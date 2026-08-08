@@ -7,6 +7,7 @@ public class FirstPersonCameraRig : MonoBehaviour
 {
     public FirstPersonCharacterController controller;
     public CinemachineCamera cineCam;
+    public CameraShaker shaker;
 
     [Header("Setup")]
     public bool autoConfigureCineCam = true;
@@ -47,6 +48,10 @@ public class FirstPersonCameraRig : MonoBehaviour
     void Start()
     {
         baseLocalPos = transform.localPosition;
+
+        if (shaker == null) shaker = GetComponent<CameraShaker>();
+        if (shaker == null) shaker = CameraShaker.Instance;
+        if (shaker != null) shaker.MarkDriven();   // the rig owns this transform
 
         if (controller != null && controller.cameraTransform == transform)
             Debug.LogError("Rig is on the CameraAnchor. Put it on a child (CameraFX).", this);
@@ -126,7 +131,7 @@ public class FirstPersonCameraRig : MonoBehaviour
 
         currentFov = Mathf.Lerp(currentFov, targetFov,
             1f - Mathf.Exp(-fovLerpSpeed * Time.deltaTime));
-        cineCam.Lens.FieldOfView = currentFov;
+        cineCam.Lens.FieldOfView = currentFov + (shaker != null ? shaker.FovOffset : 0f);
 
         float targetTilt;
         if (controller.IsWallRunning)
@@ -148,7 +153,15 @@ public class FirstPersonCameraRig : MonoBehaviour
     void UpdateDip()
     {
         dip = Mathf.SmoothDamp(dip, 0f, ref dipVelocity, 1f / dipRecoverSpeed);
-        transform.localPosition = baseLocalPos + Vector3.down * dip;
+
+        Vector3 shakeOffset = shaker != null ? shaker.PositionOffset : Vector3.zero;
+        transform.localPosition = baseLocalPos + Vector3.down * dip + shakeOffset;
+    }
+
+    /// Punches the camera downward. Used by landings and heavy impacts.
+    public void AddDip(float amount)
+    {
+        dip = Mathf.Min(dip + Mathf.Max(0f, amount), maxLandDip);
     }
 
     void UpdateVaultRoll()
@@ -164,6 +177,7 @@ public class FirstPersonCameraRig : MonoBehaviour
         float speed = targetRoll > 0f ? vaultRollSpeed * 1.5f : vaultRollSpeed;
         currentRoll = Mathf.Lerp(currentRoll, targetRoll,
             1f - Mathf.Exp(-speed * Time.deltaTime));
-        transform.localRotation = Quaternion.Euler(0f, 0f, -currentRoll);
+        Quaternion shakeRot = shaker != null ? shaker.RotationOffset : Quaternion.identity;
+        transform.localRotation = Quaternion.Euler(0f, 0f, -currentRoll) * shakeRot;
     }
 }

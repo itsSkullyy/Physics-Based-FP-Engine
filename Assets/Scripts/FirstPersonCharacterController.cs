@@ -1,14 +1,12 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
 
-// First person parkour controller.
-// WASD move, Space jump, Shift slide, LMB hold = zip grapple.
-// cameraTransform must be the CameraAnchor empty, not a real camera.
 [RequireComponent(typeof(Rigidbody))]
 public class FirstPersonCharacterController : MonoBehaviour
 {
     [Header("Camera")]
     public Transform cameraTransform;
+    public PlayerInputRouter input;
     public float mouseSensitivity = 0.1f;
     public float maxLookAngle = 89f;
     public bool lockCursor = true;
@@ -46,6 +44,11 @@ public class FirstPersonCharacterController : MonoBehaviour
     public float slideCrawlSpeed = 3f;
     public float slideHeight = 0.9f;
     public float crouchTransitionSpeed = 12f;
+
+    [Header("Air Slide")]
+    public bool enableAirSlide = true;
+    [Range(0f, 1f)] public float airSlideControlScale = 0.9f;
+    public float airSlideCounterScale = 1f;
 
     [Header("Slide Launch")]
     public bool enableSlideLaunch = true;
@@ -99,6 +102,21 @@ public class FirstPersonCharacterController : MonoBehaviour
     public float wallKickUpSpeed = 7f;
     public float wallKickAwaySpeed = 8f;
     public float wallKickCooldown = 0.25f;
+    public int maxAirWallKicks = 2;
+
+    [Header("Darting")]
+    public bool enableDarting = true;
+    public float dartWindow = 0.28f;
+    public float dartInputBuffer = 0.2f;
+    [Range(0f, 1.5f)] public float dartVerticalConversion = 0.75f;
+    public float dartSpeedBoost = 4f;
+    public float dartChainBonus = 1.5f;
+    public int dartMaxChain = 5;
+    public float dartMaxSpeed = 34f;
+    public float dartUpKeep = 1.5f;
+    [Range(0f, 1f)] public float dartSteer = 0.35f;
+    public float dartChainResetTime = 1.2f;
+    public bool dartRefundsWallKick = true;
 
     [Header("Zip Wall Run")]
     public bool enableZipWallRun = true;
@@ -109,33 +127,6 @@ public class FirstPersonCharacterController : MonoBehaviour
     public LayerMask groundMask = ~0;
     public float groundCheckRadius = 0.35f;
     public float groundCheckDistance = 0.75f;
-
-    [Header("Zip")]
-    public LineRenderer lineRenderer;
-    public Transform gunTip;
-    public LayerMask grappleMask = ~0;
-    public string grappleTag = "";
-    public bool allowTriggerGrapples = true;
-    public float maxGrappleDistance = 50f;
-    public float zipMaxSpeed = 28f;
-    public float zipAcceleration = 70f;
-    public float zipArrivalDistance = 2.5f;
-    public float zipUpwardFling = 8f;
-    [Range(0f, 1f)] public float zipSpeedCarry = 0.6f;
-    public float zipCompletionBoost = 10f;
-    public float zipSteerForce = 11f;
-    public float ropeDrawSpeed = 120f;
-
-    [Header("Targeting & Crosshair")]
-    public float aimAssistAngle = 30f;
-    public float angleWeight = 1f;
-    public float distanceWeight = 0.4f;
-    public float minTargetDistance = 2f;
-    public float reticleSize = 40f;
-    public float crosshairSize = 6f;
-    public Color crosshairColor = new Color(1f, 1f, 1f, 0.9f);
-    public Color reticleColor = new Color(1f, 1f, 1f, 0.55f);
-    public Color reticleLockedColor = new Color(0.3f, 1f, 0.6f, 0.95f);
 
     Rigidbody rb;
     float pitch;
@@ -152,6 +143,7 @@ public class FirstPersonCharacterController : MonoBehaviour
     bool jumpHeld;
 
     bool isSliding;
+    bool isAirSliding;
     bool slideBoostGiven;
 
     CapsuleCollider capsule;
@@ -162,8 +154,7 @@ public class FirstPersonCharacterController : MonoBehaviour
     bool crouchedByObstruction;
 
     bool isZipping;
-    Vector3 zipPoint;
-    Vector3 currentRopeEnd;
+    bool isSwinging;
 
     bool isVaulting;
     int vaultTier;
@@ -183,21 +174,22 @@ public class FirstPersonCharacterController : MonoBehaviour
     float wallRunTimer;
     float wallRunCooldownTimer;
     float wallKickCooldownTimer;
+    int airWallKicks;
+
+    float dartTimer;
+    float dartBufferCounter;
+    float dartChainTimer;
+    float dartFlashTimer;
+    int dartChain;
 
     Vector3 visualStartScale = Vector3.one;
     Vector3 visualStartLocalPos;
 
-    Camera cam;
-    bool hasTarget;
-    Vector3 targetPoint;
-    Vector3 targetDisplayPoint;
-    Collider targetCollider;
-    Texture2D dotTex;
-    Texture2D ringTex;
-
     public bool IsGrounded => isGrounded;
     public bool IsSliding => isSliding;
-    public bool IsZipping => isZipping;
+    public bool IsAirSliding => isAirSliding;
+    public bool IsZipping { get => isZipping; set => isZipping = value; }
+    public bool IsSwinging { get => isSwinging; set => isSwinging = value; }
     public bool IsVaulting => isVaulting;
     public int VaultTier => isVaulting ? vaultTier : 0;
     public bool IsWallRunning => isWallRunning;
@@ -207,9 +199,15 @@ public class FirstPersonCharacterController : MonoBehaviour
     public float CrouchAmount => standHeight > 0f ? 1f - currentHeight / standHeight : 0f;
     public Vector3 FlatForward => Quaternion.Euler(0f, yaw, 0f) * Vector3.forward;
     public Vector3 FlatRight => Quaternion.Euler(0f, yaw, 0f) * Vector3.right;
+    public bool DartWindowOpen => dartTimer > 0f;
+    public bool IsDarting => dartFlashTimer > 0f;
+    public int DartChain => dartChain;
+    public int AirWallKicksLeft => Mathf.Max(0, maxAirWallKicks - airWallKicks);
 
     void Awake()
     {
+        if (input == null) input = PlayerInputRouter.Resolve(this);
+
         rb = GetComponent<Rigidbody>();
         rb.freezeRotation = true;
         rb.useGravity = true;
@@ -222,9 +220,6 @@ public class FirstPersonCharacterController : MonoBehaviour
         else if (cameraTransform.GetComponent<Camera>() != null)
             Debug.LogWarning("cameraTransform is a real Camera. Assign the CameraAnchor empty instead.", this);
 
-        if (gunTip == null)
-            gunTip = cameraTransform;
-
         capsule = GetComponent<CapsuleCollider>();
         if (capsule != null)
         {
@@ -234,28 +229,12 @@ public class FirstPersonCharacterController : MonoBehaviour
         }
 
         if (cameraTransform != null)
-        {
             camStandLocalPos = cameraTransform.localPosition;
-            cam = cameraTransform.GetComponent<Camera>();
-        }
-        if (cam == null)
-            cam = Camera.main;
 
         if (characterVisual != null)
         {
             visualStartScale = characterVisual.localScale;
             visualStartLocalPos = characterVisual.localPosition;
-        }
-
-        dotTex = MakeDotTexture(16);
-        ringTex = MakeRingTexture(64, 6f);
-
-        if (lineRenderer == null)
-            lineRenderer = GetComponent<LineRenderer>();
-        if (lineRenderer != null)
-        {
-            lineRenderer.positionCount = 0;
-            lineRenderer.useWorldSpace = true;
         }
 
         if (lockCursor)
@@ -269,14 +248,7 @@ public class FirstPersonCharacterController : MonoBehaviour
     {
         HandleLook();
         BufferJumpInput();
-        UpdateGrappleTarget();
-        HandleZipInput();
         UpdateCameraHeight();
-    }
-
-    void LateUpdate()
-    {
-        DrawRope();
     }
 
     void FixedUpdate()
@@ -289,30 +261,20 @@ public class FirstPersonCharacterController : MonoBehaviour
         TryAutoVault();
         HandleMovement();
         HandleJump();
+        HandleDart();
         HandleVault();
-        HandleZip();
         ApplyBetterGravity();
         ApplyGroundStick();
     }
 
-    // -------------------- Input --------------------
-
     Vector2 ReadMoveInput()
     {
-        Vector2 move = Vector2.zero;
-        Keyboard k = Keyboard.current;
-        if (k == null) return move;
-
-        if (k.wKey.isPressed || k.upArrowKey.isPressed) move.y += 1f;
-        if (k.sKey.isPressed || k.downArrowKey.isPressed) move.y -= 1f;
-        if (k.dKey.isPressed || k.rightArrowKey.isPressed) move.x += 1f;
-        if (k.aKey.isPressed || k.leftArrowKey.isPressed) move.x -= 1f;
-        return move;
+        return input != null ? input.Move : Vector2.zero;
     }
 
     void HandleLook()
     {
-        Vector2 delta = Mouse.current != null ? Mouse.current.delta.ReadValue() : Vector2.zero;
+        Vector2 delta = input != null ? input.LookDelta : Vector2.zero;
 
         yaw += delta.x * mouseSensitivity;
         pitch = Mathf.Clamp(pitch - delta.y * mouseSensitivity, -maxLookAngle, maxLookAngle);
@@ -326,16 +288,16 @@ public class FirstPersonCharacterController : MonoBehaviour
 
     void BufferJumpInput()
     {
-        Keyboard k = Keyboard.current;
-        if (k == null) return;
+        if (input == null) return;
 
-        if (k.spaceKey.wasPressedThisFrame)
+        if (input.jump.Pressed)
             jumpBufferCounter = jumpBufferTime;
 
-        jumpHeld = k.spaceKey.isPressed;
-    }
+        if (input.dart.Pressed)
+            dartBufferCounter = dartInputBuffer;
 
-    // -------------------- Ground --------------------
+        jumpHeld = input.jump.Held;
+    }
 
     void GroundCheck()
     {
@@ -356,9 +318,14 @@ public class FirstPersonCharacterController : MonoBehaviour
             float angle = Vector3.Angle(hit.normal, Vector3.up);
 
             if (angle <= maxSlopeAngle)
+            {
                 isGrounded = true;
+                airWallKicks = 0;
+            }
             else
+            {
                 onSteepSlope = true;
+            }
         }
     }
 
@@ -369,8 +336,6 @@ public class FirstPersonCharacterController : MonoBehaviour
 
         rb.AddForce(-groundNormal * groundStickForce, ForceMode.Acceleration);
     }
-
-    // -------------------- Movement --------------------
 
     void HandleMovement()
     {
@@ -397,16 +362,20 @@ public class FirstPersonCharacterController : MonoBehaviour
         }
         else if (isZipping)
         {
-            if (hasInput)
-                rb.AddForce(wishDir * zipSteerForce, ForceMode.Acceleration);
         }
         else if (isSliding)
         {
             SlideMovement(hasInput, moveDir, horizVel);
         }
+        else if (isSwinging && !isGrounded)
+        {
+        }
         else if (hasInput)
         {
             float control = isGrounded ? 1f : airControl;
+            if (isAirSliding)
+                control *= airSlideControlScale;
+
             float speedAlong = Vector3.Dot(horizVel, new Vector3(moveDir.x, 0f, moveDir.z).normalized);
 
             if (speedAlong < targetSpeed)
@@ -417,8 +386,10 @@ public class FirstPersonCharacterController : MonoBehaviour
 
             Vector3 flatMove = new Vector3(moveDir.x, 0f, moveDir.z).normalized;
             Vector3 lateral = horizVel - Vector3.Project(horizVel, flatMove);
-            rb.AddForce(-lateral * (isGrounded ? counterMovement : airCounterMovement),
-                ForceMode.Acceleration);
+            float counter = isGrounded ? counterMovement : airCounterMovement;
+            if (isAirSliding)
+                counter *= airSlideCounterScale;
+            rb.AddForce(-lateral * counter, ForceMode.Acceleration);
 
             if (isGrounded)
             {
@@ -458,19 +429,18 @@ public class FirstPersonCharacterController : MonoBehaviour
         momentum = Mathf.Clamp01(momentum);
     }
 
-    // -------------------- Slide --------------------
-
     void HandleSlideState()
     {
         if (!enableSlide) { isSliding = false; return; }
 
-        Keyboard k = Keyboard.current;
-        bool slideKey = k != null && k.leftShiftKey.isPressed;
+        bool slideKey = input != null && input.slide.Held;
 
         bool wasSliding = isSliding;
-        // Stays sliding under a ceiling even if grounding flickers.
         isSliding = slideKey && !isVaulting &&
                     (isGrounded || (wasSliding && HasCeilingAbove()));
+
+        isAirSliding = enableAirSlide && slideKey && !isSliding &&
+                       !isGrounded && !isVaulting && !isWallRunning;
 
         if (isSliding && !wasSliding)
         {
@@ -515,7 +485,6 @@ public class FirstPersonCharacterController : MonoBehaviour
 
         if (!hasInput) return;
 
-        // Below crawl speed: real acceleration so the slide doubles as a crawl.
         Vector3 flatMove = new Vector3(moveDir.x, 0f, moveDir.z).normalized;
         float along = Vector3.Dot(horizVel, flatMove);
 
@@ -531,7 +500,7 @@ public class FirstPersonCharacterController : MonoBehaviour
         }
     }
 
-    bool WantsCrouchHeight => isSliding || crouchedByObstruction || isVaulting;
+    bool WantsCrouchHeight => isSliding || isAirSliding || crouchedByObstruction || isVaulting;
 
     void UpdateCrouchHeight()
     {
@@ -539,7 +508,6 @@ public class FirstPersonCharacterController : MonoBehaviour
 
         float targetHeight = WantsCrouchHeight ? slideHeight : standHeight;
 
-        // Never grow into a ceiling.
         if (targetHeight > currentHeight && HasCeilingAbove())
             targetHeight = currentHeight;
 
@@ -587,8 +555,6 @@ public class FirstPersonCharacterController : MonoBehaviour
             out _, needed, groundMask, QueryTriggerInteraction.Ignore);
     }
 
-    // -------------------- Jump / gravity --------------------
-
     void HandleJump()
     {
         coyoteCounter = isGrounded ? coyoteTime : coyoteCounter - Time.fixedDeltaTime;
@@ -613,7 +579,8 @@ public class FirstPersonCharacterController : MonoBehaviour
             WallJump();
             jumpBufferCounter = 0f;
         }
-        else if (enableWallKick && wallKickCooldownTimer <= 0f && TryWallKick())
+        else if (enableWallKick && !isSwinging && wallKickCooldownTimer <= 0f &&
+                 airWallKicks < maxAirWallKicks && TryWallKick())
         {
             jumpBufferCounter = 0f;
         }
@@ -621,7 +588,7 @@ public class FirstPersonCharacterController : MonoBehaviour
 
     void ApplyBetterGravity()
     {
-        if (isZipping || isVaulting || isWallRunning) return;
+        if (isZipping || isVaulting || isWallRunning || isSwinging) return;
 
         Vector3 extra = Vector3.zero;
 
@@ -632,8 +599,6 @@ public class FirstPersonCharacterController : MonoBehaviour
 
         rb.AddForce(extra, ForceMode.Acceleration);
     }
-
-    // -------------------- Wall run / kick --------------------
 
     void UpdateWallRun()
     {
@@ -659,7 +624,7 @@ public class FirstPersonCharacterController : MonoBehaviour
             return;
         }
 
-        if (!enableWallRun || isGrounded || isVaulting || isZipping) return;
+        if (!enableWallRun || isGrounded || isVaulting || isZipping || isSwinging) return;
         if (wallRunCooldownTimer > 0f) return;
         if (ReadMoveInput().y <= 0.1f) return;
 
@@ -747,6 +712,7 @@ public class FirstPersonCharacterController : MonoBehaviour
 
         StopWallRun();
         groundIgnoreCounter = jumpGroundIgnoreTime;
+        OpenDartWindow();
     }
 
     bool TryWallKick()
@@ -783,10 +749,12 @@ public class FirstPersonCharacterController : MonoBehaviour
 
         wallKickCooldownTimer = wallKickCooldown;
         groundIgnoreCounter = 0.1f;
+        airWallKicks++;
+        OpenDartWindow();
         return true;
     }
 
-    bool TryZipWallRun()
+    public bool TryZipWallRun()
     {
         if (!enableZipWallRun || !enableWallRun || isGrounded) return false;
 
@@ -827,7 +795,64 @@ public class FirstPersonCharacterController : MonoBehaviour
         return true;
     }
 
-    // -------------------- Vault --------------------
+    void OpenDartWindow()
+    {
+        if (!enableDarting) return;
+
+        dartTimer = dartWindow;
+        dartBufferCounter = 0f;
+    }
+
+    void HandleDart()
+    {
+        dartTimer -= Time.fixedDeltaTime;
+        dartBufferCounter -= Time.fixedDeltaTime;
+        dartFlashTimer -= Time.fixedDeltaTime;
+        dartChainTimer -= Time.fixedDeltaTime;
+
+        if (dartChainTimer <= 0f)
+            dartChain = 0;
+
+        if (!enableDarting || isVaulting || isZipping || isWallRunning) return;
+        if (isGrounded || dartTimer <= 0f || dartBufferCounter <= 0f) return;
+
+        PerformDart();
+    }
+
+    void PerformDart()
+    {
+        Vector3 v = rb.linearVelocity;
+        Vector3 horiz = new Vector3(v.x, 0f, v.z);
+
+        Vector3 dir = horiz.sqrMagnitude > 0.5f ? horiz.normalized : FlatForward;
+
+        Vector2 input = ReadMoveInput();
+        Vector3 wishDir = FlatRight * input.x + FlatForward * input.y;
+        if (wishDir.sqrMagnitude > 0.01f)
+            dir = Vector3.Slerp(dir, wishDir.normalized, dartSteer).normalized;
+
+        dartChain = Mathf.Min(dartChain + 1, dartMaxChain);
+
+        float converted = Mathf.Max(0f, v.y) * dartVerticalConversion;
+        float speed = horiz.magnitude + converted + dartSpeedBoost + dartChainBonus * (dartChain - 1);
+        speed = Mathf.Min(speed, dartMaxSpeed);
+
+        rb.linearVelocity = new Vector3(dir.x * speed, dartUpKeep, dir.z * speed);
+
+        momentum = 1f;
+        lastMoveDir = dir;
+        slideBoostGiven = false;
+
+        if (dartRefundsWallKick)
+            airWallKicks = Mathf.Max(0, airWallKicks - 1);
+
+        wallKickCooldownTimer = 0f;
+        dartTimer = 0f;
+        dartBufferCounter = 0f;
+        dartChainTimer = dartChainResetTime;
+        dartFlashTimer = 0.25f;
+        groundIgnoreCounter = 0.05f;
+    }
 
     void TryAutoVault()
     {
@@ -839,7 +864,7 @@ public class FirstPersonCharacterController : MonoBehaviour
 
     bool TryStartVault()
     {
-        if (!enableVault || isVaulting || isZipping || capsule == null) return false;
+        if (!enableVault || isVaulting || isZipping || isSwinging || capsule == null) return false;
 
         Vector3 fwd = FlatForward;
 
@@ -928,7 +953,6 @@ public class FirstPersonCharacterController : MonoBehaviour
         vaultTimer = 0f;
         isVaulting = true;
 
-        // Kinematic glide, momentum handed back in FinishVault.
         rb.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
         rb.isKinematic = true;
 
@@ -984,251 +1008,6 @@ public class FirstPersonCharacterController : MonoBehaviour
         isSliding = false;
         groundIgnoreCounter = 0.15f;
         vaultCooldownTimer = 0.4f;
-    }
-
-    // -------------------- Zip --------------------
-
-    void HandleZipInput()
-    {
-        Mouse m = Mouse.current;
-        if (m == null) return;
-
-        if (m.leftButton.wasPressedThisFrame)
-            TryStartZip();
-
-        if (m.leftButton.wasReleasedThisFrame)
-            StopZip();
-    }
-
-    bool TryGetGrapplePoint(out Vector3 point)
-    {
-        point = default;
-        if (cameraTransform == null) return false;
-
-        if (hasTarget)
-        {
-            point = targetPoint;
-            return true;
-        }
-
-        QueryTriggerInteraction qti = allowTriggerGrapples
-            ? QueryTriggerInteraction.Collide
-            : QueryTriggerInteraction.Ignore;
-
-        Ray ray = new Ray(cameraTransform.position, cameraTransform.forward);
-        RaycastHit[] hits = Physics.RaycastAll(ray, maxGrappleDistance, grappleMask, qti);
-        System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
-
-        foreach (RaycastHit h in hits)
-        {
-            bool tagOk = string.IsNullOrEmpty(grappleTag) || h.collider.CompareTag(grappleTag);
-
-            if (tagOk)
-            {
-                point = h.point;
-                return true;
-            }
-
-            if (!h.collider.isTrigger)
-                return false;
-        }
-
-        return false;
-    }
-
-    void TryStartZip()
-    {
-        if (isZipping || isVaulting) return;
-        if (!TryGetGrapplePoint(out Vector3 point)) return;
-
-        zipPoint = point;
-        isZipping = true;
-
-        currentRopeEnd = gunTip != null ? gunTip.position : transform.position;
-
-        if (lineRenderer != null)
-            lineRenderer.positionCount = 2;
-    }
-
-    void StopZip()
-    {
-        if (!isZipping) return;
-
-        isZipping = false;
-
-        if (lineRenderer != null)
-            lineRenderer.positionCount = 0;
-    }
-
-    void HandleZip()
-    {
-        if (!isZipping) return;
-
-        Vector3 toPoint = zipPoint - transform.position;
-        float dist = toPoint.magnitude;
-
-        if (dist <= zipArrivalDistance)
-        {
-            if (TryZipWallRun())
-            {
-                StopZip();
-                return;
-            }
-
-            Vector3 v = rb.linearVelocity;
-            Vector3 dir = v.sqrMagnitude > 1f
-                ? v.normalized
-                : (cameraTransform != null ? cameraTransform.forward : transform.forward);
-
-            Vector3 outVel = dir * (v.magnitude * zipSpeedCarry + zipCompletionBoost);
-            outVel.y = Mathf.Max(outVel.y, zipUpwardFling);
-            rb.linearVelocity = outVel;
-
-            StopZip();
-            return;
-        }
-
-        Vector3 desired = (toPoint / dist) * zipMaxSpeed;
-        rb.linearVelocity = Vector3.MoveTowards(rb.linearVelocity, desired,
-            zipAcceleration * Time.fixedDeltaTime);
-    }
-
-    // -------------------- Targeting --------------------
-
-    void UpdateGrappleTarget()
-    {
-        hasTarget = false;
-        targetCollider = null;
-        if (cameraTransform == null || isZipping) return;
-
-        QueryTriggerInteraction qti = allowTriggerGrapples
-            ? QueryTriggerInteraction.Collide
-            : QueryTriggerInteraction.Ignore;
-
-        Collider[] candidates = Physics.OverlapSphere(cameraTransform.position,
-            maxGrappleDistance, grappleMask, qti);
-
-        float bestScore = float.MaxValue;
-
-        foreach (Collider c in candidates)
-        {
-            if (c.attachedRigidbody == rb) continue;
-            if (!string.IsNullOrEmpty(grappleTag) && !c.CompareTag(grappleTag)) continue;
-
-            Vector3 approxPoint = c.bounds.ClosestPoint(cameraTransform.position);
-            Vector3 toPoint = approxPoint - cameraTransform.position;
-            float dist = toPoint.magnitude;
-            if (dist < minTargetDistance || dist > maxGrappleDistance) continue;
-
-            float angle = Vector3.Angle(cameraTransform.forward, toPoint);
-            if (angle > aimAssistAngle) continue;
-
-            Vector3 dir = toPoint / dist;
-            Vector3 anchor = approxPoint;
-            if (c.Raycast(new Ray(cameraTransform.position, dir), out RaycastHit surf, maxGrappleDistance))
-                anchor = surf.point;
-
-            float anchorDist = Mathf.Max(0.05f, Vector3.Distance(cameraTransform.position, anchor));
-            if (Physics.Raycast(cameraTransform.position, dir, out RaycastHit block,
-                    anchorDist - 0.05f, ~0, QueryTriggerInteraction.Ignore)
-                && block.collider != c)
-                continue;
-
-            float score = (angle / aimAssistAngle) * angleWeight +
-                          (dist / maxGrappleDistance) * distanceWeight;
-
-            if (score < bestScore)
-            {
-                bestScore = score;
-                hasTarget = true;
-                targetPoint = anchor;
-                targetDisplayPoint = c.bounds.center;
-                targetCollider = c;
-            }
-        }
-    }
-
-    // -------------------- HUD --------------------
-
-    void OnGUI()
-    {
-        if (dotTex == null) return;
-
-        float half = crosshairSize * 0.5f;
-        GUI.color = crosshairColor;
-        GUI.DrawTexture(new Rect(Screen.width * 0.5f - half, Screen.height * 0.5f - half,
-            crosshairSize, crosshairSize), dotTex);
-
-        bool show = isZipping || hasTarget;
-        if (show && cam != null && cameraTransform != null)
-        {
-            Vector3 worldPoint = isZipping ? zipPoint : targetDisplayPoint;
-            Vector3 sp = cam.WorldToScreenPoint(worldPoint);
-
-            if (sp.z > 0f)
-            {
-                float dist = Vector3.Distance(cameraTransform.position, worldPoint);
-                float size = Mathf.Lerp(reticleSize * 1.5f, reticleSize * 0.75f,
-                    Mathf.Clamp01(dist / maxGrappleDistance));
-                float h = size * 0.5f;
-
-                GUI.color = isZipping ? reticleLockedColor : reticleColor;
-                GUI.DrawTexture(new Rect(sp.x - h, Screen.height - sp.y - h, size, size), ringTex);
-            }
-        }
-
-        GUI.color = Color.white;
-    }
-
-    static Texture2D MakeDotTexture(int size)
-    {
-        var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
-        float r = size * 0.5f;
-        for (int y = 0; y < size; y++)
-        {
-            for (int x = 0; x < size; x++)
-            {
-                float dx = x - r + 0.5f;
-                float dy = y - r + 0.5f;
-                float d = Mathf.Sqrt(dx * dx + dy * dy);
-                tex.SetPixel(x, y, new Color(1f, 1f, 1f, Mathf.Clamp01(r - d)));
-            }
-        }
-        tex.Apply();
-        tex.hideFlags = HideFlags.HideAndDontSave;
-        return tex;
-    }
-
-    static Texture2D MakeRingTexture(int size, float thickness)
-    {
-        var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
-        float r = size * 0.5f;
-        float ringR = r - thickness * 0.5f - 1f;
-        for (int y = 0; y < size; y++)
-        {
-            for (int x = 0; x < size; x++)
-            {
-                float dx = x - r + 0.5f;
-                float dy = y - r + 0.5f;
-                float d = Mathf.Sqrt(dx * dx + dy * dy);
-                float a = Mathf.Clamp01(thickness * 0.5f - Mathf.Abs(d - ringR) + 0.5f);
-                tex.SetPixel(x, y, new Color(1f, 1f, 1f, a));
-            }
-        }
-        tex.Apply();
-        tex.hideFlags = HideFlags.HideAndDontSave;
-        return tex;
-    }
-
-    void DrawRope()
-    {
-        if (lineRenderer == null || !isZipping) return;
-
-        Vector3 start = gunTip != null ? gunTip.position : transform.position;
-        currentRopeEnd = Vector3.MoveTowards(currentRopeEnd, zipPoint, ropeDrawSpeed * Time.deltaTime);
-
-        lineRenderer.SetPosition(0, start);
-        lineRenderer.SetPosition(1, currentRopeEnd);
     }
 
     void OnDrawGizmosSelected()

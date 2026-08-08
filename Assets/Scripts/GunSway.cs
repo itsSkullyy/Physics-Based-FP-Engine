@@ -1,10 +1,10 @@
 using UnityEngine;
-using UnityEngine.InputSystem;
 
 // Weapon sway and bob. Attach to GunHolder under CameraFX.
 public class GunSway : MonoBehaviour
 {
     public FirstPersonCharacterController controller;
+    public PlayerInputRouter input;
 
     [Header("Look Sway")]
     public float swayAmount = 0.008f;
@@ -26,6 +26,12 @@ public class GunSway : MonoBehaviour
     Quaternion baseRot;
     float bobTimer;
 
+    void Awake()
+    {
+        if (controller == null) controller = GetComponentInParent<FirstPersonCharacterController>();
+        if (input == null) input = PlayerInputRouter.Resolve(this);
+    }
+
     void Start()
     {
         basePos = transform.localPosition;
@@ -34,7 +40,7 @@ public class GunSway : MonoBehaviour
 
     void Update()
     {
-        Vector2 look = Mouse.current != null ? Mouse.current.delta.ReadValue() : Vector2.zero;
+        Vector2 look = input != null ? input.LookDelta : Vector2.zero;
 
         Vector3 swayPos = new Vector3(
             Mathf.Clamp(-look.x * swayAmount, -maxSway, maxSway),
