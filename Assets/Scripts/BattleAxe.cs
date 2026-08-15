@@ -2,8 +2,12 @@ using UnityEngine;
 
 // Held battle axe. Attach to an AxeHolder empty under CameraFX (same place GunSway went).
 // Put the actual axe model as a child and assign it to axeVisual.
-// All bindings live on PlayerInputRouter: swing = axeSwing, throw = axeThrow,
-// pickup = axePickup, recall = axeRecall.
+//
+// INPUT LAYOUT
+//   axeSwing (RT / LMB)  - tap to swing, HOLD to charge a throw, release to throw.
+//   axeThrow (LT / RMB)  - optional instant throw, kept as an alternate. Switch it off
+//                          with allowDedicatedThrowButton if you want that trigger freed.
+//   axePickup / axeRecall unchanged.
 [DefaultExecutionOrder(90)]
 public class BattleAxe : MonoBehaviour
 {
@@ -33,19 +37,58 @@ public class BattleAxe : MonoBehaviour
     public float maxVerticalKick = 0.09f;
 
     [Header("Swing Timing")]
-    public float windupTime = 0.11f;
-    public float swingTime = 0.16f;
-    public float recoverTime = 0.24f;
-    [Range(0f, 1f)] public float hitWindowStart = 0.15f;
-    [Range(0f, 1f)] public float hitWindowEnd = 0.85f;
+    public float windupTime = 0.06f;
+    public float swingTime = 0.09f;
+    public float recoverTime = 0.14f;
+    // Wide window on purpose: the swing is short enough that a frame spike could
+    // otherwise skip clean past a narrow one and eat the hit entirely.
+    [Range(0f, 1f)] public float hitWindowStart = 0.05f;
+    [Range(0f, 1f)] public float hitWindowEnd = 0.95f;
+
+    [Header("Charge Throw")]
+    [Tooltip("Off = the old behaviour, where the swing fires straight off the press and " +
+             "throwing lives entirely on the dedicated throw button.")]
+    public bool enableChargeThrow = true;
+    [Tooltip("Hold the swing button longer than this and it becomes a throw charge " +
+             "instead of a swing. The windup pose plays immediately either way, so the " +
+             "axe still reacts on the same frame you press.")]
+    public float holdToChargeTime = 0.16f;
+    [Tooltip("How long a full charge takes, measured from the moment charging begins.")]
+    public float chargeTime = 0.55f;
+    [Tooltip("Release below this and you get a swing instead of a limp throw. 0 = always throw.")]
+    [Range(0f, 1f)] public float minChargeToThrow = 0f;
+    public bool allowDedicatedThrowButton = true;
+
+    [Header("Charge Power")]
+    [Tooltip("All three default to 0, so a charged throw flies exactly like the throw does " +
+             "today and the charge is pure telegraph. Raise them to make holding pay off.")]
+    public float chargeSpeedBonus = 0f;
+    public float chargeUpSpeedBonus = 0f;
+    public float chargeSpinBonus = 0f;
+
+    [Header("Charge Pose")]
+    public Vector3 chargeOffset = new Vector3(0.10f, 0.30f, -0.32f);
+    public Vector3 chargeEuler = new Vector3(-74f, 22f, -26f);
+    public float chargePoseSmooth = 14f;
+    public float chargeShakeAmount = 0.013f;
+    public float chargeShakeFrequency = 34f;
+
+    [Header("Charge Meter")]
+    public bool showChargeMeter = true;
+    public float chargeMeterWidth = 120f;
+    public float chargeMeterHeight = 4f;
+    public float chargeMeterScreenY = 0.545f;
+    public Color chargeMeterBack = new Color(0f, 0f, 0f, 0.45f);
+    public Color chargeMeterFill = new Color(1f, 0.85f, 0.4f, 0.9f);
+    public Color chargeMeterFull = Color.white;
 
     [Header("Swing Pose")]
     public Vector3 windupOffset = new Vector3(0.06f, 0.24f, -0.22f);
     public Vector3 windupEuler = new Vector3(-58f, 14f, -20f);
     public Vector3 impactOffset = new Vector3(-0.07f, -0.30f, 0.30f);
     public Vector3 impactEuler = new Vector3(72f, -12f, 16f);
-    public Vector3 impactPunch = new Vector3(0f, 0.06f, -0.18f);
-    public float punchDecay = 0.16f;
+    public Vector3 impactPunch = new Vector3(0f, 0.08f, -0.24f);
+    public float punchDecay = 0.12f;
 
     [Header("Swing Hit")]
     public LayerMask hitMask = 0;           // 0 = copy controller.groundMask
@@ -68,19 +111,19 @@ public class BattleAxe : MonoBehaviour
     public bool bounceReleasesGrapple = true;
 
     [Header("Throw")]
-    public float throwSpeed = 26f;
-    public float throwUpSpeed = 3f;
+    public float throwSpeed = 42f;
+    public float throwUpSpeed = 2f;
     [Range(0f, 1f)] public float inheritPlayerVelocity = 0.5f;
-    public float throwSpinSpeed = 1440f;     // degrees per second, 4 rotations a second
+    public float throwSpinSpeed = 2160f;     // degrees per second, 6 rotations a second
     public float throwSpawnForward = 0.6f;
-    public float throwCooldown = 0.25f;
+    public float throwCooldown = 0.15f;
 
     [Header("Thrown Axe Runtime Setup")]
     [Tooltip("Only used when thrownAxePrefab is empty and the axe is built from axeVisual.")]
     public LayerMask thrownStickMask = ~0;
     public bool stickToTriggers = false;
     public float thrownScaleMultiplier = 1f;   // viewmodels are often smaller than world scale
-    public float thrownGravityScale = 1f;
+    public float thrownGravityScale = 0.85f;
     public float headSweepRadius = 0.08f;
     public float stickDepth = 0.12f;
     public bool thrownLeaveTrail = true;
@@ -88,6 +131,12 @@ public class BattleAxe : MonoBehaviour
     public string grappleTag = "";
     public float grappleRadius = 0.6f;
     public Vector3 stickEulerOffset = Vector3.zero;
+
+    [Header("Thrown Axe Sweep Budget")]
+    [Tooltip("Shorter steps and more substeps keep the swept arc continuous at high " +
+             "throw speeds. Raise the substep count if you push throwSpeed higher.")]
+    public float thrownMaxStepDistance = 0.22f;
+    public int thrownMaxSubSteps = 14;
 
     [Header("Pickup")]
     public float pickupDistance = 2.5f;
@@ -99,7 +148,7 @@ public class BattleAxe : MonoBehaviour
     [Header("Debug")]
     public bool logDebug = false;
 
-    enum State { Idle, Windup, Swing, Recover, Thrown }
+    enum State { Idle, Windup, Charging, Swing, Recover, Thrown }
 
     State state = State.Idle;
     float stateTimer;
@@ -117,18 +166,33 @@ public class BattleAxe : MonoBehaviour
     float bobTimer;
     float punch;
 
+    // Captured whenever one state hands over to the next, so the pose carries on from
+    // wherever it actually got to instead of snapping to where it "should" be. That
+    // matters now that a windup can be cut short at any point by an early release.
+    Vector3 poseFromPos;
+    Quaternion poseFromRot = Quaternion.identity;
+
+    float charge01;
+    bool chargeFullFired;
+
     ThrownAxe activeAxe;
     bool inPickupRange;
     Collider[] playerColliders;
     Renderer[] visualRenderers;
+    static Texture2D whiteTex;
 
     // Juice hooks. PlayerJuice listens to these; hang your own VFX or audio here too.
     public event System.Action AxeThrown;
     public event System.Action AxeSwingStarted;
     public event System.Action<Vector3, Vector3, bool> AxeHit;   // point, normal, bounced
+    public event System.Action AxeChargeStarted;
+    public event System.Action AxeChargeFull;
+    public event System.Action<float> AxeChargeReleased;         // 0..1 charge at release
 
     public bool IsSwinging => state == State.Windup || state == State.Swing;
+    public bool IsCharging => state == State.Charging;
     public bool IsThrown => state == State.Thrown;
+    public float ChargeAmount => state == State.Charging ? charge01 : 0f;
     public ThrownAxe ActiveAxe => activeAxe;
 
     void Awake()
@@ -192,12 +256,57 @@ public class BattleAxe : MonoBehaviour
             return;
         }
 
+        // Windup and Charging both wait on the button rather than on a timer, so they
+        // get first look at the input every frame.
+        if (state == State.Windup)
+        {
+            UpdateWindupIntent();
+            return;
+        }
+
+        if (state == State.Charging)
+        {
+            UpdateChargeIntent();
+            return;
+        }
+
         if (state != State.Idle || !CanAct()) return;
 
         if (input.axeSwing.Pressed)
-            StartSwing();
-        else if (input.axeThrow.Pressed)
-            ThrowAxe();
+            StartWindup();
+        else if (allowDedicatedThrowButton && input.axeThrow.Pressed)
+            ThrowAxe(0f);
+    }
+
+    // Released early means a swing, held past the threshold means a charge. Release is
+    // tested first so a fast tap can never be misread as the start of a hold.
+    void UpdateWindupIntent()
+    {
+        if (!enableChargeThrow) return;
+
+        if (!input.axeSwing.Held)
+        {
+            BeginSwing();
+            return;
+        }
+
+        if (stateTimer >= Mathf.Max(0.01f, holdToChargeTime))
+            BeginCharge();
+    }
+
+    void UpdateChargeIntent()
+    {
+        if (input.axeSwing.Held) return;
+
+        // A charge abandoned almost immediately reads as a fumbled swing, so hand them
+        // the swing rather than a throw with nothing behind it.
+        if (charge01 < minChargeToThrow)
+        {
+            BeginSwing();
+            return;
+        }
+
+        ThrowAxe(charge01);
     }
 
     // Grappling is deliberately NOT blocking here - you can swing and throw mid-rope.
@@ -210,13 +319,43 @@ public class BattleAxe : MonoBehaviour
 
     // ---------------------------------------------------------------- swing
 
-    void StartSwing()
+    void StartWindup()
     {
         state = State.Windup;
         stateTimer = 0f;
         hitRegistered = false;
+        charge01 = 0f;
+        chargeFullFired = false;
+
+        poseFromPos = swingPos;
+        poseFromRot = swingRot;
 
         AxeSwingStarted?.Invoke();
+    }
+
+    void BeginSwing()
+    {
+        poseFromPos = swingPos;
+        poseFromRot = swingRot;
+
+        state = State.Swing;
+        stateTimer = 0f;
+        hitRegistered = false;
+        charge01 = 0f;
+        chargeFullFired = false;
+    }
+
+    void BeginCharge()
+    {
+        poseFromPos = swingPos;
+        poseFromRot = swingRot;
+
+        state = State.Charging;
+        stateTimer = 0f;
+        charge01 = 0f;
+        chargeFullFired = false;
+
+        AxeChargeStarted?.Invoke();
     }
 
     void UpdateState(float dt)
@@ -240,31 +379,62 @@ public class BattleAxe : MonoBehaviour
             {
                 float t = Mathf.Clamp01(stateTimer / Mathf.Max(0.01f, windupTime));
                 float e = 1f - (1f - t) * (1f - t);
-                swingPos = Vector3.Lerp(Vector3.zero, windupOffset, e);
-                swingRot = Quaternion.Slerp(Quaternion.identity, windQ, e);
+                swingPos = Vector3.Lerp(poseFromPos, windupOffset, e);
+                swingRot = Quaternion.Slerp(poseFromRot, windQ, e);
 
-                if (t >= 1f) { state = State.Swing; stateTimer = 0f; }
+                // With charging on, the windup holds at full pull-back and waits on the
+                // button. With it off, the timer drives the swing exactly like before.
+                if (!enableChargeThrow && t >= 1f)
+                    BeginSwing();
+                break;
+            }
+            case State.Charging:
+            {
+                charge01 = chargeTime <= 0.01f ? 1f : Mathf.Clamp01(stateTimer / chargeTime);
+
+                float e = 1f - Mathf.Exp(-chargePoseSmooth * stateTimer);
+                swingPos = Vector3.Lerp(poseFromPos, chargeOffset, e);
+                swingRot = Quaternion.Slerp(poseFromRot, Quaternion.Euler(chargeEuler), e);
+
+                // Tremble builds with the charge, so the release is telegraphed.
+                float tremble = chargeShakeAmount * charge01;
+                float ct = Time.time * chargeShakeFrequency;
+                swingPos += new Vector3(Mathf.Sin(ct) * tremble,
+                                        Mathf.Cos(ct * 1.37f) * tremble,
+                                        0f);
+
+                if (!chargeFullFired && charge01 >= 1f)
+                {
+                    chargeFullFired = true;
+                    AxeChargeFull?.Invoke();
+                }
                 break;
             }
             case State.Swing:
             {
                 float t = Mathf.Clamp01(stateTimer / Mathf.Max(0.01f, swingTime));
                 float e = t * t;
-                swingPos = Vector3.Lerp(windupOffset, impactOffset, e);
-                swingRot = Quaternion.Slerp(windQ, impactQ, e);
+                swingPos = Vector3.Lerp(poseFromPos, impactOffset, e);
+                swingRot = Quaternion.Slerp(poseFromRot, impactQ, e);
 
                 if (!hitRegistered && t >= hitWindowStart && t <= hitWindowEnd)
                     TryHit();
 
-                if (t >= 1f) { state = State.Recover; stateTimer = 0f; }
+                if (t >= 1f)
+                {
+                    poseFromPos = swingPos;
+                    poseFromRot = swingRot;
+                    state = State.Recover;
+                    stateTimer = 0f;
+                }
                 break;
             }
             case State.Recover:
             {
                 float t = Mathf.Clamp01(stateTimer / Mathf.Max(0.01f, recoverTime));
                 float e = t * t * (3f - 2f * t);
-                swingPos = Vector3.Lerp(impactOffset, Vector3.zero, e);
-                swingRot = Quaternion.Slerp(impactQ, Quaternion.identity, e);
+                swingPos = Vector3.Lerp(poseFromPos, Vector3.zero, e);
+                swingRot = Quaternion.Slerp(poseFromRot, Quaternion.identity, e);
 
                 if (t >= 1f) { state = State.Idle; stateTimer = 0f; }
                 break;
@@ -368,19 +538,25 @@ public class BattleAxe : MonoBehaviour
 
     // ---------------------------------------------------------------- throw
 
-    void ThrowAxe()
+    void ThrowAxe(float charge)
     {
+        charge = Mathf.Clamp01(charge);
+
+        float speed = throwSpeed + chargeSpeedBonus * charge;
+        float up = throwUpSpeed + chargeUpSpeedBonus * charge;
+        float spin = throwSpinSpeed + chargeSpinBonus * charge;
+
         Vector3 spawn = aimTransform.position + aimTransform.forward * throwSpawnForward;
         Quaternion rot = Quaternion.LookRotation(aimTransform.forward, Vector3.up);
 
-        ThrownAxe axe = SpawnThrownAxe(spawn, rot);
+        ThrownAxe axe = SpawnThrownAxe(spawn, rot, speed);
         if (axe == null) return;
 
-        Vector3 velocity = aimTransform.forward * throwSpeed + Vector3.up * throwUpSpeed;
+        Vector3 velocity = aimTransform.forward * speed + Vector3.up * up;
         if (playerBody != null)
             velocity += playerBody.linearVelocity * inheritPlayerVelocity;
 
-        axe.Launch(velocity, throwSpinSpeed, playerColliders, aimTransform.position);
+        axe.Launch(velocity, spin, playerColliders, aimTransform.position);
 
         activeAxe = axe;
         state = State.Thrown;
@@ -388,14 +564,17 @@ public class BattleAxe : MonoBehaviour
         cooldownTimer = throwCooldown;
         swingPos = Vector3.zero;
         swingRot = Quaternion.identity;
+        charge01 = 0f;
+        chargeFullFired = false;
 
         if (axeVisual != null)
             SetAxeVisible(false);
 
+        AxeChargeReleased?.Invoke(charge);
         AxeThrown?.Invoke();
     }
 
-    ThrownAxe SpawnThrownAxe(Vector3 pos, Quaternion rot)
+    ThrownAxe SpawnThrownAxe(Vector3 pos, Quaternion rot, float launchSpeed)
     {
         if (thrownAxePrefab != null)
             return Instantiate(thrownAxePrefab, pos, rot);
@@ -434,6 +613,16 @@ public class BattleAxe : MonoBehaviour
         axe.grappleTag = grappleTag;
         axe.grappleRadius = grappleRadius;
         axe.stickEulerOffset = stickEulerOffset;
+
+        // Calibrated against the speed THIS throw actually used rather than the base
+        // value, so a charged throw cannot double-scale the spin or peg the shake.
+        axe.spinReferenceSpeed = launchSpeed;
+        axe.impactReferenceSpeed = launchSpeed;
+
+        // At high speed a single physics step covers a lot of ground, so the swept
+        // chain needs more, shorter segments to stay continuous around the spin arc.
+        axe.maxStepDistance = thrownMaxStepDistance;
+        axe.maxSubSteps = thrownMaxSubSteps;
 
         return axe;
     }
@@ -523,6 +712,8 @@ public class BattleAxe : MonoBehaviour
         activeAxe = null;
         state = State.Idle;
         stateTimer = 0f;
+        charge01 = 0f;
+        chargeFullFired = false;
         cooldownTimer = Mathf.Max(cooldownTimer, 0.1f);
 
         if (axeVisual != null)
@@ -603,6 +794,8 @@ public class BattleAxe : MonoBehaviour
 
     void OnGUI()
     {
+        DrawChargeMeter();
+
         if (!showPickupPrompt || !inPickupRange || state != State.Thrown) return;
 
         GUIStyle style = new GUIStyle(GUI.skin.label)
@@ -615,6 +808,34 @@ public class BattleAxe : MonoBehaviour
         string label = input != null ? input.axePickup.Label : "G";
         GUI.Label(new Rect(0f, Screen.height * 0.58f, Screen.width, 30f),
             "[" + label + "] Pick up axe", style);
+    }
+
+    void DrawChargeMeter()
+    {
+        if (!showChargeMeter || state != State.Charging) return;
+
+        if (whiteTex == null)
+        {
+            whiteTex = new Texture2D(1, 1, TextureFormat.RGBA32, false);
+            whiteTex.SetPixel(0, 0, Color.white);
+            whiteTex.Apply();
+            whiteTex.hideFlags = HideFlags.HideAndDontSave;
+        }
+
+        float w = chargeMeterWidth;
+        float h = chargeMeterHeight;
+        float x = (Screen.width - w) * 0.5f;
+        float y = Screen.height * chargeMeterScreenY;
+
+        Color old = GUI.color;
+
+        GUI.color = chargeMeterBack;
+        GUI.DrawTexture(new Rect(x - 1f, y - 1f, w + 2f, h + 2f), whiteTex);
+
+        GUI.color = charge01 >= 1f ? chargeMeterFull : chargeMeterFill;
+        GUI.DrawTexture(new Rect(x, y, w * charge01, h), whiteTex);
+
+        GUI.color = old;
     }
 
     void OnDrawGizmosSelected()

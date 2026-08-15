@@ -3496,6 +3496,26 @@ MonoBehaviour:
   recoverTime: 0.24
   hitWindowStart: 0.15
   hitWindowEnd: 0.85
+  enableChargeThrow: 1
+  holdToChargeTime: 0.25
+  chargeTime: 0.55
+  minChargeToThrow: 0
+  allowDedicatedThrowButton: 0
+  chargeSpeedBonus: 15
+  chargeUpSpeedBonus: 0
+  chargeSpinBonus: 10
+  chargeOffset: {x: 0.1, y: 0.3, z: -0.32}
+  chargeEuler: {x: -74, y: 22, z: -26}
+  chargePoseSmooth: 14
+  chargeShakeAmount: 0.013
+  chargeShakeFrequency: 34
+  showChargeMeter: 1
+  chargeMeterWidth: 120
+  chargeMeterHeight: 4
+  chargeMeterScreenY: 0.545
+  chargeMeterBack: {r: 0, g: 0, b: 0, a: 0.45}
+  chargeMeterFill: {r: 1, g: 0.85, b: 0.4, a: 0.9}
+  chargeMeterFull: {r: 1, g: 1, b: 1, a: 1}
   windupOffset: {x: 0.06, y: 0.24, z: -0.22}
   windupEuler: {x: -58, y: 14, z: -20}
   impactOffset: {x: -0.07, y: -0.3, z: 0.3}
@@ -3504,7 +3524,7 @@ MonoBehaviour:
   punchDecay: 0.16
   hitMask:
     serializedVersion: 2
-    m_Bits: 0
+    m_Bits: 4294967295
   swingRange: 3.2
   swingRadius: 0.4
   castStartOffset: 0.25
@@ -3519,10 +3539,10 @@ MonoBehaviour:
   maxAirBounces: 0
   bounceWhenGrounded: 1
   bounceReleasesGrapple: 1
-  throwSpeed: 26
-  throwUpSpeed: 3
+  throwSpeed: 42
+  throwUpSpeed: 2
   inheritPlayerVelocity: 0.5
-  throwSpinSpeed: 900
+  throwSpinSpeed: 1440
   throwSpawnForward: 0.6
   throwCooldown: 0.25
   thrownStickMask:
@@ -3538,6 +3558,8 @@ MonoBehaviour:
   grappleTag: 
   grappleRadius: 0.6
   stickEulerOffset: {x: 0, y: 0, z: 0}
+  thrownMaxStepDistance: 0.22
+  thrownMaxSubSteps: 14
   pickupDistance: 2.5
   requireStuckToPickup: 0
   allowRemoteRecall: 1
@@ -8895,6 +8917,9 @@ MonoBehaviour:
   angleWeight: 1
   distanceWeight: 0.4
   minTargetDistance: 2
+  attachToObjectCenter: 1
+  respectTargetRadius: 1
+  anchorClearance: 0.6
   zipMaxSpeed: 28
   zipAcceleration: 70
   zipArrivalDistance: 2.5
@@ -8948,11 +8973,18 @@ MonoBehaviour:
   ropeSegments: 14
   ropeDrawSpeed: 140
   sagAmount: 0.35
-  reticleSize: 40
   crosshairSize: 6
   crosshairColor: {r: 1, g: 1, b: 1, a: 0.9}
+  reticleSize: 40
   reticleColor: {r: 1, g: 1, b: 1, a: 0.55}
   reticleLockedColor: {r: 0.3, g: 1, b: 0.6, a: 0.95}
+  reticleSpinSpeed: 42
+  reticleSnapTime: 0.12
+  reticleSnapScale: 2.2
+  reticleRingThickness: 5
+  reticleSegmentGap: 0.55
+  lockedPulseSpeed: 7
+  lockedPulseAmount: 0.05
 --- !u!114 &1956646849
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -8965,49 +8997,410 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 05f5e31518ed4666aad016533bcd3b97, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  moveForward:
-    source: 1
-    key: 37
-  moveBack:
-    source: 1
-    key: 33
-  moveLeft:
-    source: 1
-    key: 15
-  moveRight:
-    source: 1
-    key: 18
-  arrowKeysAlsoMove: 0
+  move:
+    reference: {fileID: -2831073821844608992, guid: 72a49e85ce8983e4a9e55eeb533549e4, type: 3}
+    action:
+      m_Name: Move
+      m_Type: 0
+      m_ExpectedControlType: Vector2
+      m_Id: dbc546ec-5ccf-4879-b1b8-3a22febd08c0
+      m_Processors: 
+      m_Interactions: 
+      m_SingletonActionBindings:
+      - m_Name: 2DVector
+        m_Id: f35dd072-4ee9-41c6-ab46-36956a56549b
+        m_Path: 2DVector(mode=2)
+        m_Interactions: 
+        m_Processors: 
+        m_Groups: 
+        m_Action: Move
+        m_Flags: 4
+      - m_Name: Up
+        m_Id: ec2d6504-43e0-4054-9a19-4c0c548c1e3f
+        m_Path: <Keyboard>/w
+        m_Interactions: 
+        m_Processors: 
+        m_Groups: 
+        m_Action: Move
+        m_Flags: 8
+      - m_Name: Down
+        m_Id: e05cc5ea-a27d-4ef8-8f63-e4f5f9f8d84e
+        m_Path: <Keyboard>/s
+        m_Interactions: 
+        m_Processors: 
+        m_Groups: 
+        m_Action: Move
+        m_Flags: 8
+      - m_Name: Left
+        m_Id: ebde8cf1-3a0f-42ce-b728-9edda1307851
+        m_Path: <Keyboard>/a
+        m_Interactions: 
+        m_Processors: 
+        m_Groups: 
+        m_Action: Move
+        m_Flags: 8
+      - m_Name: Right
+        m_Id: a478a709-9cb4-40ce-9b3a-cbef216d9cc8
+        m_Path: <Keyboard>/d
+        m_Interactions: 
+        m_Processors: 
+        m_Groups: 
+        m_Action: Move
+        m_Flags: 8
+      - m_Name: 2DVector
+        m_Id: 606b5c28-a5c6-420a-913b-1c5717c9a2e5
+        m_Path: 2DVector(mode=2)
+        m_Interactions: 
+        m_Processors: 
+        m_Groups: 
+        m_Action: Move
+        m_Flags: 4
+      - m_Name: Up
+        m_Id: b5527646-8a9f-4f7e-a363-f345bff450a6
+        m_Path: <Keyboard>/upArrow
+        m_Interactions: 
+        m_Processors: 
+        m_Groups: 
+        m_Action: Move
+        m_Flags: 8
+      - m_Name: Down
+        m_Id: e051b265-dd91-4c56-8c13-46d9701af5ee
+        m_Path: <Keyboard>/downArrow
+        m_Interactions: 
+        m_Processors: 
+        m_Groups: 
+        m_Action: Move
+        m_Flags: 8
+      - m_Name: Left
+        m_Id: 0fa9ae76-65ff-4bf1-8119-43473ebf4b09
+        m_Path: <Keyboard>/leftArrow
+        m_Interactions: 
+        m_Processors: 
+        m_Groups: 
+        m_Action: Move
+        m_Flags: 8
+      - m_Name: Right
+        m_Id: a733533b-bf63-4bc7-a3fa-c882a3bb3893
+        m_Path: <Keyboard>/rightArrow
+        m_Interactions: 
+        m_Processors: 
+        m_Groups: 
+        m_Action: Move
+        m_Flags: 8
+      - m_Name: 
+        m_Id: 5eebb21c-ec86-460f-b096-1499359a0577
+        m_Path: <Gamepad>/leftStick
+        m_Interactions: 
+        m_Processors: stickDeadzone(min=0.15,max=0.95)
+        m_Groups: 
+        m_Action: Move
+        m_Flags: 0
+      m_Flags: 0
+  lookMouse:
+    reference: {fileID: -3008507662850386609, guid: 72a49e85ce8983e4a9e55eeb533549e4, type: 3}
+    action:
+      m_Name: LookMouse
+      m_Type: 0
+      m_ExpectedControlType: Vector2
+      m_Id: c15b138a-2e7f-4199-8a72-82b5ab26421e
+      m_Processors: 
+      m_Interactions: 
+      m_SingletonActionBindings:
+      - m_Name: 
+        m_Id: 6e17c271-5d26-417b-9b8f-40c616e80a40
+        m_Path: <Mouse>/delta
+        m_Interactions: 
+        m_Processors: 
+        m_Groups: 
+        m_Action: LookMouse
+        m_Flags: 0
+      m_Flags: 0
+  lookStick:
+    reference: {fileID: 2362551316282578376, guid: 72a49e85ce8983e4a9e55eeb533549e4, type: 3}
+    action:
+      m_Name: LookStick
+      m_Type: 0
+      m_ExpectedControlType: Vector2
+      m_Id: 2c25c7e3-1567-4207-b00e-dbf920860f23
+      m_Processors: 
+      m_Interactions: 
+      m_SingletonActionBindings:
+      - m_Name: 
+        m_Id: a0c46961-fdc2-4dd4-9287-c17f79fb9a50
+        m_Path: <Gamepad>/rightStick
+        m_Interactions: 
+        m_Processors: stickDeadzone(min=0.12,max=0.95)
+        m_Groups: 
+        m_Action: LookStick
+        m_Flags: 0
+      m_Flags: 0
+  scroll:
+    reference: {fileID: -8034498884694295560, guid: 72a49e85ce8983e4a9e55eeb533549e4, type: 3}
+    action:
+      m_Name: Scroll
+      m_Type: 0
+      m_ExpectedControlType: Axis
+      m_Id: 4768719b-0cf0-4598-bda3-97f8cd35b9a0
+      m_Processors: 
+      m_Interactions: 
+      m_SingletonActionBindings:
+      - m_Name: 
+        m_Id: 7ef5c628-a42d-49d1-9455-363e6b7e5240
+        m_Path: <Mouse>/scroll/y
+        m_Interactions: 
+        m_Processors: 
+        m_Groups: 
+        m_Action: Scroll
+        m_Flags: 0
+      - m_Name: 
+        m_Id: 2607e69d-7326-4909-b522-43dfcec4bfa8
+        m_Path: <Gamepad>/dpad/y
+        m_Interactions: 
+        m_Processors: 
+        m_Groups: 
+        m_Action: Scroll
+        m_Flags: 0
+      m_Flags: 0
   jump:
-    source: 1
-    key: 1
+    reference: {fileID: -7090014611545555120, guid: 72a49e85ce8983e4a9e55eeb533549e4, type: 3}
+    action:
+      m_Name: Jump
+      m_Type: 1
+      m_ExpectedControlType: 
+      m_Id: 5c0fa4f3-3e15-453a-9a8d-60bb00e18ede
+      m_Processors: 
+      m_Interactions: 
+      m_SingletonActionBindings:
+      - m_Name: 
+        m_Id: e0b14e66-b319-4b2b-9245-a86418718172
+        m_Path: <Keyboard>/space
+        m_Interactions: 
+        m_Processors: 
+        m_Groups: 
+        m_Action: Jump
+        m_Flags: 0
+      - m_Name: 
+        m_Id: 0a899c09-5554-4524-af0e-288180c0f758
+        m_Path: <Gamepad>/buttonSouth
+        m_Interactions: 
+        m_Processors: 
+        m_Groups: 
+        m_Action: Jump
+        m_Flags: 0
+      m_Flags: 0
   slide:
-    source: 1
-    key: 51
+    reference: {fileID: -7757673494873084794, guid: 72a49e85ce8983e4a9e55eeb533549e4, type: 3}
+    action:
+      m_Name: Slide
+      m_Type: 1
+      m_ExpectedControlType: 
+      m_Id: b4218ed7-b9f7-473e-98f9-9587516f4a42
+      m_Processors: 
+      m_Interactions: 
+      m_SingletonActionBindings:
+      - m_Name: 
+        m_Id: 9c51d362-570e-4c3b-bd3f-7c1151d4459c
+        m_Path: <Keyboard>/leftShift
+        m_Interactions: 
+        m_Processors: 
+        m_Groups: 
+        m_Action: Slide
+        m_Flags: 0
+      - m_Name: 
+        m_Id: 395cbe97-ad53-4324-83a3-e4dbcc28a0ef
+        m_Path: <Gamepad>/buttonEast
+        m_Interactions: 
+        m_Processors: 
+        m_Groups: 
+        m_Action: Slide
+        m_Flags: 0
+      m_Flags: 0
   dart:
-    source: 1
-    key: 51
+    reference: {fileID: 2088192465964882463, guid: 72a49e85ce8983e4a9e55eeb533549e4, type: 3}
+    action:
+      m_Name: Dart
+      m_Type: 1
+      m_ExpectedControlType: 
+      m_Id: 4ca9476d-2a2e-44ca-9b35-deb291146f02
+      m_Processors: 
+      m_Interactions: 
+      m_SingletonActionBindings:
+      - m_Name: 
+        m_Id: 54699b1b-35bd-444a-9d55-647a6dd28a3e
+        m_Path: <Keyboard>/leftShift
+        m_Interactions: 
+        m_Processors: 
+        m_Groups: 
+        m_Action: Dart
+        m_Flags: 0
+      - m_Name: 
+        m_Id: 0a3c568e-39a8-4bb9-b74f-f0496350510d
+        m_Path: <Gamepad>/buttonEast
+        m_Interactions: 
+        m_Processors: 
+        m_Groups: 
+        m_Action: Dart
+        m_Flags: 0
+      m_Flags: 0
   grappleSwing:
-    source: 1
-    key: 19
+    reference: {fileID: -4345044284319865770, guid: 72a49e85ce8983e4a9e55eeb533549e4, type: 3}
+    action:
+      m_Name: GrappleSwing
+      m_Type: 1
+      m_ExpectedControlType: 
+      m_Id: cc6b9775-d7e1-4ab6-84ea-be5a98d9efaa
+      m_Processors: 
+      m_Interactions: 
+      m_SingletonActionBindings:
+      - m_Name: 
+        m_Id: 8a908962-809c-4937-bcf5-bdfc5b8690ed
+        m_Path: <Keyboard>/e
+        m_Interactions: 
+        m_Processors: 
+        m_Groups: 
+        m_Action: GrappleSwing
+        m_Flags: 0
+      - m_Name: 
+        m_Id: 682462cf-aa62-4dba-9c47-eac059d531a5
+        m_Path: <Gamepad>/rightShoulder
+        m_Interactions: 
+        m_Processors: 
+        m_Groups: 
+        m_Action: GrappleSwing
+        m_Flags: 0
+      m_Flags: 0
   grapplePull:
-    source: 3
-    key: 0
+    reference: {fileID: 5880535618903418716, guid: 72a49e85ce8983e4a9e55eeb533549e4, type: 3}
+    action:
+      m_Name: GrapplePull
+      m_Type: 1
+      m_ExpectedControlType: 
+      m_Id: c8230435-ad00-4c78-bbd1-c84b08ee2985
+      m_Processors: 
+      m_Interactions: 
+      m_SingletonActionBindings:
+      - m_Name: 
+        m_Id: 85648ca5-a6c8-4319-b97a-ac33b1ee3d32
+        m_Path: <Keyboard>/f
+        m_Interactions: 
+        m_Processors: 
+        m_Groups: 
+        m_Action: GrapplePull
+        m_Flags: 0
+      - m_Name: 
+        m_Id: 3f602740-b1cf-4d57-b10b-86506f4ca028
+        m_Path: <Gamepad>/leftShoulder
+        m_Interactions: 
+        m_Processors: 
+        m_Groups: 
+        m_Action: GrapplePull
+        m_Flags: 0
+      m_Flags: 0
   axeSwing:
-    source: 2
-    key: 0
+    reference: {fileID: -1245316698173361784, guid: 72a49e85ce8983e4a9e55eeb533549e4, type: 3}
+    action:
+      m_Name: AxeSwing
+      m_Type: 1
+      m_ExpectedControlType: 
+      m_Id: 1a66b3ca-1f84-4a84-a8f7-3d1da1b15b1e
+      m_Processors: 
+      m_Interactions: 
+      m_SingletonActionBindings:
+      - m_Name: 
+        m_Id: d3a854e9-dd2a-4c86-b939-0f1358049ec6
+        m_Path: <Mouse>/leftButton
+        m_Interactions: 
+        m_Processors: 
+        m_Groups: 
+        m_Action: AxeSwing
+        m_Flags: 0
+      - m_Name: 
+        m_Id: f23a0ebe-7a38-42ce-b0e3-264a28eb4af8
+        m_Path: <Gamepad>/rightTrigger
+        m_Interactions: 
+        m_Processors: 
+        m_Groups: 
+        m_Action: AxeSwing
+        m_Flags: 0
+      m_Flags: 0
   axeThrow:
-    source: 1
-    key: 20
+    reference: {fileID: 5613938843582963325, guid: 72a49e85ce8983e4a9e55eeb533549e4, type: 3}
+    action:
+      m_Name: AxeThrow
+      m_Type: 1
+      m_ExpectedControlType: 
+      m_Id: cac6eaae-3d95-4fd4-b4df-02ca63192315
+      m_Processors: 
+      m_Interactions: 
+      m_SingletonActionBindings: []
+      m_Flags: 0
   axePickup:
-    source: 1
-    key: 21
+    reference: {fileID: -4029297838420322142, guid: 72a49e85ce8983e4a9e55eeb533549e4, type: 3}
+    action:
+      m_Name: AxePickup
+      m_Type: 1
+      m_ExpectedControlType: 
+      m_Id: f66c7cbb-d936-49d9-a178-699955d18f07
+      m_Processors: 
+      m_Interactions: 
+      m_SingletonActionBindings:
+      - m_Name: 
+        m_Id: c8a13b1e-6862-47a4-b145-65d86ebc2851
+        m_Path: <Keyboard>/g
+        m_Interactions: 
+        m_Processors: 
+        m_Groups: 
+        m_Action: AxePickup
+        m_Flags: 0
+      - m_Name: 
+        m_Id: bb577018-790f-410f-91f7-f29325d3feb4
+        m_Path: <Gamepad>/buttonWest
+        m_Interactions: 
+        m_Processors: 
+        m_Groups: 
+        m_Action: AxePickup
+        m_Flags: 0
+      m_Flags: 0
   axeRecall:
-    source: 1
-    key: 32
+    reference: {fileID: 5933215353843436945, guid: 72a49e85ce8983e4a9e55eeb533549e4, type: 3}
+    action:
+      m_Name: AxeRecall
+      m_Type: 1
+      m_ExpectedControlType: 
+      m_Id: 621ab845-e9d0-4ab7-9699-59c1a58ae931
+      m_Processors: 
+      m_Interactions: 
+      m_SingletonActionBindings:
+      - m_Name: 
+        m_Id: e914fe91-c10a-44d6-90e7-a1372de8cae7
+        m_Path: <Keyboard>/r
+        m_Interactions: 
+        m_Processors: 
+        m_Groups: 
+        m_Action: AxeRecall
+        m_Flags: 0
+      - m_Name: 
+        m_Id: a06f21e8-1f4f-44fa-a2d9-f048bb807729
+        m_Path: <Gamepad>/buttonNorth
+        m_Interactions: 
+        m_Processors: 
+        m_Groups: 
+        m_Action: AxeRecall
+        m_Flags: 0
+      m_Flags: 0
+  mouseLookScale: 1
+  gamepadLookSpeed: 2600
+  gamepadLookDeadzone: 0.15
+  gamepadLookExponent: 2
   invertLookY: 0
   blockLookWhenCursorFree: 1
+  gamepadWakeThreshold: 0.3
+  lockCursorOnGamepad: 1
+  enableRumble: 1
+  rumbleScale: 1
   inputEnabled: 1
+  saveKey: input.bindings.v1
+  loadSavedBindingsOnAwake: 1
 --- !u!114 &1956646850
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -9025,6 +9418,7 @@ MonoBehaviour:
   cameraRig: {fileID: 835992646}
   grappling: {fileID: 1956646848}
   axe: {fileID: 573419314}
+  input: {fileID: 0}
   landDust: 1
   landMinSpeed: 4
   landBigSpeed: 24
@@ -9064,6 +9458,17 @@ MonoBehaviour:
   axeStickShake: 0.35
   axeStickFullRange: 6
   axeStickMaxRange: 28
+  chargeStartFov: -2
+  chargeStartKick: {x: 0.02, y: 0.04, z: -0.05}
+  chargeHumTrauma: 0.6
+  chargeFullShake: 0.18
+  chargeFullFov: 2.5
+  chargedThrowShakeBonus: 0.3
+  chargedThrowFovBonus: 4
+  chargeRumble: 1
+  chargeFullRumbleLow: 0.5
+  chargeFullRumbleHigh: 0.35
+  chargeFullRumbleTime: 0.14
 --- !u!43 &2033742953
 Mesh:
   m_ObjectHideFlags: 0
@@ -9556,6 +9961,10 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 6629975046791531227, guid: cc66f48f8d23e7f4688b7578e092c24e, type: 3}
       propertyPath: m_IsActive
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 6901364589956764316, guid: cc66f48f8d23e7f4688b7578e092c24e, type: 3}
+      propertyPath: stickToTriggers
       value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 6901364589956764316, guid: cc66f48f8d23e7f4688b7578e092c24e, type: 3}

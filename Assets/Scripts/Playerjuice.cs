@@ -12,6 +12,7 @@ public class PlayerJuice : MonoBehaviour
     public FirstPersonCameraRig cameraRig;
     public Grappling grappling;
     public BattleAxe axe;
+    public PlayerInputRouter input;
 
     [Header("Landing")]
     public bool landDust = true;
@@ -70,6 +71,23 @@ public class PlayerJuice : MonoBehaviour
     public float axeStickFullRange = 6f;
     public float axeStickMaxRange = 28f;
 
+    [Header("Axe Charge")]
+    [Tooltip("Negative pulls the lens in, which reads as winding up.")]
+    public float chargeStartFov = -2f;
+    public Vector3 chargeStartKick = new Vector3(0.02f, 0.04f, -0.05f);
+    [Tooltip("Trauma per second at full charge. The rumble builds as the charge does.")]
+    public float chargeHumTrauma = 0.6f;
+    public float chargeFullShake = 0.18f;
+    public float chargeFullFov = 2.5f;
+    [Tooltip("Extra throw punch at full charge, on top of the normal throw juice.")]
+    public float chargedThrowShakeBonus = 0.3f;
+    public float chargedThrowFovBonus = 4f;
+    [Header("Axe Charge Rumble")]
+    public bool chargeRumble = true;
+    public float chargeFullRumbleLow = 0.5f;
+    public float chargeFullRumbleHigh = 0.35f;
+    public float chargeFullRumbleTime = 0.14f;
+
     JuiceFX fx;
 
     bool wasGrounded;
@@ -104,6 +122,7 @@ public class PlayerJuice : MonoBehaviour
 
         if (grappling == null) grappling = controller.GetComponent<Grappling>();
         if (axe == null) axe = controller.GetComponentInChildren<BattleAxe>();
+        if (input == null) input = PlayerInputRouter.Resolve(this);
         if (cameraRig == null && controller.cameraTransform != null)
             cameraRig = controller.cameraTransform.GetComponentInChildren<FirstPersonCameraRig>();
         if (shaker == null) shaker = CameraShaker.Instance;
@@ -123,6 +142,9 @@ public class PlayerJuice : MonoBehaviour
             axe.AxeThrown += OnAxeThrown;
             axe.AxeSwingStarted += OnAxeSwingStarted;
             axe.AxeHit += OnAxeHit;
+            axe.AxeChargeStarted += OnAxeChargeStarted;
+            axe.AxeChargeFull += OnAxeChargeFull;
+            axe.AxeChargeReleased += OnAxeChargeReleased;
         }
     }
 
@@ -133,6 +155,9 @@ public class PlayerJuice : MonoBehaviour
             axe.AxeThrown -= OnAxeThrown;
             axe.AxeSwingStarted -= OnAxeSwingStarted;
             axe.AxeHit -= OnAxeHit;
+            axe.AxeChargeStarted -= OnAxeChargeStarted;
+            axe.AxeChargeFull -= OnAxeChargeFull;
+            axe.AxeChargeReleased -= OnAxeChargeReleased;
         }
     }
 
@@ -149,6 +174,7 @@ public class PlayerJuice : MonoBehaviour
         TrackVault();
         TrackGrapple();
         TrackThrownAxe();
+        TrackAxeCharge(dt);
 
         lastPos = controller.transform.position;
     }
@@ -358,6 +384,48 @@ public class PlayerJuice : MonoBehaviour
                 axeStickFullRange, axeStickMaxRange);
 
         wasAxeStuck = stuck;
+    }
+
+    // A steady trickle of trauma while charging. Trauma decays on its own, so feeding
+    // it per second settles at a low hum that grows with the charge instead of spiking.
+    void TrackAxeCharge(float dt)
+    {
+        if (axe == null || shaker == null || chargeHumTrauma <= 0f) return;
+
+        float charge = axe.ChargeAmount;
+        if (charge <= 0f) return;
+
+        shaker.AddTrauma(chargeHumTrauma * charge * dt);
+    }
+
+    void OnAxeChargeStarted()
+    {
+        if (shaker == null) return;
+
+        shaker.AddKick(chargeStartKick, new Vector3(-2f, 0f, 1f));
+        shaker.AddFovPunch(chargeStartFov);
+    }
+
+    void OnAxeChargeFull()
+    {
+        if (shaker != null)
+        {
+            shaker.AddTrauma(chargeFullShake);
+            shaker.AddFovPunch(chargeFullFov);
+        }
+
+        if (chargeRumble && input != null)
+            input.Rumble(chargeFullRumbleLow, chargeFullRumbleHigh, chargeFullRumbleTime);
+    }
+
+    // Fires immediately before AxeThrown, so this is the bonus on top of the normal
+    // throw juice rather than a replacement for it.
+    void OnAxeChargeReleased(float charge)
+    {
+        if (shaker == null || charge <= 0f) return;
+
+        shaker.AddTrauma(chargedThrowShakeBonus * charge);
+        shaker.AddFovPunch(chargedThrowFovBonus * charge);
     }
 
     void OnAxeThrown()

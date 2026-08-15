@@ -21,6 +21,17 @@ public class Grappling : MonoBehaviour
     public float distanceWeight = 0.4f;
     public float minTargetDistance = 2f;
 
+    [Header("Centre Anchoring")]
+    [Tooltip("Every grappleable object anchors at the centre of its collider bounds " +
+             "instead of wherever the aim happens to graze it. Aim assist still scores " +
+             "against the nearest point, so big props are no harder to pick out.")]
+    public bool attachToObjectCenter = true;
+    [Tooltip("Stops the rope reeling you inside a large target now that the anchor sits " +
+             "in its middle. The rope can never shorten past the target's own radius plus " +
+             "this clearance.")]
+    public bool respectTargetRadius = true;
+    public float anchorClearance = 0.6f;
+
     [Header("Zip")]
     public float zipMaxSpeed = 28f;
     public float zipAcceleration = 70f;
@@ -95,11 +106,24 @@ public class Grappling : MonoBehaviour
     public float sagAmount = 0.35f;
 
     [Header("Crosshair")]
-    public float reticleSize = 40f;
     public float crosshairSize = 6f;
     public Color crosshairColor = new Color(1f, 1f, 1f, 0.9f);
-    public Color reticleColor = new Color(1f, 1f, 1f, 0.55f);
-    public Color reticleLockedColor = new Color(0.3f, 1f, 0.6f, 0.95f);
+
+    [Header("Homing Reticle")]
+    [Tooltip("Base on-screen size in pixels, before the distance falloff.")]
+    public float reticleSize = 96f;
+    public Color reticleColor = new Color(0.35f, 1f, 0.5f, 0.8f);
+    public Color reticleLockedColor = new Color(0.45f, 1f, 0.6f, 1f);
+    [Tooltip("Degrees per second the outer bracket ring turns.")]
+    public float reticleSpinSpeed = 42f;
+    [Tooltip("How long the snap-in takes when a new target is acquired.")]
+    public float reticleSnapTime = 0.12f;
+    [Tooltip("Size it snaps in FROM, as a multiple of the resting size.")]
+    public float reticleSnapScale = 2.2f;
+    public float reticleRingThickness = 5f;
+    [Range(0f, 0.9f)] public float reticleSegmentGap = 0.55f;
+    public float lockedPulseSpeed = 7f;
+    public float lockedPulseAmount = 0.05f;
 
     bool isSwinging;
     Vector3 anchor;
@@ -112,6 +136,11 @@ public class Grappling : MonoBehaviour
 
     bool isZipping;
     Vector3 zipPoint;
+    float zipRadius;
+
+    // Half-size of whatever we are anchored to. Keeps the rope from reeling the player
+    // into the middle of a large grapple volume now that the anchor lives there.
+    float anchorRadius;
 
     Vector3 currentRopeEnd;
     GameObject ropeObject;
@@ -119,10 +148,15 @@ public class Grappling : MonoBehaviour
     bool hasTarget;
     Vector3 targetPoint;
     Vector3 targetDisplayPoint;
+    Collider lockTarget;
+
+    float reticleSpin;
+    float lockT;
 
     Camera cam;
     Texture2D dotTex;
-    Texture2D ringTex;
+    Texture2D arcTex;
+    Texture2D chevronTex;
 
     Vector3 Pos => rb != null ? rb.position : transform.position;
 
@@ -136,6 +170,9 @@ public class Grappling : MonoBehaviour
     float CurrentCeiling => CurrentMaxSpeed + Mathf.Max(0f, hardSpeedCeiling - maxSwingSpeed);
 
     bool RopeIdleOnGround => controller.IsGrounded && !controller.IsSliding && !constrainWhileWalking;
+
+    /// Shortest the rope is allowed to get for the thing we are currently attached to.
+    float RopeFloor => Mathf.Max(minRopeLength, anchorRadius + anchorClearance);
 
     float ActiveGravityScale => controller.IsGrounded
         ? 1f
@@ -170,7 +207,8 @@ public class Grappling : MonoBehaviour
             cam = Camera.main;
 
         dotTex = MakeDotTexture(16);
-        ringTex = MakeRingTexture(64, 6f);
+        arcTex = MakeArcTexture(160, reticleRingThickness, 4, reticleSegmentGap, 16f);
+        chevronTex = MakeChevronTexture(64, 0.17f);
     }
 
     LineRenderer CreateWorldRope()
@@ -215,6 +253,7 @@ public class Grappling : MonoBehaviour
         cooldownTimer -= Time.deltaTime;
 
         UpdateTarget();
+        UpdateReticle(Time.deltaTime);
 
         if (input != null)
         {
@@ -277,6 +316,8 @@ public class Grappling : MonoBehaviour
         DrawRope();
     }
 
+    // ---------------------------------------------------------------- targeting
+
     void UpdateTarget()
     {
         hasTarget = false;
@@ -291,47 +332,114 @@ public class Grappling : MonoBehaviour
         Collider[] candidates = Physics.OverlapSphere(camT.position, maxGrappleDistance, grappleMask, qti);
 
         float bestScore = float.MaxValue;
+        Collider bestCollider = null;
 
         foreach (Collider c in candidates)
         {
             if (c.attachedRigidbody == rb) continue;
             if (!string.IsNullOrEmpty(grappleTag) && !c.CompareTag(grappleTag)) continue;
 
-            Vector3 approxPoint = c.bounds.ClosestPoint(camT.position);
-            Vector3 toPoint = approxPoint - camT.position;
-            float dist = toPoint.magnitude;
-            if (dist < minTargetDistance || dist > maxGrappleDistance) continue;
+            // Scored against the nearest point so a big cube is as easy to look at as a
+            // small one, but anchored at the centre so every object behaves the same.
+            Vector3 nearest = c.bounds.ClosestPoint(camT.position);
+            Vector3 toNearest = nearest - camT.position;
+            float nearDist = toNearest.magnitude;
+            if (nearDist < minTargetDistance || nearDist > maxGrappleDistance) continue;
 
-            float angle = Vector3.Angle(camT.forward, toPoint);
+            float angle = Vector3.Angle(camT.forward, toNearest);
             if (angle > aimAssistAngle) continue;
 
-            Vector3 dir = toPoint / dist;
-            Vector3 point = approxPoint;
-            if (c.Raycast(new Ray(camT.position, dir), out RaycastHit surf, maxGrappleDistance))
-                point = surf.point;
+            Vector3 point = GrapplePointFor(c, camT.position);
+            Vector3 toPoint = point - camT.position;
+            float pointDist = toPoint.magnitude;
+            if (pointDist < 0.05f) continue;
 
-            float pointDist = Mathf.Max(0.05f, Vector3.Distance(camT.position, point));
-            if (Physics.Raycast(camT.position, dir, out RaycastHit block,
-                    pointDist - 0.05f, ~0, QueryTriggerInteraction.Ignore)
-                && block.collider != c)
-                continue;
+            if (IsBlocked(camT.position, toPoint / pointDist, pointDist, c)) continue;
 
             float score = (angle / aimAssistAngle) * angleWeight +
-                          (dist / maxGrappleDistance) * distanceWeight;
+                          (nearDist / maxGrappleDistance) * distanceWeight;
 
             if (score < bestScore)
             {
                 bestScore = score;
                 hasTarget = true;
+                bestCollider = c;
                 targetPoint = point;
-                targetDisplayPoint = c.bounds.center;
+                targetDisplayPoint = point;
             }
         }
+
+        // A new object snaps the reticle in again, which is the whole read of the effect.
+        if (hasTarget && bestCollider != lockTarget)
+        {
+            lockTarget = bestCollider;
+            lockT = 0f;
+        }
+        else if (!hasTarget)
+        {
+            lockTarget = null;
+        }
+    }
+
+    /// Where the rope actually attaches on a given collider.
+    Vector3 GrapplePointFor(Collider c, Vector3 from)
+    {
+        if (attachToObjectCenter)
+            return c.bounds.center;
+
+        Vector3 nearest = c.bounds.ClosestPoint(from);
+        Vector3 to = nearest - from;
+        float d = to.magnitude;
+        if (d < 0.001f) return nearest;
+
+        if (c.Raycast(new Ray(from, to / d), out RaycastHit surf, maxGrappleDistance))
+            return surf.point;
+
+        return nearest;
+    }
+
+    /// Line of sight test that tolerates the target's own geometry. Aiming at a centre
+    /// point means the ray always passes through the target's own surface first, and a
+    /// prop built from several colliders would otherwise block itself.
+    bool IsBlocked(Vector3 origin, Vector3 dir, float dist, Collider target)
+    {
+        float check = dist - 0.05f;
+        if (check <= 0.05f) return false;
+
+        RaycastHit[] hits = Physics.RaycastAll(origin, dir, check, ~0, QueryTriggerInteraction.Ignore);
+
+        foreach (RaycastHit h in hits)
+        {
+            if (h.collider == null) continue;
+            if (h.collider == target) continue;
+            if (h.collider.attachedRigidbody == rb) continue;
+            if (SameObject(h.collider, target)) continue;
+
+            return true;
+        }
+
+        return false;
+    }
+
+    static bool SameObject(Collider a, Collider b)
+    {
+        if (a == null || b == null) return false;
+        if (a.attachedRigidbody != null && a.attachedRigidbody == b.attachedRigidbody) return true;
+
+        return a.transform == b.transform
+            || a.transform.IsChildOf(b.transform)
+            || b.transform.IsChildOf(a.transform);
     }
 
     public bool TryGetGrapplePoint(out Vector3 point)
     {
+        return TryGetGrapplePoint(out point, out _);
+    }
+
+    public bool TryGetGrapplePoint(out Vector3 point, out Collider hitCollider)
+    {
         point = default;
+        hitCollider = null;
 
         Transform camT = controller.cameraTransform;
         if (camT == null) return false;
@@ -339,6 +447,7 @@ public class Grappling : MonoBehaviour
         if (hasTarget)
         {
             point = targetPoint;
+            hitCollider = lockTarget;
             return true;
         }
 
@@ -356,7 +465,8 @@ public class Grappling : MonoBehaviour
 
             if (tagOk)
             {
-                point = h.point;
+                point = GrapplePointFor(h.collider, camT.position);
+                hitCollider = h.collider;
                 return true;
             }
 
@@ -367,12 +477,21 @@ public class Grappling : MonoBehaviour
         return false;
     }
 
+    static float RadiusOf(Collider c)
+    {
+        if (c == null) return 0f;
+
+        Vector3 e = c.bounds.extents;
+        return Mathf.Max(e.x, Mathf.Max(e.y, e.z));
+    }
+
     void TryStartZip()
     {
         if (isZipping || isSwinging || controller.IsVaulting) return;
-        if (!TryGetGrapplePoint(out Vector3 point)) return;
+        if (!TryGetGrapplePoint(out Vector3 point, out Collider col)) return;
 
         zipPoint = point;
+        zipRadius = attachToObjectCenter && respectTargetRadius ? RadiusOf(col) : 0f;
         isZipping = true;
         controller.IsZipping = true;
         currentRopeEnd = gunTip != null ? gunTip.position : transform.position;
@@ -384,6 +503,7 @@ public class Grappling : MonoBehaviour
 
         isZipping = false;
         controller.IsZipping = false;
+        zipRadius = 0f;
 
         if (ropeLine != null)
             ropeLine.positionCount = 0;
@@ -400,7 +520,9 @@ public class Grappling : MonoBehaviour
         Vector3 toPoint = zipPoint - Pos;
         float dist = toPoint.magnitude;
 
-        if (dist <= zipArrivalDistance)
+        // Arrival is measured from the target's surface, not its centre, so zipping to
+        // a large object no longer flies you into the middle of it before letting go.
+        if (dist <= zipArrivalDistance + zipRadius)
         {
             if (controller.TryZipWallRun())
             {
@@ -434,13 +556,14 @@ public class Grappling : MonoBehaviour
     {
         if (isSwinging || isZipping || cooldownTimer > 0f) return;
         if (controller.IsVaulting) return;
-        if (!TryGetGrapplePoint(out Vector3 point)) return;
+        if (!TryGetGrapplePoint(out Vector3 point, out Collider col)) return;
 
         float dist = Vector3.Distance(Pos, point);
         if (dist < minSwingDistance || dist > maxSwingDistance) return;
 
         anchor = point;
-        ropeLength = Mathf.Max(minRopeLength, dist * initialRopeScale);
+        anchorRadius = attachToObjectCenter && respectTargetRadius ? RadiusOf(col) : 0f;
+        ropeLength = Mathf.Max(RopeFloor, dist * initialRopeScale);
         attachRopeLength = ropeLength;
         isSwinging = true;
         controller.IsSwinging = true;
@@ -498,6 +621,7 @@ public class Grappling : MonoBehaviour
         controller.IsSwinging = false;
         jumpQueued = false;
         pendingReel = 0f;
+        anchorRadius = 0f;
         cooldownTimer = reattachCooldown;
 
         if (ropeLine != null)
@@ -535,7 +659,7 @@ public class Grappling : MonoBehaviour
         if (!breakOnObstruction) return true;
 
         Vector3 dir = (anchor - pos) / Mathf.Max(dist, 0.001f);
-        float checkDist = dist - obstructionTolerance;
+        float checkDist = dist - obstructionTolerance - anchorRadius;
 
         bool blocked = checkDist > 0.5f && Physics.Raycast(pos, dir, checkDist,
             controller.groundMask, QueryTriggerInteraction.Ignore);
@@ -547,6 +671,7 @@ public class Grappling : MonoBehaviour
     void UpdateRopeLength(float dt)
     {
         float dist = Vector3.Distance(Pos, anchor);
+        float floor = RopeFloor;
 
         if (Mathf.Abs(pendingReel) > 0.0001f)
         {
@@ -558,8 +683,8 @@ public class Grappling : MonoBehaviour
 
         if (above > 0.15f && !RopeIdleOnGround)
         {
-            float floor = Mathf.Max(minRopeLength, attachRopeLength * aboveAnchorMinRopeFactor);
-            ropeLength = Mathf.Max(floor, ropeLength - aboveAnchorReelSpeed * above * dt);
+            float aboveFloor = Mathf.Max(floor, attachRopeLength * aboveAnchorMinRopeFactor);
+            ropeLength = Mathf.Max(aboveFloor, ropeLength - aboveAnchorReelSpeed * above * dt);
         }
         else if (autoReelSpeed > 0f && !RopeIdleOnGround)
         {
@@ -569,7 +694,7 @@ public class Grappling : MonoBehaviour
         if (slackTakeUpSpeed > 0f && dist < ropeLength && above < 0.15f)
             ropeLength = Mathf.MoveTowards(ropeLength, dist, slackTakeUpSpeed * dt);
 
-        ropeLength = Mathf.Clamp(ropeLength, minRopeLength, maxSwingDistance);
+        ropeLength = Mathf.Clamp(ropeLength, floor, maxSwingDistance);
     }
 
     void SolveRope(float dt)
@@ -750,35 +875,104 @@ public class Grappling : MonoBehaviour
         }
     }
 
+    // ---------------------------------------------------------------- reticle
+
+    // Animated here rather than in OnGUI, which runs more than once per frame and would
+    // otherwise advance the snap and the spin at double speed.
+    void UpdateReticle(float dt)
+    {
+        reticleSpin += reticleSpinSpeed * dt;
+        if (reticleSpin > 360f) reticleSpin -= 360f;
+
+        bool show = isZipping || isSwinging || hasTarget;
+        if (!show)
+        {
+            lockT = 0f;
+            return;
+        }
+
+        lockT = Mathf.MoveTowards(lockT, 1f, dt / Mathf.Max(0.01f, reticleSnapTime));
+    }
+
     void OnGUI()
     {
         if (dotTex == null) return;
+
+        Color old = GUI.color;
 
         float half = crosshairSize * 0.5f;
         GUI.color = crosshairColor;
         GUI.DrawTexture(new Rect(Screen.width * 0.5f - half, Screen.height * 0.5f - half,
             crosshairSize, crosshairSize), dotTex);
 
-        bool show = isZipping || isSwinging || hasTarget;
-        if (show && cam != null && controller.cameraTransform != null)
+        if (lockT > 0.001f && cam != null && controller.cameraTransform != null)
         {
             Vector3 worldPoint = isZipping ? zipPoint : (isSwinging ? anchor : targetDisplayPoint);
             Vector3 sp = cam.WorldToScreenPoint(worldPoint);
 
             if (sp.z > 0f)
             {
+                Vector2 screen = new Vector2(sp.x, Screen.height - sp.y);
                 float dist = Vector3.Distance(controller.cameraTransform.position, worldPoint);
-                float size = Mathf.Lerp(reticleSize * 1.5f, reticleSize * 0.75f,
+                float size = Mathf.Lerp(reticleSize * 1.35f, reticleSize * 0.7f,
                     Mathf.Clamp01(dist / maxGrappleDistance));
-                float h = size * 0.5f;
 
-                GUI.color = (isZipping || isSwinging) ? reticleLockedColor : reticleColor;
-                GUI.DrawTexture(new Rect(sp.x - h, Screen.height - sp.y - h, size, size), ringTex);
+                bool locked = isZipping || isSwinging;
+                DrawReticle(screen, size, locked ? reticleLockedColor : reticleColor, locked);
             }
         }
 
-        GUI.color = Color.white;
+        GUI.color = old;
     }
+
+    // Four bracket arcs turning one way, four chevrons converging inward the other way.
+    // The whole thing snaps down from oversized on acquisition, which is what sells it.
+    void DrawReticle(Vector2 screen, float size, Color tint, bool locked)
+    {
+        float ease = 1f - Mathf.Pow(1f - Mathf.Clamp01(lockT), 3f);
+        float scale = Mathf.Lerp(reticleSnapScale, 1f, ease);
+
+        if (locked)
+            scale *= 1f + Mathf.Sin(Time.time * lockedPulseSpeed) * lockedPulseAmount;
+
+        float s = size * scale;
+
+        Color c = tint;
+        c.a *= ease;
+        GUI.color = c;
+
+        Matrix4x4 baseMatrix = GUI.matrix;
+
+        // Outer bracket ring.
+        GUIUtility.RotateAroundPivot(reticleSpin, screen);
+        GUI.DrawTexture(new Rect(screen.x - s * 0.5f, screen.y - s * 0.5f, s, s), arcTex);
+        GUI.matrix = baseMatrix;
+
+        // Chevrons, sat between the brackets and sliding in as the lock completes.
+        float radius = s * Mathf.Lerp(0.95f, 0.46f, ease);
+        float bladeSize = s * 0.2f;
+
+        for (int i = 0; i < 4; i++)
+        {
+            float ang = 45f + i * 90f - reticleSpin * 0.55f;
+            float rad = ang * Mathf.Deg2Rad;
+
+            // GUI space has y running down, so "up" is -y and positive angles turn clockwise.
+            Vector2 dir = new Vector2(Mathf.Sin(rad), -Mathf.Cos(rad));
+            Vector2 p = screen + dir * radius;
+
+            GUIUtility.RotateAroundPivot(ang + 180f, p);
+            GUI.DrawTexture(new Rect(p.x - bladeSize * 0.5f, p.y - bladeSize * 0.5f,
+                bladeSize, bladeSize), chevronTex);
+            GUI.matrix = baseMatrix;
+        }
+
+        // Centre pip so the anchor point itself is readable.
+        float pip = Mathf.Max(3f, s * 0.045f);
+        GUI.DrawTexture(new Rect(screen.x - pip * 0.5f, screen.y - pip * 0.5f, pip, pip), dotTex);
+    }
+
+    // ---------------------------------------------------------------- textures
 
     static Texture2D MakeDotTexture(int size)
     {
@@ -799,22 +993,102 @@ public class Grappling : MonoBehaviour
         return tex;
     }
 
-    static Texture2D MakeRingTexture(int size, float thickness)
+    /// Ring broken into segments with an inward tick at each segment centre - the bit
+    /// that makes it read as a scope rather than a plain circle.
+    static Texture2D MakeArcTexture(int size, float thickness, int segments,
+                                    float gap, float tickLength)
     {
         var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
+        Color[] px = new Color[size * size];
+
         float r = size * 0.5f;
         float ringR = r - thickness * 0.5f - 1f;
+        float segSpan = 360f / Mathf.Max(1, segments);
+        float halfFill = segSpan * (1f - Mathf.Clamp01(gap)) * 0.5f;
+
         for (int y = 0; y < size; y++)
         {
             for (int x = 0; x < size; x++)
             {
-                float dx = x - r + 0.5f;
-                float dy = y - r + 0.5f;
-                float d = Mathf.Sqrt(dx * dx + dy * dy);
-                float a = Mathf.Clamp01(thickness * 0.5f - Mathf.Abs(d - ringR) + 0.5f);
-                tex.SetPixel(x, y, new Color(1f, 1f, 1f, a));
+                float a = 0f;
+
+                // 2x2 supersample, since these are drawn scaled and rotated.
+                for (int sy = 0; sy < 2; sy++)
+                {
+                    for (int sx = 0; sx < 2; sx++)
+                    {
+                        float fx = x + 0.25f + sx * 0.5f - r;
+                        float fy = y + 0.25f + sy * 0.5f - r;
+
+                        float d = Mathf.Sqrt(fx * fx + fy * fy);
+                        if (d < 0.001f) continue;
+
+                        float ang = Mathf.Repeat(Mathf.Atan2(fx, fy) * Mathf.Rad2Deg, 360f);
+                        float local = Mathf.Repeat(ang + segSpan * 0.5f, segSpan) - segSpan * 0.5f;
+
+                        bool onRing = Mathf.Abs(local) <= halfFill &&
+                                      Mathf.Abs(d - ringR) <= thickness * 0.5f;
+
+                        // Perpendicular distance from the segment's centre ray, so the
+                        // tick keeps a constant pixel width all the way in.
+                        float perp = Mathf.Abs(d * Mathf.Sin(local * Mathf.Deg2Rad));
+                        bool onTick = perp <= thickness * 0.4f &&
+                                      d <= ringR && d >= ringR - tickLength;
+
+                        if (onRing || onTick) a += 0.25f;
+                    }
+                }
+
+                px[y * size + x] = new Color(1f, 1f, 1f, a);
             }
         }
+
+        tex.SetPixels(px);
+        tex.Apply();
+        tex.hideFlags = HideFlags.HideAndDontSave;
+        return tex;
+    }
+
+    /// Hollow arrowhead pointing at the top of the image, so a 180 degree turn aims it
+    /// back at the reticle centre.
+    static Texture2D MakeChevronTexture(int size, float thickness)
+    {
+        var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
+        Color[] px = new Color[size * size];
+
+        const float spread = 0.95f;
+        const float tailCut = 0.32f;
+
+        for (int y = 0; y < size; y++)
+        {
+            for (int x = 0; x < size; x++)
+            {
+                float a = 0f;
+
+                for (int sy = 0; sy < 2; sy++)
+                {
+                    for (int sx = 0; sx < 2; sx++)
+                    {
+                        float nx = (x + 0.25f + sx * 0.5f) / size;
+                        float ny = (y + 0.25f + sy * 0.5f) / size;   // 1 = top of the image
+
+                        float outerHalf = 0.5f * spread * (1f - ny);
+                        bool outer = ny >= tailCut && Mathf.Abs(nx - 0.5f) <= outerHalf;
+
+                        float innerHalf = outerHalf - thickness * 0.5f;
+                        bool inner = ny >= tailCut + thickness * 0.6f &&
+                                     ny <= 1f - thickness * 1.5f &&
+                                     Mathf.Abs(nx - 0.5f) <= innerHalf;
+
+                        if (outer && !inner) a += 0.25f;
+                    }
+                }
+
+                px[y * size + x] = new Color(1f, 1f, 1f, a);
+            }
+        }
+
+        tex.SetPixels(px);
         tex.Apply();
         tex.hideFlags = HideFlags.HideAndDontSave;
         return tex;

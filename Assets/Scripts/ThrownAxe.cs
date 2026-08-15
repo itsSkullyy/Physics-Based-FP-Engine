@@ -14,9 +14,9 @@ public class ThrownAxe : MonoBehaviour
 
     [Header("Flight")]
     public float gravityScale = 1f;
-    public float spinSpeed = 1440f;             // degrees per second, 4 rotations a second
+    public float spinSpeed = 2160f;             // degrees per second, 6 rotations a second
     public bool scaleSpinWithThrowSpeed = true;
-    public float spinReferenceSpeed = 26f;
+    public float spinReferenceSpeed = 42f;
     [Range(0.25f, 3f)] public float minSpinScale = 0.7f;
     [Range(0.25f, 3f)] public float maxSpinScale = 1.7f;
     public float maxLifetime = 30f;
@@ -26,8 +26,8 @@ public class ThrownAxe : MonoBehaviour
     public float sweepRadius = 0.08f;           // fatness of the head probe
     public bool sweepBody = true;
     public float bodySweepRadius = 0.06f;       // fatness of the pivot/handle probe
-    public float maxStepDistance = 0.35f;       // shorter = more substeps = tighter arc
-    public int maxSubSteps = 8;
+    public float maxStepDistance = 0.22f;       // shorter = more substeps = tighter arc
+    public int maxSubSteps = 14;
     public float skinWidth = 0.02f;
 
     [Header("Stick")]
@@ -45,7 +45,7 @@ public class ThrownAxe : MonoBehaviour
     public float impactShake = 0.4f;
     public float impactShakeFullRange = 5f;
     public float impactShakeMaxRange = 30f;
-    public float impactReferenceSpeed = 26f;
+    public float impactReferenceSpeed = 42f;
     public float stickWobbleAngle = 7f;
     public float stickWobbleFrequency = 26f;
     public float stickWobbleDamp = 7f;
