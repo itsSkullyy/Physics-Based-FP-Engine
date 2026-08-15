@@ -145,6 +145,26 @@ public class BattleAxe : MonoBehaviour
     public bool showPickupPrompt = true;
     public float grappleDetachRadius = 3f;
 
+    [Header("Recall")]
+    [Tooltip("Once the stuck axe's cooldown is up, the pickup button flies it back to you " +
+             "Mjolnir-style instead of needing you to walk over. Contact catches it.")]
+    public bool recallOnPickupButton = true;
+    [Tooltip("Local point on the player the axe homes to. Roughly chest height reads best.")]
+    public Vector3 recallAimLocalOffset = new Vector3(0f, 1.1f, 0f);
+    [Tooltip("How close the flying axe must get to be caught, added to its own setting.")]
+    public float recallCatchRadius = 0.7f;
+
+    [Header("Cooldown Ring UI")]
+    public bool showCooldownRing = true;
+    [Tooltip("On-screen diameter of the BOTW-style ring, in pixels.")]
+    public float ringSize = 54f;
+    public float ringThickness = 6f;
+    public Color ringBackColor = new Color(0f, 0f, 0f, 0.5f);
+    public Color ringFillColor = new Color(0.5f, 0.85f, 1f, 0.95f);
+    public Color ringReadyColor = new Color(0.4f, 1f, 0.6f, 1f);
+    [Tooltip("Ring pulses once it is ready to recall.")]
+    public float ringReadyPulseSpeed = 6f;
+
     [Header("Debug")]
     public bool logDebug = false;
 
@@ -673,23 +693,63 @@ public class BattleAxe : MonoBehaviour
             return;
         }
 
+        // While the axe is flying back to us there is nothing to do but wait for its
+        // caught callback, which runs CollectAxe. Ignore other input until it lands.
+        if (activeAxe.IsRecalling)
+            return;
+
         float dist = Vector3.Distance(controller.transform.position, activeAxe.transform.position);
         bool stuckOk = !requireStuckToPickup || activeAxe.IsStuck;
         inPickupRange = stuckOk && dist <= pickupDistance;
 
-        if (input.axePickup.Pressed && !inPickupRange && logDebug)
-            Debug.Log("[BattleAxe] Pickup pressed but not in range. Distance " +
-                      dist.ToString("0.00") + " / " + pickupDistance +
-                      ", stuck = " + activeAxe.IsStuck, this);
-
+        // Standing right next to it: collect instantly, no need to fly it back.
         if (inPickupRange && input.axePickup.Pressed)
         {
             CollectAxe();
             return;
         }
 
+        // Pickup button at range, cooldown elapsed: launch the Mjolnir recall. The axe
+        // homes to us and CollectAxe fires the moment it reaches the hand (see below).
+        if (recallOnPickupButton && input.axePickup.Pressed && activeAxe.RecallReady)
+        {
+            StartRecall();
+            return;
+        }
+
+        if (input.axePickup.Pressed && !inPickupRange && !activeAxe.RecallReady && logDebug)
+            Debug.Log("[BattleAxe] Pickup pressed but not in range and recall on cooldown. " +
+                      "Distance " + dist.ToString("0.00") + " / " + pickupDistance +
+                      ", cooldown " + activeAxe.RecallCooldownProgress.ToString("0.00"), this);
+
+        // Dedicated recall button: same gate, also flies it back rather than teleporting.
         if (allowRemoteRecall && input.axeRecall.Pressed)
-            CollectAxe();
+        {
+            if (activeAxe.RecallReady)
+                StartRecall();
+            else if (logDebug)
+                Debug.Log("[BattleAxe] Recall pressed but still on cooldown.", this);
+        }
+    }
+
+    void StartRecall()
+    {
+        if (activeAxe == null) return;
+
+        // Aim at a point on the player, not their feet, so it flies to the hand.
+        Transform aimT = controller.transform;
+        System.Func<Vector3> aimPoint = () =>
+            aimT.position + aimT.TransformVector(recallAimLocalOffset);
+
+        activeAxe.Recall(aimT, recallCatchRadius, OnRecallCaught, aimPoint);
+
+        if (logDebug) Debug.Log("[BattleAxe] Axe recalled - flying back.", this);
+    }
+
+    // Fired by ThrownAxe when the flying axe reaches us.
+    void OnRecallCaught()
+    {
+        CollectAxe();
     }
 
     void CollectAxe()
@@ -795,6 +855,7 @@ public class BattleAxe : MonoBehaviour
     void OnGUI()
     {
         DrawChargeMeter();
+        DrawCooldownRing();
 
         if (!showPickupPrompt || !inPickupRange || state != State.Thrown) return;
 
@@ -808,6 +869,116 @@ public class BattleAxe : MonoBehaviour
         string label = input != null ? input.axePickup.Label : "G";
         GUI.Label(new Rect(0f, Screen.height * 0.58f, Screen.width, 30f),
             "[" + label + "] Pick up axe", style);
+    }
+
+    // BOTW-style radial cooldown over the stuck axe. Fills clockwise as the cooldown runs,
+    // then switches to a solid ready colour and pulses. Hidden once it flies back.
+    void DrawCooldownRing()
+    {
+        if (!showCooldownRing || state != State.Thrown) return;
+        if (activeAxe == null || !activeAxe.IsStuck || activeAxe.IsRecalling) return;
+
+        Camera cam = aimTransform != null ? aimTransform.GetComponent<Camera>() : null;
+        if (cam == null) cam = Camera.main;
+        if (cam == null) return;
+
+        Vector3 sp = cam.WorldToScreenPoint(activeAxe.HeadPosition);
+        if (sp.z <= 0f) return;   // behind us
+
+        Vector2 center = new Vector2(sp.x, Screen.height - sp.y);
+        float progress = activeAxe.RecallCooldownProgress;
+        bool ready = activeAxe.RecallReady;
+
+        EnsureRingTex();
+
+        float size = ringSize;
+        if (ready)
+            size *= 1f + Mathf.Sin(Time.time * ringReadyPulseSpeed) * 0.06f;
+
+        Color old = GUI.color;
+        Rect rect = new Rect(center.x - size * 0.5f, center.y - size * 0.5f, size, size);
+
+        // Back ring (full, dim).
+        GUI.color = ringBackColor;
+        GUI.DrawTexture(rect, ringBackTex, ScaleMode.StretchToFill, true);
+
+        // Fill: when ready, a full solid ring; otherwise a radial wedge up to progress.
+        GUI.color = ready ? ringReadyColor : ringFillColor;
+        if (ready)
+        {
+            GUI.DrawTexture(rect, ringFullTex, ScaleMode.StretchToFill, true);
+        }
+        else
+        {
+            DrawRadialFill(rect, progress);
+        }
+
+        GUI.color = old;
+    }
+
+    // Radial wedge drawn by clipping the full ring into angular slices. Cheap and needs no
+    // per-frame texture work - just GUI clip rects rotated around the centre.
+    void DrawRadialFill(Rect rect, float progress)
+    {
+        const int slices = 48;
+        int lit = Mathf.CeilToInt(slices * Mathf.Clamp01(progress));
+        Vector2 pivot = rect.center;
+        Matrix4x4 baseMatrix = GUI.matrix;
+
+        // Each slice is a thin pie wedge approximated by a rotated half-width strip of the
+        // ring texture. Drawing only the lit count gives the clockwise fill.
+        for (int i = 0; i < lit; i++)
+        {
+            float ang = (i / (float)slices) * 360f;
+            GUIUtility.RotateAroundPivot(ang, pivot);
+            float ww = rect.width / slices * 1.6f;
+            GUI.DrawTextureWithTexCoords(
+                new Rect(pivot.x - ww * 0.5f, rect.y, ww, rect.height * 0.5f),
+                ringFullTex,
+                new Rect(0.5f - (ww * 0.5f) / rect.width, 0.5f, ww / rect.width, 0.5f));
+            GUI.matrix = baseMatrix;
+        }
+        GUI.matrix = baseMatrix;
+    }
+
+    static Texture2D ringBackTex;
+    static Texture2D ringFullTex;
+
+    void EnsureRingTex()
+    {
+        if (ringFullTex != null && ringBackTex != null) return;
+
+        int res = 128;
+        float outer = res * 0.5f - 1f;
+        float inner = outer - ringThickness / ringSize * res;
+
+        ringFullTex = new Texture2D(res, res, TextureFormat.RGBA32, false);
+        ringBackTex = new Texture2D(res, res, TextureFormat.RGBA32, false);
+        ringFullTex.hideFlags = ringBackTex.hideFlags = HideFlags.HideAndDontSave;
+
+        Color[] full = new Color[res * res];
+        Color[] back = new Color[res * res];
+        float c = res * 0.5f;
+
+        for (int y = 0; y < res; y++)
+        {
+            for (int x = 0; x < res; x++)
+            {
+                float dx = x - c + 0.5f;
+                float dy = y - c + 0.5f;
+                float d = Mathf.Sqrt(dx * dx + dy * dy);
+                // Anti-aliased annulus: 1 inside the band, feathered at both edges.
+                float a = Mathf.Clamp01(outer - d) * Mathf.Clamp01(d - inner);
+                a = Mathf.Clamp01(a);
+                full[y * res + x] = new Color(1f, 1f, 1f, a);
+                back[y * res + x] = new Color(1f, 1f, 1f, a);
+            }
+        }
+
+        ringFullTex.SetPixels(full);
+        ringFullTex.Apply();
+        ringBackTex.SetPixels(back);
+        ringBackTex.Apply();
     }
 
     void DrawChargeMeter()
@@ -847,4 +1018,4 @@ public class BattleAxe : MonoBehaviour
         Gizmos.DrawWireSphere(origin, swingRadius);
         Gizmos.DrawWireSphere(origin + aimTransform.forward * swingRange, swingRadius);
     }
-}
+}   

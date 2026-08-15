@@ -125,23 +125,65 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 58783665338a5ad4683cd9c9b9d6b5c3, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  headPoint: {fileID: 0}
+  headLocalOffset: {x: 0, y: 0, z: 0.25}
+  autoFitHead: 1
+  gravityScale: 1
+  spinSpeed: 2160
+  scaleSpinWithThrowSpeed: 1
+  spinReferenceSpeed: 42
+  minSpinScale: 0.7
+  maxSpinScale: 1.7
+  maxLifetime: 0
+  despawnBelowY: -200
+  sweepRadius: 0.08
+  sweepBody: 1
+  bodySweepRadius: 0.06
+  maxStepDistance: 0.22
+  maxSubSteps: 14
+  skinWidth: 0.02
   stickMask:
     serializedVersion: 2
-    m_Bits: 448
+    m_Bits: 4294967295
+  stickToTriggers: 1
   stickDepth: 0.15
   stickNormalBlend: 0.65
   stickEulerOffset: {x: 0, y: 0, z: 0}
+  levelRoll: 1
   parentToSurface: 1
-  minStickSpeed: 3
+  impactShake: 0.4
+  impactShakeFullRange: 5
+  impactShakeMaxRange: 30
+  impactReferenceSpeed: 42
+  stickWobbleAngle: 7
+  stickWobbleFrequency: 26
+  stickWobbleDamp: 7
+  stickWobbleDuration: 0.6
+  leaveTrail: 1
+  trailColor: {r: 1, g: 1, b: 1, a: 0.5}
+  trailTime: 0.22
+  trailStartWidth: 0.06
+  trailEndWidth: 0
+  trailMaterial: {fileID: 0}
   becomesGrappable: 1
   grappleLayerName: Grapple Mask
   grappleTag: Grapple
   grappleRadius: 0.6
   addGrappleTrigger: 1
-  maxAngularVelocity: 60
-  alignSpinToTravel: 1
-  maxLifetime: 0
-  despawnBelowY: -200
+  recallCooldown: 3
+  recallMaxSpeed: 34
+  recallAcceleration: 120
+  recallTurnRate: 14
+  recallSpin: 1440
+  recallCatchDistance: 0.6
+  recallAvoidObstacles: 1
+  recallObstacleMask:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  recallProbeDistance: 3
+  recallProbeRadius: 0.35
+  recallAvoidStrength: 26
+  recallNoProgressTimeout: 1.75
 --- !u!54 &2703425736218964398
 Rigidbody:
   m_ObjectHideFlags: 0
