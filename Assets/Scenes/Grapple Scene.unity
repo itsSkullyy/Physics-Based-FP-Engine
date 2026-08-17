@@ -10044,7 +10044,7 @@ MonoBehaviour:
         m_Flags: 0
       - m_Name: 
         m_Id: 016bdda4-dec0-43a7-a0f1-08e8353b2bf3
-        m_Path: <Gamepad>/leftShoulder
+        m_Path: <Gamepad>/leftTrigger
         m_Interactions: 
         m_Processors: 
         m_Groups: 
@@ -10134,6 +10134,14 @@ MonoBehaviour:
         m_Groups: 
         m_Action: Slot Next
         m_Flags: 0
+      - m_Name: 
+        m_Id: cff11bdf-f6c9-4168-9647-7afa61c25b87
+        m_Path: <Gamepad>/rightShoulder
+        m_Interactions: 
+        m_Processors: 
+        m_Groups: 
+        m_Action: Slot Next
+        m_Flags: 0
       m_Flags: 0
   slotPrev:
     reference: {fileID: 0}
@@ -10156,6 +10164,14 @@ MonoBehaviour:
       - m_Name: 
         m_Id: c488d9e1-2319-453d-96ee-98da22b7f4fa
         m_Path: <Gamepad>/dpad/left
+        m_Interactions: 
+        m_Processors: 
+        m_Groups: 
+        m_Action: Slot Prev
+        m_Flags: 0
+      - m_Name: 
+        m_Id: 8644a550-1978-427c-a347-43a27799c709
+        m_Path: <Gamepad>/leftShoulder
         m_Interactions: 
         m_Processors: 
         m_Groups: 
@@ -10192,7 +10208,7 @@ MonoBehaviour:
   enableRumble: 1
   rumbleScale: 1
   inputEnabled: 1
-  saveKey: input.bindings.v4
+  saveKey: input.bindings.v6
   loadSavedBindingsOnAwake: 1
 --- !u!114 &1956646850
 MonoBehaviour:

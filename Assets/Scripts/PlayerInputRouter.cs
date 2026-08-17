@@ -6,17 +6,6 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.Utilities;
 
-// Single source of truth for player input. Put this on the Player root.
-//
-// SETUP
-//   1. Delete the old PlayerInputRouter.cs - this file replaces it, including the
-//      old InputBinding class and InputSourceType enum.
-//   2. Package Manager -> Input System installed, and Project Settings -> Player ->
-//      Active Input Handling set to "Input System Package" or "Both".
-//   3. Bindings on any existing Player object reset to the defaults below once, since
-//      the serialized shape changed. The component reference itself survives, so
-//      nothing else in the scene needs rewiring.
-//
 // Every caller keeps the API it already had: Move, LookDelta, ScrollY, and
 // jump/slide/dart/grapple/axe actions with .Held, .Pressed, .Released and .Label.
 // FirstPersonCharacterController, Grappling, BattleAxe and GunSway need zero edits.
@@ -96,7 +85,7 @@ public class PlayerInputRouter : MonoBehaviour
 
     [Header("Saving")]
     [Tooltip("PlayerPrefs key the rebind menu writes to. Bump the suffix to invalidate old saves.")]
-    public string saveKey = "input.bindings.v4";
+    public string saveKey = "input.bindings.v6";
     public bool loadSavedBindingsOnAwake = true;
 
     // ---------------------------------------------------------------- state
@@ -153,7 +142,7 @@ public class PlayerInputRouter : MonoBehaviour
             case "dart":         return GameAction.Button("Dart", "<Keyboard>/leftShift", "<Gamepad>/buttonEast");
             case "primary":      return GameAction.Button("Primary", "<Mouse>/leftButton", "<Gamepad>/rightTrigger");
             case "secondary":    return GameAction.Button("Secondary", "<Mouse>/rightButton", "<Gamepad>/leftTrigger");
-            case "zip":          return GameAction.Button("Zip", "<Mouse>/rightButton", "<Gamepad>/leftShoulder");
+            case "zip":          return GameAction.Button("Zip", "<Mouse>/rightButton", "<Gamepad>/leftTrigger");
             case "axePickup":    return GameAction.Button("Axe Pickup", "<Keyboard>/g", "<Gamepad>/buttonWest");
             
             // D-pad up/down is left alone: that is the scroll axis, which reels the rope.
@@ -161,8 +150,8 @@ public class PlayerInputRouter : MonoBehaviour
             case "slot2":        return GameAction.Button("Slot 2", "<Keyboard>/2");
             case "slot3":        return GameAction.Button("Slot 3", "<Keyboard>/3");
             
-            case "slotNext":     return GameAction.Button("Slot Next", "<Gamepad>/dpad/right");
-            case "slotPrev":     return GameAction.Button("Slot Prev", "<Gamepad>/dpad/left");
+            case "slotNext":     return GameAction.Button("Slot Next", "<Gamepad>/RightShoulder");
+            case "slotPrev":     return GameAction.Button("Slot Prev", "<Gamepad>/leftShoulder");
             
         }
 
