@@ -153,6 +153,21 @@ public class BattleAxe : MonoBehaviour
     public Vector3 recallAimLocalOffset = new Vector3(0f, 1.1f, 0f);
     [Tooltip("How close the flying axe must get to be caught, added to its own setting.")]
     public float recallCatchRadius = 0.7f;
+    
+    [Header("Zip Pull")]
+    [Tooltip("Aim at a loose axe and hit the zip/pull button to fly it back to you.")]
+    public bool zipPullsLooseAxe = true;
+    [Tooltip("Half-angle of the aim cone, in degrees.")]
+    public float zipAimAngle = 14f;
+    public float zipPullRange = 60f;
+    [Tooltip("The zip is its own deliberate action, so it does not wait on the embed cooldown.")]
+    public bool zipIgnoresRecallCooldown = true;
+
+    [Header("Auto Pickup")]
+    public bool autoPickupOnContact = true;
+    public float autoPickupRadius = 1.1f;
+    [Tooltip("Off = you also collect an axe stuck in a wall by brushing past it.")]
+    public bool autoPickupOnlyWhenLoose = true;
 
     [Header("Cooldown Ring UI")]
     public bool showCooldownRing = true;
@@ -171,6 +186,7 @@ public class BattleAxe : MonoBehaviour
     enum State { Idle, Windup, Charging, Swing, Recover, Thrown }
 
     State state = State.Idle;
+    bool equipped = true;
     float stateTimer;
     float cooldownTimer;
     bool hitRegistered;
@@ -208,6 +224,7 @@ public class BattleAxe : MonoBehaviour
     public event System.Action AxeChargeStarted;
     public event System.Action AxeChargeFull;
     public event System.Action<float> AxeChargeReleased;         // 0..1 charge at release
+    public event System.Action AxeReturned;                      // back in hand, however it got there
 
     public bool IsSwinging => state == State.Windup || state == State.Swing;
     public bool IsCharging => state == State.Charging;
@@ -248,6 +265,33 @@ public class BattleAxe : MonoBehaviour
         idlePos = basePos;
         idleRot = baseRot;
     }
+    
+    public void SetEquipped(bool value)
+    {
+        if (equipped == value) return;
+        equipped = value;
+
+        if (!equipped)
+        {
+            // Cancel a swing or a charge in progress. A thrown axe is left alone - it is
+            // out in the world and that does not change just because you swapped slots.
+            if (state != State.Thrown)
+            {
+                state = State.Idle;
+                stateTimer = 0f;
+                charge01 = 0f;
+                chargeFullFired = false;
+                swingPos = Vector3.zero;
+                swingRot = Quaternion.identity;
+            }
+
+            SetAxeVisible(false);
+        }
+        else
+        {
+            SetAxeVisible(state != State.Thrown);
+        }
+    }
 
     void Update()
     {
@@ -270,14 +314,15 @@ public class BattleAxe : MonoBehaviour
     {
         if (input == null) return;
 
+        // Pickup and recall sit outside the slot gate on purpose: G always works.
         if (state == State.Thrown)
         {
             HandleThrownAxe();
             return;
         }
 
-        // Windup and Charging both wait on the button rather than on a timer, so they
-        // get first look at the input every frame.
+        if (!equipped) return;
+
         if (state == State.Windup)
         {
             UpdateWindupIntent();
@@ -698,6 +743,24 @@ public class BattleAxe : MonoBehaviour
         if (activeAxe.IsRecalling)
             return;
 
+        // Walk into it and it comes back on its own - no button.
+        if (autoPickupOnContact && (!autoPickupOnlyWhenLoose || activeAxe.IsLoose))
+        {
+            if (Vector3.Distance(PlayerCatchPoint(), activeAxe.HeadPosition) <= autoPickupRadius)
+            {
+                CollectAxe();
+                return;
+            }
+        }
+
+        // Zip aimed at a loose axe hauls the AXE in, rather than hauling the player out to it.
+        if (zipPullsLooseAxe && activeAxe.IsLoose && input.grapplePull.Pressed && AimedAtLooseAxe())
+        {
+            if (zipIgnoresRecallCooldown) activeAxe.ForceRecallReady();
+            StartRecall();
+            return;
+        }
+
         float dist = Vector3.Distance(controller.transform.position, activeAxe.transform.position);
         bool stuckOk = !requireStuckToPickup || activeAxe.IsStuck;
         inPickupRange = stuckOk && dist <= pickupDistance;
@@ -777,7 +840,9 @@ public class BattleAxe : MonoBehaviour
         cooldownTimer = Mathf.Max(cooldownTimer, 0.1f);
 
         if (axeVisual != null)
-            SetAxeVisible(true);
+            SetAxeVisible(equipped);
+
+        AxeReturned?.Invoke();
 
         if (logDebug) Debug.Log("[BattleAxe] Axe back in hand.", this);
     }
@@ -854,8 +919,9 @@ public class BattleAxe : MonoBehaviour
 
     void OnGUI()
     {
-        DrawChargeMeter();
         DrawCooldownRing();
+
+        if (equipped) DrawChargeMeter();
 
         if (!showPickupPrompt || !inPickupRange || state != State.Thrown) return;
 
@@ -1007,6 +1073,21 @@ public class BattleAxe : MonoBehaviour
         GUI.DrawTexture(new Rect(x, y, w * charge01, h), whiteTex);
 
         GUI.color = old;
+    }
+    
+    Vector3 PlayerCatchPoint()
+    {
+        Transform t = controller.transform;
+        return t.position + t.TransformVector(recallAimLocalOffset);
+    }
+
+    bool AimedAtLooseAxe()
+    {
+        Vector3 to = activeAxe.HeadPosition - aimTransform.position;
+        float dist = to.magnitude;
+        if (dist > zipPullRange || dist < 0.001f) return false;
+
+        return Vector3.Angle(aimTransform.forward, to / dist) <= zipAimAngle;
     }
 
     void OnDrawGizmosSelected()

@@ -3642,7 +3642,14 @@ MonoBehaviour:
   recallOnPickupButton: 1
   recallAimLocalOffset: {x: 0, y: 1.1, z: 0}
   recallCatchRadius: 0.7
-  showCooldownRing: 1
+  zipPullsLooseAxe: 0
+  zipAimAngle: 14
+  zipPullRange: 60
+  zipIgnoresRecallCooldown: 0
+  autoPickupOnContact: 1
+  autoPickupRadius: 1.1
+  autoPickupOnlyWhenLoose: 1
+  showCooldownRing: 0
   ringSize: 54
   ringThickness: 6
   ringBackColor: {r: 0, g: 0, b: 0, a: 0.5}
@@ -6683,6 +6690,9 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   respawnPoint: {fileID: 1298854870}
+  kills: 1
+  damage: 35
+  playerTag: Player
 --- !u!65 &1339646007
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -7562,6 +7572,10 @@ PrefabInstance:
       propertyPath: m_Textures0.Array.data[21].y
       value: -25.081335
       objectReference: {fileID: 0}
+    - target: {fileID: 3215012290065973719, guid: 281d4a592586d704ab6b7fb40ed49101, type: 3}
+      propertyPath: 'm_Materials.Array.data[0]'
+      value: 
+      objectReference: {fileID: 2100000, guid: f023f6a6da7f9ca4b8332b6cc9698967, type: 2}
     - target: {fileID: 3695898081810117502, guid: 281d4a592586d704ab6b7fb40ed49101, type: 3}
       propertyPath: m_Mesh
       value: 
@@ -9308,6 +9322,9 @@ GameObject:
   - component: {fileID: 1956646848}
   - component: {fileID: 1956646841}
   - component: {fileID: 1956646847}
+  - component: {fileID: 1956646853}
+  - component: {fileID: 1956646852}
+  - component: {fileID: 1956646851}
   m_Layer: 0
   m_Name: Player
   m_TagString: Player
@@ -9617,6 +9634,7 @@ MonoBehaviour:
   gunTip: {fileID: 870369059}
   ropeLine: {fileID: 1956646847}
   input: {fileID: 1956646849}
+  swingEquipped: 1
   grappleMask:
     serializedVersion: 2
     m_Bits: 128
@@ -9952,150 +9970,215 @@ MonoBehaviour:
         m_Action: Dart
         m_Flags: 0
       m_Flags: 0
-  grappleSwing:
-    reference: {fileID: -4345044284319865770, guid: 72a49e85ce8983e4a9e55eeb533549e4, type: 3}
+  primary:
+    reference: {fileID: 0}
     action:
-      m_Name: GrappleSwing
+      m_Name: Primary
       m_Type: 1
       m_ExpectedControlType: 
-      m_Id: cc6b9775-d7e1-4ab6-84ea-be5a98d9efaa
+      m_Id: 18e3c2a2-f52a-4180-9f12-3338b7c7e02c
       m_Processors: 
       m_Interactions: 
       m_SingletonActionBindings:
       - m_Name: 
-        m_Id: 8a908962-809c-4937-bcf5-bdfc5b8690ed
-        m_Path: <Keyboard>/e
-        m_Interactions: 
-        m_Processors: 
-        m_Groups: 
-        m_Action: GrappleSwing
-        m_Flags: 0
-      - m_Name: 
-        m_Id: 682462cf-aa62-4dba-9c47-eac059d531a5
-        m_Path: <Gamepad>/rightShoulder
-        m_Interactions: 
-        m_Processors: 
-        m_Groups: 
-        m_Action: GrappleSwing
-        m_Flags: 0
-      m_Flags: 0
-  grapplePull:
-    reference: {fileID: 5880535618903418716, guid: 72a49e85ce8983e4a9e55eeb533549e4, type: 3}
-    action:
-      m_Name: GrapplePull
-      m_Type: 1
-      m_ExpectedControlType: 
-      m_Id: c8230435-ad00-4c78-bbd1-c84b08ee2985
-      m_Processors: 
-      m_Interactions: 
-      m_SingletonActionBindings:
-      - m_Name: 
-        m_Id: 85648ca5-a6c8-4319-b97a-ac33b1ee3d32
-        m_Path: <Keyboard>/f
-        m_Interactions: 
-        m_Processors: 
-        m_Groups: 
-        m_Action: GrapplePull
-        m_Flags: 0
-      - m_Name: 
-        m_Id: 3f602740-b1cf-4d57-b10b-86506f4ca028
-        m_Path: <Gamepad>/leftShoulder
-        m_Interactions: 
-        m_Processors: 
-        m_Groups: 
-        m_Action: GrapplePull
-        m_Flags: 0
-      m_Flags: 0
-  axeSwing:
-    reference: {fileID: -1245316698173361784, guid: 72a49e85ce8983e4a9e55eeb533549e4, type: 3}
-    action:
-      m_Name: AxeSwing
-      m_Type: 1
-      m_ExpectedControlType: 
-      m_Id: 1a66b3ca-1f84-4a84-a8f7-3d1da1b15b1e
-      m_Processors: 
-      m_Interactions: 
-      m_SingletonActionBindings:
-      - m_Name: 
-        m_Id: d3a854e9-dd2a-4c86-b939-0f1358049ec6
+        m_Id: 0c7a7341-76e5-4706-83ce-0e1e7279f19b
         m_Path: <Mouse>/leftButton
         m_Interactions: 
         m_Processors: 
         m_Groups: 
-        m_Action: AxeSwing
+        m_Action: Primary
         m_Flags: 0
       - m_Name: 
-        m_Id: f23a0ebe-7a38-42ce-b0e3-264a28eb4af8
+        m_Id: 579cb63e-0883-4509-979f-064f92b0f4b8
         m_Path: <Gamepad>/rightTrigger
         m_Interactions: 
         m_Processors: 
         m_Groups: 
-        m_Action: AxeSwing
+        m_Action: Primary
         m_Flags: 0
       m_Flags: 0
-  axeThrow:
-    reference: {fileID: 5613938843582963325, guid: 72a49e85ce8983e4a9e55eeb533549e4, type: 3}
+  secondary:
+    reference: {fileID: 0}
     action:
-      m_Name: AxeThrow
+      m_Name: Secondary
       m_Type: 1
       m_ExpectedControlType: 
-      m_Id: cac6eaae-3d95-4fd4-b4df-02ca63192315
-      m_Processors: 
-      m_Interactions: 
-      m_SingletonActionBindings: []
-      m_Flags: 0
-  axePickup:
-    reference: {fileID: -4029297838420322142, guid: 72a49e85ce8983e4a9e55eeb533549e4, type: 3}
-    action:
-      m_Name: AxePickup
-      m_Type: 1
-      m_ExpectedControlType: 
-      m_Id: f66c7cbb-d936-49d9-a178-699955d18f07
+      m_Id: 65997247-c0dd-411d-9809-2c502deb5635
       m_Processors: 
       m_Interactions: 
       m_SingletonActionBindings:
       - m_Name: 
-        m_Id: c8a13b1e-6862-47a4-b145-65d86ebc2851
+        m_Id: 87b55831-24c2-4825-a886-9ab95eadc2aa
         m_Path: <Keyboard>/g
         m_Interactions: 
         m_Processors: 
         m_Groups: 
-        m_Action: AxePickup
+        m_Action: Secondary
         m_Flags: 0
       - m_Name: 
-        m_Id: bb577018-790f-410f-91f7-f29325d3feb4
-        m_Path: <Gamepad>/buttonWest
+        m_Id: a2acee67-5cca-495b-8469-7585fa09f666
+        m_Path: <Gamepad>/leftTrigger
         m_Interactions: 
         m_Processors: 
         m_Groups: 
-        m_Action: AxePickup
+        m_Action: Secondary
         m_Flags: 0
       m_Flags: 0
-  axeRecall:
-    reference: {fileID: 5933215353843436945, guid: 72a49e85ce8983e4a9e55eeb533549e4, type: 3}
+  zip:
+    reference: {fileID: 0}
     action:
-      m_Name: AxeRecall
+      m_Name: Zip
       m_Type: 1
       m_ExpectedControlType: 
-      m_Id: 621ab845-e9d0-4ab7-9699-59c1a58ae931
+      m_Id: d96312be-b168-4fcf-9f5f-130915f6904a
       m_Processors: 
       m_Interactions: 
       m_SingletonActionBindings:
       - m_Name: 
-        m_Id: e914fe91-c10a-44d6-90e7-a1372de8cae7
-        m_Path: <Keyboard>/r
+        m_Id: d9504452-ab85-4a97-897e-eca02d27d287
+        m_Path: <Mouse>/rightButton
         m_Interactions: 
         m_Processors: 
         m_Groups: 
-        m_Action: AxeRecall
+        m_Action: Zip
         m_Flags: 0
       - m_Name: 
-        m_Id: a06f21e8-1f4f-44fa-a2d9-f048bb807729
-        m_Path: <Gamepad>/buttonNorth
+        m_Id: 016bdda4-dec0-43a7-a0f1-08e8353b2bf3
+        m_Path: <Gamepad>/leftShoulder
         m_Interactions: 
         m_Processors: 
         m_Groups: 
-        m_Action: AxeRecall
+        m_Action: Zip
+        m_Flags: 0
+      m_Flags: 0
+  slot1:
+    reference: {fileID: 0}
+    action:
+      m_Name: Slot 1
+      m_Type: 1
+      m_ExpectedControlType: 
+      m_Id: 0fe82339-d206-4b17-8e12-4de2365c57d9
+      m_Processors: 
+      m_Interactions: 
+      m_SingletonActionBindings:
+      - m_Name: 
+        m_Id: 2726a055-8c2f-4535-bd60-1febde72e36f
+        m_Path: <Keyboard>/1
+        m_Interactions: 
+        m_Processors: 
+        m_Groups: 
+        m_Action: Slot 1
+        m_Flags: 0
+      m_Flags: 0
+  slot2:
+    reference: {fileID: 0}
+    action:
+      m_Name: Slot 2
+      m_Type: 1
+      m_ExpectedControlType: 
+      m_Id: a6ac2d99-2254-4eb9-bb0c-7530ec1d7d21
+      m_Processors: 
+      m_Interactions: 
+      m_SingletonActionBindings:
+      - m_Name: 
+        m_Id: a86223a1-17ce-45e6-9aba-82a21a19cddd
+        m_Path: <Keyboard>/2
+        m_Interactions: 
+        m_Processors: 
+        m_Groups: 
+        m_Action: Slot 2
+        m_Flags: 0
+      m_Flags: 0
+  slot3:
+    reference: {fileID: 0}
+    action:
+      m_Name: Slot 3
+      m_Type: 1
+      m_ExpectedControlType: 
+      m_Id: f37b8ee7-bffd-4111-b588-7111b78b13b4
+      m_Processors: 
+      m_Interactions: 
+      m_SingletonActionBindings:
+      - m_Name: 
+        m_Id: c0937cf6-c330-4fdf-b435-3fc49c256f75
+        m_Path: <Keyboard>/3
+        m_Interactions: 
+        m_Processors: 
+        m_Groups: 
+        m_Action: Slot 3
+        m_Flags: 0
+      m_Flags: 0
+  slotNext:
+    reference: {fileID: 0}
+    action:
+      m_Name: Slot Next
+      m_Type: 1
+      m_ExpectedControlType: 
+      m_Id: f7c977e1-4411-4353-8451-9be67bbc4789
+      m_Processors: 
+      m_Interactions: 
+      m_SingletonActionBindings:
+      - m_Name: 
+        m_Id: 9678fb35-1357-4975-97d2-d53b432d46a9
+        m_Path: <Keyboard>/e
+        m_Interactions: 
+        m_Processors: 
+        m_Groups: 
+        m_Action: Slot Next
+        m_Flags: 0
+      - m_Name: 
+        m_Id: f641f69e-739f-46c3-9732-d83f87fead45
+        m_Path: <Gamepad>/dpad/right
+        m_Interactions: 
+        m_Processors: 
+        m_Groups: 
+        m_Action: Slot Next
+        m_Flags: 0
+      m_Flags: 0
+  slotPrev:
+    reference: {fileID: 0}
+    action:
+      m_Name: Slot Prev
+      m_Type: 1
+      m_ExpectedControlType: 
+      m_Id: 1041cd8a-3822-4538-bd6a-28ee59aa034b
+      m_Processors: 
+      m_Interactions: 
+      m_SingletonActionBindings:
+      - m_Name: 
+        m_Id: 5452293b-0c4a-4357-85a5-512e23cbbb63
+        m_Path: <Keyboard>/q
+        m_Interactions: 
+        m_Processors: 
+        m_Groups: 
+        m_Action: Slot Prev
+        m_Flags: 0
+      - m_Name: 
+        m_Id: c488d9e1-2319-453d-96ee-98da22b7f4fa
+        m_Path: <Gamepad>/dpad/left
+        m_Interactions: 
+        m_Processors: 
+        m_Groups: 
+        m_Action: Slot Prev
+        m_Flags: 0
+      m_Flags: 0
+  axePickup:
+    reference: {fileID: 0}
+    action:
+      m_Name: Action
+      m_Type: 0
+      m_ExpectedControlType: 
+      m_Id: fa1ed55f-4526-44b4-894c-3da3c0abf870
+      m_Processors: 
+      m_Interactions: 
+      m_SingletonActionBindings:
+      - m_Name: 
+        m_Id: 666b76f5-c340-46bc-816a-9303d4070eaf
+        m_Path: <Keyboard>/g
+        m_Interactions: 
+        m_Processors: 
+        m_Groups: 
+        m_Action: Action
         m_Flags: 0
       m_Flags: 0
   mouseLookScale: 1
@@ -10109,7 +10192,7 @@ MonoBehaviour:
   enableRumble: 1
   rumbleScale: 1
   inputEnabled: 1
-  saveKey: input.bindings.v1
+  saveKey: input.bindings.v4
   loadSavedBindingsOnAwake: 1
 --- !u!114 &1956646850
 MonoBehaviour:
@@ -10179,6 +10262,102 @@ MonoBehaviour:
   chargeFullRumbleLow: 0.5
   chargeFullRumbleHigh: 0.35
   chargeFullRumbleTime: 0.14
+--- !u!114 &1956646851
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1956646840}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fea936b89ed058843a8847306d37c240, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  controller: {fileID: 1956646842}
+  health: {fileID: 1956646852}
+  slots: {fileID: 1956646853}
+  axe: {fileID: 573419314}
+  margin: 50
+  hideWhenCursorFree: 0
+  showHealth: 1
+  showSpeed: 1
+  barWidth: 300
+  barHeight: 22
+  barGap: 8
+  barTrack: {r: 0, g: 0, b: 0, a: 0.45}
+  barSmoothing: 12
+  healthFull: {r: 0.35, g: 0.95, b: 0.55, a: 1}
+  healthMid: {r: 1, g: 0.82, b: 0.25, a: 1}
+  healthLow: {r: 1, g: 0.28, b: 0.25, a: 1}
+  damageFlash: {r: 1, g: 1, b: 1, a: 1}
+  damageFlashTime: 0.18
+  speedReference: 0
+  speedIdle: {r: 0.52, g: 0.6, b: 0.72, a: 1}
+  speedCruise: {r: 0.3, g: 0.85, b: 1, a: 1}
+  speedFast: {r: 1, g: 0.85, b: 0.3, a: 1}
+  speedPeak: {r: 1, g: 0.34, b: 0.18, a: 1}
+  peakPulseSpeed: 7
+  showSlots: 1
+  showInactiveSlots: 1
+  axeIcon: {fileID: 2800000, guid: 369ebdccf832b3a41b623df3977a15e7, type: 3}
+  grappleIcon: {fileID: 2800000, guid: 79f71485ab6d72044aa09c8c0ba8afa7, type: 3}
+  slotSize: 130
+  slotGap: 8
+  activeGrow: 25
+  showSlotNumbers: 1
+  iconShadow: 1
+  iconShadowOffset: 2.5
+  showRecallProgress: 1
+  inactiveTint: {r: 1, g: 1, b: 1, a: 0.3}
+  textColor: {r: 1, g: 1, b: 1, a: 0.92}
+  shadowColor: {r: 0, g: 0, b: 0, a: 0.55}
+  readyColor: {r: 0.4, g: 1, b: 0.6, a: 1}
+--- !u!114 &1956646852
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1956646840}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b83a1aa97d1f10b4b8c5d4bc4b343db6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  maxHealth: 100
+  invulnerable: 0
+  regenerate: 0
+  regenDelay: 5
+  regenPerSecond: 12
+  respawnPoint: {fileID: 1298854870}
+  respawnOnDeath: 1
+  damageShake: 0.35
+  deathShake: 0.8
+  debugKeys: 0
+--- !u!114 &1956646853
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1956646840}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 44c3424c949e67a4e9e9ce1b677c2aa4, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  input: {fileID: 1956646849}
+  axe: {fileID: 573419314}
+  grappling: {fileID: 1956646848}
+  startSlot: 0
+  scrollSwitchesSlots: 1
+  scrollThreshold: 0.15
+  wrapAround: 1
+  switchCooldown: 0.1
+  swapDownOnThrow: 1
+  swapBackOnAxeReturned: 1
+  logDebug: 0
 --- !u!43 &2033742953
 Mesh:
   m_ObjectHideFlags: 0
@@ -10798,6 +10977,10 @@ PrefabInstance:
       propertyPath: m_VersionIndex
       value: 8700
       objectReference: {fileID: 0}
+    - target: {fileID: 3215012290065973719, guid: 281d4a592586d704ab6b7fb40ed49101, type: 3}
+      propertyPath: 'm_Materials.Array.data[0]'
+      value: 
+      objectReference: {fileID: 2100000, guid: f023f6a6da7f9ca4b8332b6cc9698967, type: 2}
     - target: {fileID: 3695898081810117502, guid: 281d4a592586d704ab6b7fb40ed49101, type: 3}
       propertyPath: m_Mesh
       value: 

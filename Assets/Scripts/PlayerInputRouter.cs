@@ -42,15 +42,31 @@ public class PlayerInputRouter : MonoBehaviour
     public GameAction slide = Default("slide");
     public GameAction dart = Default("dart");
 
-    [Header("Grapple")]
-    public GameAction grappleSwing = Default("grappleSwing");
-    public GameAction grapplePull = Default("grapplePull");
+    [Header("Weapons (shared by every slot)")]
+    public GameAction primary = Default("primary");
+    public GameAction secondary = Default("secondary");
 
-    [Header("Battle Axe")]
-    public GameAction axeSwing = Default("axeSwing");
-    public GameAction axeThrow = Default("axeThrow");
+    [Header("Zip (works on every slot)")]
+    public GameAction zip = Default("zip");
+
+    [Header("Weapon Slots")]
+    public GameAction slot1 = Default("slot1");
+    public GameAction slot2 = Default("slot2");
+    public GameAction slot3 = Default("slot3");
+    public GameAction slotNext = Default("slotNext");
+    public GameAction slotPrev = Default("slotPrev");
+    
+    [Header("Axe Pickup (works on every slot)")]
     public GameAction axePickup = Default("axePickup");
-    public GameAction axeRecall = Default("axeRecall");
+
+    // Aliases so BattleAxe and Grappling keep the exact call shape they already use.
+    // Properties, not fields, so BuildRegistry's reflection pass never sees them and the
+    // rebind menu still lists one row per real action.
+    public GameAction grappleSwing => primary;
+    public GameAction grapplePull  => zip;
+    public GameAction axeSwing     => primary;
+    public GameAction axeThrow     => secondary;
+    public GameAction axeRecall    => axePickup;
 
     // ---------------------------------------------------------------- tuning
 
@@ -80,7 +96,7 @@ public class PlayerInputRouter : MonoBehaviour
 
     [Header("Saving")]
     [Tooltip("PlayerPrefs key the rebind menu writes to. Bump the suffix to invalidate old saves.")]
-    public string saveKey = "input.bindings.v1";
+    public string saveKey = "input.bindings.v4";
     public bool loadSavedBindingsOnAwake = true;
 
     // ---------------------------------------------------------------- state
@@ -135,12 +151,19 @@ public class PlayerInputRouter : MonoBehaviour
             case "jump":         return GameAction.Button("Jump", "<Keyboard>/space", "<Gamepad>/buttonSouth");
             case "slide":        return GameAction.Button("Slide", "<Keyboard>/leftShift", "<Gamepad>/buttonEast");
             case "dart":         return GameAction.Button("Dart", "<Keyboard>/leftShift", "<Gamepad>/buttonEast");
-            case "grappleSwing": return GameAction.Button("GrappleSwing", "<Keyboard>/e", "<Gamepad>/rightShoulder");
-            case "grapplePull":  return GameAction.Button("GrapplePull", "<Keyboard>/f", "<Gamepad>/leftShoulder");
-            case "axeSwing":     return GameAction.Button("AxeSwing", "<Mouse>/leftButton", "<Gamepad>/rightTrigger");
-            case "axeThrow":     return GameAction.Button("AxeThrow", "<Mouse>/rightButton", "<Gamepad>/leftTrigger");
-            case "axePickup":    return GameAction.Button("AxePickup", "<Keyboard>/g", "<Gamepad>/buttonWest");
-            case "axeRecall":    return GameAction.Button("AxeRecall", "<Keyboard>/r", "<Gamepad>/buttonNorth");
+            case "primary":      return GameAction.Button("Primary", "<Mouse>/leftButton", "<Gamepad>/rightTrigger");
+            case "secondary":    return GameAction.Button("Secondary", "<Mouse>/rightButton", "<Gamepad>/leftTrigger");
+            case "zip":          return GameAction.Button("Zip", "<Mouse>/rightButton", "<Gamepad>/leftShoulder");
+            case "axePickup":    return GameAction.Button("Axe Pickup", "<Keyboard>/g", "<Gamepad>/buttonWest");
+            
+            // D-pad up/down is left alone: that is the scroll axis, which reels the rope.
+            case "slot1":        return GameAction.Button("Slot 1", "<Keyboard>/1");
+            case "slot2":        return GameAction.Button("Slot 2", "<Keyboard>/2");
+            case "slot3":        return GameAction.Button("Slot 3", "<Keyboard>/3");
+            
+            case "slotNext":     return GameAction.Button("Slot Next", "<Gamepad>/dpad/right");
+            case "slotPrev":     return GameAction.Button("Slot Prev", "<Gamepad>/dpad/left");
+            
         }
 
         return null;
@@ -225,20 +248,17 @@ public class PlayerInputRouter : MonoBehaviour
         {
             if (f.FieldType != typeof(GameAction)) continue;
 
+            // Bindings live in Default(), not in the scene file. Unity rebuilds a
+            // serialized GameAction with its own copy of the old binding array, which
+            // leaves the singleton action and its hidden map holding two different
+            // arrays - that is the "bindings array must match" assert, and it makes
+            // the action resolve against stale controls. Building fresh sidesteps it
+            // entirely, and an action added in code can never come back unbound on an
+            // object that was serialized before it existed.
+            GameAction fresh = Default(f.Name);
+            if (fresh != null) f.SetValue(this, fresh);
+
             GameAction ga = f.GetValue(this) as GameAction;
-
-            // Repairs a field that was added to this script after the object was
-            // serialized, which Unity would otherwise hand back empty.
-            if (ga == null || ga.BindingCount == 0)
-            {
-                GameAction fresh = Default(f.Name);
-                if (fresh != null)
-                {
-                    ga = fresh;
-                    f.SetValue(this, ga);
-                }
-            }
-
             if (ga == null) continue;
 
             registry.Add(new Entry { field = f.Name, label = Prettify(f.Name), action = ga });

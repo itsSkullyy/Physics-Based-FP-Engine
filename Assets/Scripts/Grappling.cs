@@ -11,6 +11,11 @@ public class Grappling : MonoBehaviour
     public LineRenderer ropeLine;
     public PlayerInputRouter input;
 
+    [Header("Slots")]
+    [Tooltip("Owned by WeaponSlots. Swing grappling only works while the grapple slot is " +
+             "up; zipping is deliberately always allowed, whatever you are holding.")]
+    public bool swingEquipped = true;
+    
     [Header("Targeting")]
     public LayerMask grappleMask = ~0;
     public string grappleTag = "";
@@ -257,8 +262,15 @@ public class Grappling : MonoBehaviour
 
         if (input != null)
         {
-            if (input.grappleSwing.Pressed) TryAttach();
-            if (input.grappleSwing.Released && isSwinging) Detach(false);
+            if (swingEquipped)
+            {
+                if (input.grappleSwing.Pressed) TryAttach();
+                if (input.grappleSwing.Released && isSwinging) Detach(false);
+            }
+            else if (isSwinging)
+            {
+                Detach(false);   // slot changed out from under a live rope
+            }
 
             if (input.grapplePull.Pressed) TryStartZip();
             if (input.grapplePull.Released) StopZip();
@@ -554,6 +566,7 @@ public class Grappling : MonoBehaviour
 
     void TryAttach()
     {
+        if (!swingEquipped) return;
         if (isSwinging || isZipping || cooldownTimer > 0f) return;
         if (controller.IsVaulting) return;
         if (!TryGetGrapplePoint(out Vector3 point, out Collider col)) return;

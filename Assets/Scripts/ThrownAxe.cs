@@ -40,6 +40,15 @@ public class ThrownAxe : MonoBehaviour
     public Vector3 stickEulerOffset = Vector3.zero;
     public bool levelRoll = true;
     public bool parentToSurface = true;
+    
+    [Header("Loose On Ground")]
+    [Tooltip("A loose axe stops being a grapple anchor, so the zip pulls it back to YOU " +
+             "instead of pulling you toward it.")]
+    public bool looseStopsBeingGrappleTarget = true;
+
+    int originalLayer;
+    string originalTag;
+    SphereCollider grappleTrigger;   // the one MakeGrappable adds, so it can be removed again
 
     [Header("Impact Juice")]
     public float impactShake = 0.4f;
@@ -131,6 +140,9 @@ public class ThrownAxe : MonoBehaviour
 
     void Awake()
     {
+        originalLayer = gameObject.layer;
+        originalTag = gameObject.tag;
+        
         rb = GetComponent<Rigidbody>();
         rb.useGravity = false;
         rb.isKinematic = true;
@@ -324,6 +336,13 @@ public class ThrownAxe : MonoBehaviour
         velocity = (RecallAimPoint() - HeadPosition).normalized * (recallMaxSpeed * 0.25f);
 
         if (trail != null) trail.emitting = true;
+        
+        if (rb == null) rb = GetComponent<Rigidbody>();
+        rb.isKinematic = true;
+        rb.useGravity = false;
+        rb.linearVelocity = Vector3.zero;
+        rb.angularVelocity = Vector3.zero;
+        rb.interpolation = RigidbodyInterpolation.Interpolate;
 
         return true;
     }
@@ -462,6 +481,14 @@ public class ThrownAxe : MonoBehaviour
         if (!recalling) return;
         recalling = false;
         velocity = Vector3.zero;
+    }
+    
+    public bool IsLoose => dropped && !recalling;
+
+    /// Skips the embed cooldown. Used by the zip pull, which is its own gate.
+    public void ForceRecallReady()
+    {
+        if (recallCooldown > 0f) stuckTimer = Mathf.Max(stuckTimer, recallCooldown);
     }
 
     // ---------------------------------------------------------------- sweeping
@@ -662,6 +689,18 @@ public class ThrownAxe : MonoBehaviour
             // dead straight, which looks stuck-in-air for a frame.
             rb.linearVelocity = Vector3.down * 1.5f + Random.insideUnitSphere * 0.6f;
             rb.angularVelocity = Random.insideUnitSphere * 2f;
+            
+            if (looseStopsBeingGrappleTarget) RemoveGrappleTargeting();
+        }
+        
+        void RemoveGrappleTargeting()
+        {
+            if (grappleTrigger != null) { Destroy(grappleTrigger); grappleTrigger = null; }
+
+            SetLayerRecursive(gameObject, originalLayer);
+
+            if (!string.IsNullOrEmpty(grappleTag) && gameObject.CompareTag(grappleTag))
+                gameObject.tag = string.IsNullOrEmpty(originalTag) ? "Untagged" : originalTag;
         }
 
         // The grapple trigger colliders were turned into triggers when it stuck. Make the
@@ -701,10 +740,21 @@ public class ThrownAxe : MonoBehaviour
 
             if (addGrappleTrigger && GetComponent<SphereCollider>() == null)
             {
-                SphereCollider grab = gameObject.AddComponent<SphereCollider>();
-                grab.isTrigger = true;
-                grab.center = headLocalOffset;
-                grab.radius = grappleRadius / Mathf.Max(0.0001f, Mathf.Abs(transform.lossyScale.x));
+                grappleTrigger = gameObject.AddComponent<SphereCollider>();
+                grappleTrigger.isTrigger = true;
+                grappleTrigger.center = headLocalOffset;
+                grappleTrigger.radius = grappleRadius / Mathf.Max(0.0001f, Mathf.Abs(transform.lossyScale.x));
+            }
+
+            else
+            {
+                // Came back from a recall that gave up. Restore it as a solid, falling object.
+                if (ownColliders != null)
+                    foreach (Collider c in ownColliders)
+                        if (c != null) { c.enabled = true; c.isTrigger = false; }
+
+                if (rb != null) { rb.isKinematic = false; rb.useGravity = true; }
+                stuck = false;
             }
         }
 
