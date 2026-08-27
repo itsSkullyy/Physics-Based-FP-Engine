@@ -144,7 +144,7 @@ public class PlayerInputRouter : MonoBehaviour
             case "secondary":    return GameAction.Button("Secondary", "<Mouse>/rightButton", "<Gamepad>/leftTrigger");
             case "zip":          return GameAction.Button("Zip", "<Mouse>/rightButton", "<Gamepad>/leftTrigger");
             case "axePickup":    return GameAction.Button("Axe Pickup", "<Keyboard>/g", "<Gamepad>/buttonWest");
-            
+
             // D-pad up/down is left alone: that is the scroll axis, which reels the rope.
             case "slot1":        return GameAction.Button("Slot 1", "<Keyboard>/1");
             case "slot2":        return GameAction.Button("Slot 2", "<Keyboard>/2");

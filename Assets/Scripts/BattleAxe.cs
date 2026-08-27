@@ -102,13 +102,26 @@ public class BattleAxe : MonoBehaviour
     public float bounceUpSpeed = 8f;
     [Range(0f, 1f)] public float surfaceNormalInfluence = 0.5f;
     [Range(0f, 1f)] public float velocityKeep = 0.25f;
-    [Range(0f, 1.5f)] public float fallToBounce = 0.55f;
+    [Tooltip("How much of your fall speed comes back as bounce height. 1 = a full mirror - " +
+             "slam into the ground at 20 and you launch back up at 20 (plus bounceUpSpeed).")]
+    [Range(0f, 1.5f)] public float fallToBounce = 1f;
     public float minBounceUp = 6f;
-    public float maxBounceSpeed = 32f;
+    public float maxBounceSpeed = 45f;
     public int maxAirBounces = 0;           // 0 = unlimited
     public bool bounceWhenGrounded = true;
     [Tooltip("Bouncing while on the rope cuts it, otherwise the rope solver eats the impulse.")]
     public bool bounceReleasesGrapple = true;
+
+    [Header("Glass Smash Boost")]
+    [Tooltip("When the hit shatters a BreakableWall, skip the normal mace bounce (which " +
+             "would throw you back away from the wall) and instead launch you forward " +
+             "through the opening you just made, with extra height.")]
+    public bool smashOnBreakableWall = true;
+    public float smashForwardSpeed = 20f;
+    public float smashUpSpeed = 10f;
+    [Tooltip("Fraction of your existing velocity kept before the smash boost is added on top.")]
+    [Range(0f, 1f)] public float smashVelocityKeep = 0.35f;
+    public float maxSmashSpeed = 45f;
 
     [Header("Throw")]
     public float throwSpeed = 42f;
@@ -540,9 +553,18 @@ public class BattleAxe : MonoBehaviour
         Vector3 normal = best.normal.sqrMagnitude > 0.001f ? best.normal : -dir;
         Vector3 point = best.point.sqrMagnitude > 0.0001f ? best.point : origin + dir * swingRadius;
 
+        // Captured before OnAxeHit fires - a shattering wall deactivates itself as part of
+        // that call, and GetComponentInParent on an already-inactive object is not reliable.
+        BreakableWall brokenWall = best.collider.GetComponentInParent<BreakableWall>();
+
         OnAxeHit(best.collider, point, normal);
 
-        bool bounced = bounceOnHit && ApplyBounce(dir, normal);
+        bool bounced;
+        if (brokenWall != null && smashOnBreakableWall)
+            bounced = ApplySmashBoost(dir);
+        else
+            bounced = bounceOnHit && ApplyBounce(dir, normal);
+
         AxeHit?.Invoke(point, normal, bounced);
     }
 
@@ -587,6 +609,34 @@ public class BattleAxe : MonoBehaviour
         if (v.magnitude > maxBounceSpeed) v = v.normalized * maxBounceSpeed;
 
         playerBody.linearVelocity = v;
+        controller.SuppressJumpHold();
+        return true;
+    }
+
+    // Punching through a glass wall shouldn't bounce you back off it like a solid surface
+    // would - it should carry you through. Keeps a slice of your existing velocity (so a
+    // running smash still feels faster than a standing one) and adds a flat forward-and-up
+    // boost along the swing direction, i.e. straight through the hole you just made.
+    bool ApplySmashBoost(Vector3 aimDir)
+    {
+        if (playerBody == null) return false;
+
+        if (grappling != null && bounceReleasesGrapple)
+        {
+            if (grappling.IsZipping) grappling.StopZip();
+            if (grappling.IsSwinging) grappling.Detach(false);
+        }
+
+        Vector3 forward = aimDir.sqrMagnitude > 0.001f ? aimDir.normalized : transform.forward;
+
+        Vector3 v = playerBody.linearVelocity * smashVelocityKeep;
+        v += forward * smashForwardSpeed;
+        v.y = Mathf.Max(v.y, 0f) + smashUpSpeed;
+
+        if (v.magnitude > maxSmashSpeed) v = v.normalized * maxSmashSpeed;
+
+        playerBody.linearVelocity = v;
+        controller.SuppressJumpHold();
         return true;
     }
 
