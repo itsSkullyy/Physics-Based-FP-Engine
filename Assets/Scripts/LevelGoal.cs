@@ -1,10 +1,8 @@
 using UnityEngine;
 
-// Floating pickup that ends the level. Bobs and spins in place, throws off the same
-// mesh-based JuiceFX dust the rest of the game uses so it reads as part of the same
-// world instead of a UI element pasted into 3D space, and on touch stops CourseTimer,
-// grades the final time against the rank thresholds below, and hands off to
-// LevelCompleteMenu.
+// Floating pickup that ends the level. Bobs and spins in place with ambient JuiceFX dust;
+// on touch stops CourseTimer, grades the time against the rank thresholds below, and
+// hands off to LevelCompleteMenu.
 [RequireComponent(typeof(Collider))]
 public class LevelGoal : MonoBehaviour
 {

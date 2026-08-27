@@ -1,9 +1,7 @@
 using UnityEngine;
 
-// Kill volume under the level. Goes through PlayerHealth when the player has one, so
-// death runs through a single code path and the HUD sees it. Falls back to the old
-// straight teleport when there is no health component, which keeps existing scenes
-// working unchanged.
+// Kill volume under the level. Routes through PlayerHealth when present so death goes
+// through one code path and the HUD sees it. Falls back to a plain teleport otherwise.
 public class Deathplane : MonoBehaviour
 {
     [SerializeField] private Transform respawnPoint;
@@ -22,8 +20,6 @@ public class Deathplane : MonoBehaviour
 
         if (health != null)
         {
-            // Let this plane's own respawn point stand in if the player has not been
-            // given one, so a scene that only ever configured the deathplane still works.
             if (health.respawnPoint == null) health.respawnPoint = respawnPoint;
 
             if (kills)

@@ -3,11 +3,7 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 
 // Drop-in controls menu. Put it on the Player root next to PlayerInputRouter.
-//
-// IMGUI on purpose: it matches the pickup prompt and grapple reticle already in this
-// project, needs no canvas, no prefab and no TextMeshPro, and works the moment the
-// component is added. When you build a real menu, keep this as the reference for the
-// call order - it is only ~15 lines of actual rebinding logic.
+// IMGUI, matching the rest of this project's UI.
 [DefaultExecutionOrder(-400)]
 public class RebindMenu : MonoBehaviour
 {
@@ -64,7 +60,7 @@ public class RebindMenu : MonoBehaviour
             for (int i = 0; i < action.bindings.Count; i++)
             {
                 UnityEngine.InputSystem.InputBinding b = action.bindings[i];
-                if (b.isComposite) continue;   // the parts underneath are the bindable bits
+                if (b.isComposite) continue;
 
                 string label = entry.label;
                 if (b.isPartOfComposite && !string.IsNullOrEmpty(b.name))
@@ -83,7 +79,7 @@ public class RebindMenu : MonoBehaviour
 
     void Update()
     {
-        if (listening != null) return;   // swallow the toggle while waiting for a control
+        if (listening != null) return;
 
         bool pressed =
             (Keyboard.current != null && toggleKey != Key.None && Keyboard.current[toggleKey].wasPressedThisFrame) ||

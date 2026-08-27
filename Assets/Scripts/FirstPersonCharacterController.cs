@@ -1,17 +1,11 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
 
-// Rigidbody-driven first person movement. Everything - walking, sliding, wall running,
-// vaulting, air darting - is forces and velocity edits on one Rigidbody in FixedUpdate,
-// not a CharacterController or a state machine class hierarchy. That keeps every system
-// able to read and nudge the same velocity, which is what lets a slide chain into a vault
-// launch, or a wall kick open a dart window, without each move needing to know about the
-// others explicitly - they just leave the velocity in a state the next one can pick up.
-//
-// FixedUpdate order matters and is deliberate: ground/wall checks first, then state
-// transitions (slide, crouch, vault), then the actual movement forces, then jump, then
-// gravity shaping, then the ground stick. Later steps assume earlier ones already know
-// whether the player is grounded/sliding/vaulting this step.
+// Rigidbody-driven first person movement. Walking, sliding, wall running, vaulting and
+// air darting are all forces and velocity edits on one Rigidbody in FixedUpdate rather
+// than a CharacterController or a state machine hierarchy, so a slide can chain into a
+// vault launch or a wall kick can open a dart window without either move needing to know
+// about the other.
 [RequireComponent(typeof(Rigidbody))]
 public class FirstPersonCharacterController : MonoBehaviour
 {
@@ -211,10 +205,8 @@ public class FirstPersonCharacterController : MonoBehaviour
     public float CrouchAmount => standHeight > 0f ? 1f - currentHeight / standHeight : 0f;
     public Vector3 FlatForward => Quaternion.Euler(0f, yaw, 0f) * Vector3.forward;
     public Vector3 FlatRight => Quaternion.Euler(0f, yaw, 0f) * Vector3.right;
-    // Called by anything that launches the player upward without it being a real jump
-    // press (currently the mace's bounce-on-hit) - holding the jump key would otherwise
-    // let that launch ride the same "no extra gravity while held" curve a real jump
-    // gets, adding height the launch was never tuned for.
+    /// Called by anything that launches the player upward without a real jump press
+    /// (the mace's bounce-on-hit), so the launch doesn't ride the low-jump gravity curve.
     public void SuppressJumpHold() => ignoreJumpHold = true;
 
     public bool DartWindowOpen => dartTimer > 0f;
@@ -227,11 +219,6 @@ public class FirstPersonCharacterController : MonoBehaviour
         if (input == null) input = PlayerInputRouter.Resolve(this);
 
         rb = GetComponent<Rigidbody>();
-        // Rotation is frozen because look is applied directly to the camera and visual
-        // transforms instead - letting physics spin the body would fight the mouse every
-        // frame it clipped something. Continuous collision is worth the extra cost here:
-        // at dart/zip speeds a discrete rigidbody can tunnel straight through a thin wall
-        // in a single physics step.
         rb.freezeRotation = true;
         rb.useGravity = true;
         rb.interpolation = RigidbodyInterpolation.Interpolate;
@@ -328,11 +315,9 @@ public class FirstPersonCharacterController : MonoBehaviour
         onSteepSlope = false;
         groundNormal = Vector3.up;
 
-        // Right after a jump the sphere cast would immediately see the ground the player
-        // just pushed off and call them grounded again on the very next FixedUpdate,
-        // killing the jump before it starts. groundIgnoreCounter blinds the check for a
-        // few frames so the velocity change actually gets to happen. Every launch-y move
-        // (jump, wall jump, wall kick, dart, slide launch) sets it for exactly this reason.
+        // Blinds the check for a few frames right after a launch, otherwise the sphere
+        // cast would see the ground the player just pushed off and re-ground them
+        // before the velocity change takes effect.
         if (groundIgnoreCounter > 0f)
         {
             groundIgnoreCounter -= Time.fixedDeltaTime;
@@ -345,9 +330,6 @@ public class FirstPersonCharacterController : MonoBehaviour
             groundNormal = hit.normal;
             float angle = Vector3.Angle(hit.normal, Vector3.up);
 
-            // A surface can be hit without counting as "grounded" - past maxSlopeAngle it
-            // is a wall-like ramp instead, which onSteepSlope routes into a forced slide
-            // rather than lets the player stand on it.
             if (angle <= maxSlopeAngle)
             {
                 isGrounded = true;
@@ -361,12 +343,6 @@ public class FirstPersonCharacterController : MonoBehaviour
         }
     }
 
-    // Without this the player slowly bounces down any slope, because gravity alone isn't
-    // enough to keep a rigidbody glued to an angled surface it's sliding across - each
-    // physics step it drifts a hair off the ground, the sphere cast still catches it, but
-    // the normal force from actual collision keeps popping it back up. Skipped for the
-    // moves that own vertical velocity themselves (zip, vault, wall run) and while rising
-    // fast, so it never fights a jump that just started.
     void ApplyGroundStick()
     {
         if (!isGrounded || isZipping || isVaulting || isWallRunning) return;
@@ -418,19 +394,10 @@ public class FirstPersonCharacterController : MonoBehaviour
 
             if (speedAlong < targetSpeed)
             {
-                // Accel is capped by how much speed is actually missing this step, not
-                // just the raw acceleration stat - otherwise a low framerate (big
-                // Time.fixedDeltaTime) could push speedAlong straight past targetSpeed in
-                // one step and the overspeed drag below would immediately claw it back,
-                // producing a visible stutter right at the speed cap.
                 float accel = Mathf.Min(acceleration, (targetSpeed - speedAlong) / Time.fixedDeltaTime);
                 rb.AddForce(moveDir * accel * control, ForceMode.Acceleration);
             }
 
-            // Kills any velocity that isn't pointed where the player is currently holding,
-            // so strafing or reversing snaps the direction of travel instead of curving
-            // into it - this is most of what makes the movement feel tight rather than
-            // slidey, on top of what the ground friction alone would give you.
             Vector3 flatMove = new Vector3(moveDir.x, 0f, moveDir.z).normalized;
             Vector3 lateral = horizVel - Vector3.Project(horizVel, flatMove);
             float counter = isGrounded ? counterMovement : airCounterMovement;
@@ -438,9 +405,6 @@ public class FirstPersonCharacterController : MonoBehaviour
                 counter *= airSlideCounterScale;
             rb.AddForce(-lateral * counter, ForceMode.Acceleration);
 
-            // Only bleeds speed while grounded and holding input, so momentum picked up
-            // from a dart, vault or swing carries through a landing instead of being
-            // instantly clamped back to maxSpeed the moment the player touches down.
             if (isGrounded)
             {
                 float overspeed = horizVel.magnitude - targetSpeed;
@@ -460,17 +424,10 @@ public class FirstPersonCharacterController : MonoBehaviour
         }
     }
 
-    // Momentum is a 0..1 blend between baseSpeed and maxSpeed, not a literal speed value -
-    // it builds while you hold a direction and bleeds off the instant you let go or reverse
-    // sharply, which is what makes committing to a direction feel rewarded and flip-
-    // flopping feel punished, on top of whatever the counter-movement above is doing.
     void UpdateMomentum(bool hasInput, Vector3 wishDir)
     {
         if (hasInput)
         {
-            // Turning against your last direction costs momentum proportional to how sharp
-            // the reversal is (alignment runs -1..1) - a slight strafe barely registers, a
-            // full about-face drains hard, same frame it happens.
             float alignment = Vector3.Dot(wishDir, lastMoveDir);
             if (alignment < 0f)
                 momentum += alignment * momentumDecayRate * Time.fixedDeltaTime;
@@ -486,10 +443,6 @@ public class FirstPersonCharacterController : MonoBehaviour
         momentum = Mathf.Clamp01(momentum);
     }
 
-    // A slide that runs off a ledge stays a slide in the air rather than snapping back to
-    // standing height mid-jump - that's the (wasSliding && HasCeilingAbove()) branch. If
-    // there's room to stand it ends normally; if the player crouched under something low
-    // and is still under it, they stay down instead of popping their head into the ceiling.
     void HandleSlideState()
     {
         if (!enableSlide) { isSliding = false; return; }
@@ -503,10 +456,6 @@ public class FirstPersonCharacterController : MonoBehaviour
         isAirSliding = enableAirSlide && slideKey && !isSliding &&
                        !isGrounded && !isVaulting && !isWallRunning;
 
-        // One-shot: slideBoostGiven latches true the instant a slide starts fast enough,
-        // so holding the key doesn't add the boost again every frame, and only resets once
-        // the player has fully let go and returned to standing - not on every brief stutter
-        // in and out of the slide state.
         if (isSliding && !wasSliding)
         {
             Vector3 horizVel = new Vector3(rb.linearVelocity.x, 0f, rb.linearVelocity.z);
@@ -524,11 +473,6 @@ public class FirstPersonCharacterController : MonoBehaviour
             crouchedByObstruction = HasCeilingAbove();
     }
 
-    // Sliding down a bumpy or curved surface would otherwise let gravity gradually pull
-    // velocity away from the ground plane and into the floor, which the sphere-cast ground
-    // check and ApplyGroundStick would then have to keep correcting - this just keeps the
-    // slide's own velocity flush with the surface every step instead. Skipped while rising
-    // (vel.y > 0.5) so a bump or ramp launch during a slide isn't immediately flattened.
     void AlignSlideVelocityToGround()
     {
         if (!isSliding || !isGrounded) return;
@@ -613,10 +557,6 @@ public class FirstPersonCharacterController : MonoBehaviour
             1f - Mathf.Exp(-crouchTransitionSpeed * Time.deltaTime));
     }
 
-    // Sphere-cast up from the top of the CURRENT (possibly crouched) capsule for however
-    // much height standing back up would add, plus a hair of clearance. Reused by both the
-    // crouch-height logic (don't grow into a ceiling) and the slide state machine (stay
-    // down if still under something), so the two never disagree about whether there's room.
     bool HasCeilingAbove()
     {
         if (capsule == null) return false;
@@ -629,13 +569,6 @@ public class FirstPersonCharacterController : MonoBehaviour
             out _, needed, groundMask, QueryTriggerInteraction.Ignore);
     }
 
-    // Coyote time forgives jumping a few frames after walking off a ledge; the jump buffer
-    // forgives pressing jump a few frames before landing. Together they cover the two ways
-    // a frame-perfect input requirement would otherwise eat a jump the player clearly meant.
-    // Below that, the three branches are a priority order, not independent checks: an actual
-    // ground jump wins if coyote time is still open, a wall run jump is next, and a wall
-    // kick off a nearby-but-not-currently-run surface is the last resort - so jump always
-    // does the most "grounded" thing available before reaching for the air options.
     void HandleJump()
     {
         coyoteCounter = isGrounded ? coyoteTime : coyoteCounter - Time.fixedDeltaTime;
@@ -670,11 +603,6 @@ public class FirstPersonCharacterController : MonoBehaviour
         }
     }
 
-    // Standard "juicy jump" gravity curve: falling is heavier than rising, and releasing
-    // jump early cuts the rise short instead of coasting to the same peak either way - that
-    // second part is what makes jump height controllable by tap-vs-hold rather than fixed.
-    // Skipped entirely for moves that already fully own vertical velocity themselves
-    // (zip, vault, wall run, swing), so this never fights their own gravity handling.
     void ApplyBetterGravity()
     {
         if (isZipping || isVaulting || isWallRunning || isSwinging) return;
@@ -730,9 +658,6 @@ public class FirstPersonCharacterController : MonoBehaviour
         }
     }
 
-    // A "wall" for running purposes is anything steeper than 60 degrees from up - that
-    // excludes ramps and steep-but-standable slopes, which are handled by the ground/slope
-    // logic instead, so the two systems never both claim the same surface.
     bool CheckWallSide(int side, out RaycastHit hit)
     {
         Vector3 dir = FlatRight * side;
@@ -748,10 +673,6 @@ public class FirstPersonCharacterController : MonoBehaviour
         return false;
     }
 
-    // Attaching to the wall kills most of the fall speed (a full run shouldn't start from a
-    // dead drop) and cancels any velocity component still heading INTO the wall, so the
-    // player doesn't spend the first few frames of the run pressed into the surface by
-    // their own momentum before wallRunStickForce takes over holding them there.
     void StartWallRun(int side, Vector3 normal)
     {
         isWallRunning = true;
@@ -773,11 +694,6 @@ public class FirstPersonCharacterController : MonoBehaviour
         wallRunCooldownTimer = wallRunCooldown;
     }
 
-    // Every step: cancel drift away from the wall, then accelerate along whatever direction
-    // the player is already travelling projected onto the wall's plane (not the input
-    // direction directly - the wall dictates the line, input can only speed up or slow down
-    // along it). Reduced gravity plus a constant inward stick force is what actually keeps
-    // the player glued to a vertical surface for the run's duration.
     void WallRunMovement()
     {
         Vector3 v = rb.linearVelocity;
@@ -816,11 +732,6 @@ public class FirstPersonCharacterController : MonoBehaviour
         OpenDartWindow();
     }
 
-    // The fallback when there's no wall to RUN along (nothing on the left/right within
-    // wallCheckDistance, or moving too slowly to qualify) but there IS a steep surface
-    // somewhere close by - checks all four cardinal directions and kicks off whichever is
-    // nearest, so pressing jump next to any wall always does something rather than only
-    // working on the two sides a wall run cares about.
     bool TryWallKick()
     {
         Vector3[] dirs =
@@ -860,11 +771,6 @@ public class FirstPersonCharacterController : MonoBehaviour
         return true;
     }
 
-    // Called by Grappling when a zip pull finishes near a wall, so arriving at the end of a
-    // zip can flow straight into a wall run instead of just dropping the player at the
-    // target. Probes in 8 directions around the player rather than just left/right, because
-    // a zip can arrive from any angle - unlike a normal wall run approach, which is always
-    // roughly forward past a wall already to one side.
     public bool TryZipWallRun()
     {
         if (!enableZipWallRun || !enableWallRun || isGrounded) return false;
@@ -906,10 +812,6 @@ public class FirstPersonCharacterController : MonoBehaviour
         return true;
     }
 
-    // Darting only exists as a brief follow-up to a wall jump or wall kick, not as a free
-    // air dash - opening the window is how those two moves grant it. It resets any pending
-    // buffered press because a dart buffered from before this kick shouldn't fire off a
-    // window it wasn't meant for.
     void OpenDartWindow()
     {
         if (!enableDarting) return;
@@ -934,9 +836,6 @@ public class FirstPersonCharacterController : MonoBehaviour
         PerformDart();
     }
 
-    // A dart replaces the current velocity outright rather than adding to it - it flattens
-    // whatever arc the player was on into a fast, level dash in roughly (but not exactly;
-    // dartSteer lets input bend it a little) the direction they were already moving.
     void PerformDart()
     {
         Vector3 v = rb.linearVelocity;
@@ -951,10 +850,6 @@ public class FirstPersonCharacterController : MonoBehaviour
 
         dartChain = Mathf.Min(dartChain + 1, dartMaxChain);
 
-        // Upward speed at the moment of the dart isn't just discarded - it converts into
-        // extra horizontal speed, so darting near the top of a rising wall kick pays off
-        // more than darting on the way down already out of vertical speed to spend. Chain
-        // bonus rewards consecutive darts strung together before dartChainResetTime lapses.
         float converted = Mathf.Max(0f, v.y) * dartVerticalConversion;
         float speed = horiz.magnitude + converted + dartSpeedBoost + dartChainBonus * (dartChain - 1);
         speed = Mathf.Min(speed, dartMaxSpeed);
@@ -984,13 +879,6 @@ public class FirstPersonCharacterController : MonoBehaviour
         TryStartVault();
     }
 
-    // Three-part probe: a forward raycast at three heights finds a wall-like surface to
-    // vault (the lowest hit found wins, so a low lip in front of a taller wall is what gets
-    // vaulted, not the tall wall behind it); a top-down raycast from above that point finds
-    // how tall the obstacle actually is; a capsule check at the landing spot makes sure
-    // there's room to arrive without vaulting head-first into a ceiling. Height alone then
-    // decides which of the three vault tiers (low/regular/full jump-vault) it becomes, each
-    // with its own speed-keep and duration further down in HandleVault/FinishVault.
     bool TryStartVault()
     {
         if (!enableVault || isVaulting || isZipping || isSwinging || capsule == null) return false;
@@ -1082,21 +970,12 @@ public class FirstPersonCharacterController : MonoBehaviour
         vaultTimer = 0f;
         isVaulting = true;
 
-        // Kinematic for the vault's duration so nothing else - gravity, the ground stick,
-        // a collision with the very geometry being vaulted over - can push the body off the
-        // scripted path. ContinuousSpeculative is kept on even though physics isn't driving
-        // movement any more, purely so MovePosition doesn't stop reporting collisions.
         rb.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
         rb.isKinematic = true;
 
         return true;
     }
 
-    // Moves along a quadratic Bezier (start -> control -> end) using a smoothstepped t
-    // instead of raw time, so the vault eases into and out of the motion rather than
-    // travelling at constant speed - constant speed reads as a slide, easing reads as a
-    // deliberate hop. The control point's height (peakY, set back in TryStartVault) is what
-    // gives the arc a genuine "up and over" shape instead of a straight diagonal line.
     void HandleVault()
     {
         if (!isVaulting) return;
@@ -1113,11 +992,6 @@ public class FirstPersonCharacterController : MonoBehaviour
             FinishVault();
     }
 
-    // Hands control back to physics at the landing point, along the vault's direction at a
-    // fraction of the entry speed (vaultKeep, tiered by vault height - a low-vault barely
-    // slows you, a full jump-vault costs most of it). The tier-3 exemption from the
-    // baseSpeed floor is deliberate: a jumpVault is meant to feel like it costs momentum,
-    // not just be a slower version of the other two.
     void FinishVault()
     {
         if (!isVaulting) return;
@@ -1135,11 +1009,6 @@ public class FirstPersonCharacterController : MonoBehaviour
         rb.linearVelocity = vaultDir * exitSpeed + Vector3.up * vaultExitUpPop;
     }
 
-    // Called instead of a normal vault when sliding into a low/regular-height obstacle:
-    // rather than arcing over it on the scripted vault curve, it launches the player up and
-    // over ballistically using their own slide speed, converted into vertical and forward
-    // components. Reads as a slide-into-hop combo rather than a canned vault animation
-    // interrupting a slide's momentum.
     void SlideLaunch(Vector3 wallDir)
     {
         Vector3 v = rb.linearVelocity;

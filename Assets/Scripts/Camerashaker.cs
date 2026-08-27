@@ -2,7 +2,7 @@ using UnityEngine;
 
 // Camera shake. Put this on CameraFX (same object as FirstPersonCameraRig).
 // It does NOT move the transform itself when a rig is driving it - it just exposes
-// offsets that FirstPersonCameraRig folds into its final pose, so the two never fight.
+// offsets that FirstPersonCameraRig folds into its final pose.
 [DefaultExecutionOrder(-60)]
 public class CameraShaker : MonoBehaviour
 {
@@ -19,7 +19,6 @@ public class CameraShaker : MonoBehaviour
     public float maxTrauma = 1f;
 
     [Header("Directional Kick")]
-    [Tooltip("Spring stiffness. Higher snaps back faster.")]
     public float kickStiffness = 190f;
     public float kickDamping = 21f;
 
@@ -71,7 +70,6 @@ public class CameraShaker : MonoBehaviour
         if (Instance == this) Instance = null;
     }
 
-    // FirstPersonCameraRig calls this so the shaker knows not to touch the transform.
     public void MarkDriven() => driven = true;
 
     // ---------------------------------------------------------------- public API
@@ -82,7 +80,7 @@ public class CameraShaker : MonoBehaviour
         trauma = Mathf.Min(maxTrauma, trauma + Mathf.Max(0f, amount));
     }
 
-    /// Shake that falls off with distance from the camera. Good for world impacts.
+    /// Shake that falls off with distance from the camera.
     public void AddTraumaAtPoint(Vector3 point, float amount, float fullRange, float maxRange)
     {
         float d = Vector3.Distance(transform.position, point);
@@ -92,8 +90,7 @@ public class CameraShaker : MonoBehaviour
         AddTrauma(amount * falloff);
     }
 
-    /// A deliberate shove in a direction, in the camera's local space.
-    /// localPos in metres, localEuler in degrees.
+    /// localPos in metres, localEuler in degrees, in the camera's local space.
     public void AddKick(Vector3 localPos, Vector3 localEuler)
     {
         kickPosVel += localPos * kickStiffness * 0.05f;
@@ -106,7 +103,6 @@ public class CameraShaker : MonoBehaviour
         fovVel += degrees * fovStiffness * 0.05f;
     }
 
-    /// One call for the common case.
     public void Impact(float traumaAmount, Vector3 kickLocalPos, Vector3 kickLocalEuler, float fov)
     {
         AddTrauma(traumaAmount);
@@ -121,7 +117,7 @@ public class CameraShaker : MonoBehaviour
         float dt = useUnscaledTime ? Time.unscaledDeltaTime : Time.deltaTime;
         if (dt <= 0f) return;
 
-        dt = Mathf.Min(dt, 0.05f);   // never let a hitch launch the spring
+        dt = Mathf.Min(dt, 0.05f);
         noiseTime += dt * noiseFrequency;
 
         trauma = Mathf.Max(0f, trauma - traumaDecay * dt);

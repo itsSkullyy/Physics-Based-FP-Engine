@@ -1,9 +1,7 @@
 using UnityEngine;
 
-// Finish gate for a CourseTimer run. Crossing it stops the clock and cashes in the same
-// juice hooks everything else in the game uses (shake, impact frame, a JuiceFX burst) so
-// the payoff for finishing a course reads on the same level as landing an axe hit, not
-// like a silent UI event bolted on the side.
+// Finish gate for a CourseTimer run. Crossing it stops the clock and fires the same
+// juice hooks the rest of the game uses (shake, impact frame, a JuiceFX burst).
 [RequireComponent(typeof(Collider))]
 public class FinishZone : MonoBehaviour
 {
@@ -25,9 +23,6 @@ public class FinishZone : MonoBehaviour
     {
         if (!other.CompareTag(playerTag)) return;
 
-        // FinishRun no-ops if no run was in progress, so walking through the finish
-        // without ever touching the start gate is silently ignored rather than logging
-        // a bogus time.
         bool wasRunning = CourseTimer.Get().Running;
         CourseTimer.Get().FinishRun();
         if (!wasRunning) return;

@@ -1,8 +1,7 @@
 using UnityEngine;
 
-// Trigger sitting just in front of a BreakableWall. It watches for the player crossing it
-// above a speed threshold and reports that back to the wall, which shatters and lets them
-// through. Created and configured by BreakableWall - you never add this by hand.
+// Trigger sitting just in front of a BreakableWall. Watches for the player crossing it
+// above a speed threshold and reports that back to the wall. Created by BreakableWall.
 [RequireComponent(typeof(Collider))]
 public class RunThroughProbe : MonoBehaviour
 {
@@ -22,8 +21,8 @@ public class RunThroughProbe : MonoBehaviour
         Evaluate(other);
     }
 
-    // Also checked on stay: a player who was just under the threshold on entry but
-    // accelerated inside the trigger (a dart, a slide launch) still gets to smash through.
+    // Also checked on stay so a player who speeds up inside the trigger (a dart, a
+    // slide launch) still gets to smash through.
     void OnTriggerStay(Collider other)
     {
         Evaluate(other);

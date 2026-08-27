@@ -1,8 +1,8 @@
 using UnityEngine;
 
-// Thrown axe. Simulates its own arc and sweeps a CONTINUOUS chain of segments along the
-// axe head's real path (plus the pivot's path) every physics step, so there is never a
-// gap for it to slip through no matter how fast it flies or spins.
+// Thrown axe. Simulates its own arc and sweeps a continuous chain of segments along the
+// axe head's real path (plus the pivot's path) every physics step, so it never has a
+// gap to slip through no matter how fast it flies or spins.
 [RequireComponent(typeof(Rigidbody))]
 public class ThrownAxe : MonoBehaviour
 {
@@ -14,7 +14,7 @@ public class ThrownAxe : MonoBehaviour
 
     [Header("Flight")]
     public float gravityScale = 1f;
-    public float spinSpeed = 2160f;             // degrees per second, 6 rotations a second
+    public float spinSpeed = 2160f;             // degrees per second
     public bool scaleSpinWithThrowSpeed = true;
     public float spinReferenceSpeed = 42f;
     [Range(0.25f, 3f)] public float minSpinScale = 0.7f;
@@ -23,32 +23,30 @@ public class ThrownAxe : MonoBehaviour
     public float despawnBelowY = -200f;
 
     [Header("Sweeping")]
-    public float sweepRadius = 0.08f;           // fatness of the head probe
+    public float sweepRadius = 0.08f;
     public bool sweepBody = true;
-    public float bodySweepRadius = 0.06f;       // fatness of the pivot/handle probe
-    public float maxStepDistance = 0.22f;       // shorter = more substeps = tighter arc
+    public float bodySweepRadius = 0.06f;
+    public float maxStepDistance = 0.22f;
     public int maxSubSteps = 14;
     public float skinWidth = 0.02f;
 
     [Header("Stick")]
     public LayerMask stickMask = ~0;
-    [Tooltip("Let the axe embed in trigger colliders. Turn this ON if your grappleable " +
-             "props use trigger colliders, or the axe will fly straight through them.")]
+    [Tooltip("Let the axe embed in trigger colliders. Turn on if grappleable props use trigger colliders.")]
     public bool stickToTriggers = false;
     public float stickDepth = 0.12f;
     [Range(0f, 1f)] public float stickNormalBlend = 0.55f;
     public Vector3 stickEulerOffset = Vector3.zero;
     public bool levelRoll = true;
     public bool parentToSurface = true;
-    
+
     [Header("Loose On Ground")]
-    [Tooltip("A loose axe stops being a grapple anchor, so the zip pulls it back to YOU " +
-             "instead of pulling you toward it.")]
+    [Tooltip("A loose axe stops being a grapple anchor, so a zip pulls it back to you instead of pulling you to it.")]
     public bool looseStopsBeingGrappleTarget = true;
 
     int originalLayer;
     string originalTag;
-    SphereCollider grappleTrigger;   // the one MakeGrappable adds, so it can be removed again
+    SphereCollider grappleTrigger;
 
     [Header("Impact Juice")]
     public float impactShake = 0.4f;
@@ -78,26 +76,18 @@ public class ThrownAxe : MonoBehaviour
     [Header("Recall")]
     [Tooltip("Seconds the axe must stay stuck before it can be recalled.")]
     public float recallCooldown = 3f;
-    [Tooltip("Top speed of the axe flying back to the player.")]
     public float recallMaxSpeed = 34f;
-    [Tooltip("How hard it accelerates toward the player. Higher = snappier flight.")]
     public float recallAcceleration = 120f;
-    [Tooltip("How quickly it turns toward the target. Higher = tighter homing.")]
     public float recallTurnRate = 14f;
-    [Tooltip("Spin while flying back, degrees per second.")]
     public float recallSpin = 1440f;
-    [Tooltip("Distance at which it counts as caught, on top of the catcher's own radius.")]
     public float recallCatchDistance = 0.6f;
     [Header("Recall Avoidance")]
-    [Tooltip("Look-ahead spherecast so the axe steers around walls instead of grinding " +
-             "into them - the 'finding its way back' feel.")]
     public bool recallAvoidObstacles = true;
     public LayerMask recallObstacleMask = ~0;
     public float recallProbeDistance = 3f;
     public float recallProbeRadius = 0.35f;
     public float recallAvoidStrength = 26f;
-    [Tooltip("If the axe makes no headway toward you for this long (walled off with no " +
-             "path), it gives up and re-embeds where it is instead of orbiting forever.")]
+    [Tooltip("If the axe makes no headway toward you for this long, it gives up and re-embeds where it is.")]
     public float recallNoProgressTimeout = 1.75f;
 
     Rigidbody rb;
@@ -117,11 +107,11 @@ public class ThrownAxe : MonoBehaviour
     Vector3 lastHeadPos;
 
     Transform recallTarget;
-    System.Func<Vector3> recallTargetPoint;   // optional dynamic aim (e.g. chest height)
+    System.Func<Vector3> recallTargetPoint;
     float recallCatchRadius;
     System.Action onRecallCaught;
-    float recallBestDist;      // closest we have ever got to the target this recall
-    float recallStuckTimer;    // time spent making no progress toward the target
+    float recallBestDist;
+    float recallStuckTimer;
 
     Quaternion stuckLocalRot;
     Vector3 wobbleAxisLocal = Vector3.right;
@@ -132,7 +122,6 @@ public class ThrownAxe : MonoBehaviour
     public Vector3 StickPoint => transform.position;
     public Vector3 HeadPosition => transform.position + HeadWorldOffset(transform.rotation);
 
-    // Recall readiness, for the cooldown UI. Progress runs 0..1 over recallCooldown.
     public float StuckTime => stuck ? stuckTimer : 0f;
     public float RecallCooldownProgress =>
         stuck && recallCooldown > 0.01f ? Mathf.Clamp01(stuckTimer / recallCooldown) : (stuck ? 1f : 0f);
@@ -142,7 +131,7 @@ public class ThrownAxe : MonoBehaviour
     {
         originalLayer = gameObject.layer;
         originalTag = gameObject.tag;
-        
+
         rb = GetComponent<Rigidbody>();
         rb.useGravity = false;
         rb.isKinematic = true;
@@ -155,8 +144,8 @@ public class ThrownAxe : MonoBehaviour
         Launch(launchVelocity, spinDegreesPerSecond, ignoreColliders, transform.position);
     }
 
-    // originPoint should be where the throw came FROM (the camera). The gap between there
-    // and the spawn point gets swept too, so throwing while hugging a wall still lands.
+    // originPoint should be where the throw came FROM (the camera), so the gap between
+    // there and the spawn point gets swept too.
     public void Launch(Vector3 launchVelocity, float spinDegreesPerSecond,
                        Collider[] ignoreColliders, Vector3 originPoint)
     {
@@ -169,8 +158,6 @@ public class ThrownAxe : MonoBehaviour
 
         ownColliders = GetComponentsInChildren<Collider>(true);
 
-        // The axe never physically collides - it only uses its own sweep - so the
-        // colliders stay off until it sticks and needs to be grapple-targetable.
         foreach (Collider c in ownColliders)
             if (c != null) c.enabled = false;
 
@@ -197,7 +184,6 @@ public class ThrownAxe : MonoBehaviour
 
         launched = true;
 
-        // Close the gap between the thrower and the spawn point.
         if (SweepSegment(originPoint, lastHeadPos, sweepRadius, out RaycastHit spawnHit, out Vector3 spawnDir))
             Stick(spawnHit, spawnDir);
     }
@@ -212,7 +198,6 @@ public class ThrownAxe : MonoBehaviour
 
         if (stuck)
         {
-            // Count up while embedded so the recall cooldown and its UI can progress.
             stuckTimer += Time.fixedDeltaTime;
             return;
         }
@@ -246,9 +231,8 @@ public class ThrownAxe : MonoBehaviour
             Quaternion nextRot = Quaternion.AngleAxis(activeSpin * sdt, spinAxis) * rot;
 
             // The head orbits the pivot while it spins, so its true path is an arc.
-            // Chaining each segment from the LAST head position to the NEXT one -
-            // both using their own rotations - leaves no gap between steps. That gap
-            // was what let it clip through thin geometry.
+            // Chaining each segment from the last head position to the next one keeps
+            // there from being a gap between steps.
             Vector3 nextHead = nextPos + HeadWorldOffset(nextRot);
 
             if (SweepSegment(lastHeadPos, nextHead, sweepRadius,
@@ -299,8 +283,7 @@ public class ThrownAxe : MonoBehaviour
     /// Begin flying back to a target. Returns false if it is not ready (still on
     /// cooldown, not stuck, or already recalling). targetPoint lets the caller aim at a
     /// moving point like the player's chest; pass null to home on the transform's origin.
-    /// onCaught fires when the axe reaches the catch radius - that is where the owner
-    /// collects it back into the hand.
+    /// onCaught fires when the axe reaches the catch radius.
     public bool Recall(Transform target, float catchRadius, System.Action onCaught,
                        System.Func<Vector3> targetPoint = null)
     {
@@ -318,7 +301,6 @@ public class ThrownAxe : MonoBehaviour
         recallBestDist = float.MaxValue;
         recallStuckTimer = 0f;
 
-        // Unparent from whatever surface it stuck to, and go kinematic-driven like flight.
         transform.SetParent(null, true);
 
         if (rb == null) rb = GetComponent<Rigidbody>();
@@ -326,23 +308,17 @@ public class ThrownAxe : MonoBehaviour
         rb.interpolation = RigidbodyInterpolation.Interpolate;
         rb.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
 
-        // Keep the axe non-solid in flight so it never shoves the player or knocks props.
-        // The catch is a distance check, not a physics collision.
         if (ownColliders != null)
             foreach (Collider c in ownColliders)
                 if (c != null) c.enabled = false;
 
-        // Seed velocity gently outward from the wall so it peels off before homing.
         velocity = (RecallAimPoint() - HeadPosition).normalized * (recallMaxSpeed * 0.25f);
 
         if (trail != null) trail.emitting = true;
-        
-        if (rb == null) rb = GetComponent<Rigidbody>();
-        rb.isKinematic = true;
+
         rb.useGravity = false;
         rb.linearVelocity = Vector3.zero;
         rb.angularVelocity = Vector3.zero;
-        rb.interpolation = RigidbodyInterpolation.Interpolate;
 
         return true;
     }
@@ -357,7 +333,6 @@ public class ThrownAxe : MonoBehaviour
     {
         if (recallTarget == null)
         {
-            // Target vanished - just stop and sit where we are, re-stick softly.
             recalling = false;
             stuck = true;
             return;
@@ -368,7 +343,6 @@ public class ThrownAxe : MonoBehaviour
         Vector3 toTarget = aim - head;
         float dist = toTarget.magnitude;
 
-        // Caught: close enough to the player. Hand back to the owner.
         if (dist <= recallCatchRadius + recallCatchDistance)
         {
             recalling = false;
@@ -376,12 +350,9 @@ public class ThrownAxe : MonoBehaviour
             return;
         }
 
-        // Progress watchdog. If the axe is genuinely walled off from the player it would
-        // otherwise slide along that wall forever without ever reaching the catch radius.
-        // Track the closest it has ever got; if it spends too long making no headway, it
-        // gives up flying and re-embeds where it is, so it can be recalled again from a
-        // spot with a clear path (or walked to). This never fires on a normal curved
-        // flight, only on a true dead end.
+        // Progress watchdog: if the axe is genuinely walled off from the player it would
+        // otherwise slide along that wall forever. Track the closest it has ever got; if
+        // it spends too long making no headway, give up and re-embed where it is.
         if (dist < recallBestDist - 0.05f)
         {
             recallBestDist = dist;
@@ -394,19 +365,17 @@ public class ThrownAxe : MonoBehaviour
             {
                 recalling = false;
                 stuck = true;
-                stuckTimer = 0f;        // restart the cooldown so a retry is deliberate
+                stuckTimer = 0f;
                 velocity = Vector3.zero;
-                MakeGrappable();        // re-arm as a grapple/recall target in place
-                                        // (restores its colliders correctly for us)
+                MakeGrappable();
                 return;
             }
         }
 
         Vector3 desiredDir = dist > 0.001f ? toTarget / dist : transform.forward;
 
-        // Steer the HEADING around obstacles so the flight curves toward gaps instead of
-        // charging flat into a wall. This alone cannot guarantee no clipping - it only
-        // biases intent - so the actual movement below is separately collision-swept.
+        // Steer the heading around obstacles so the flight curves toward gaps instead of
+        // charging into a wall; the actual movement below is separately collision-swept.
         if (recallAvoidObstacles)
         {
             float probe = Mathf.Min(recallProbeDistance, dist);
@@ -422,18 +391,14 @@ public class ThrownAxe : MonoBehaviour
             }
         }
 
-        // Accelerate toward the (possibly steered) direction and clamp to top speed.
         Vector3 desiredVel = desiredDir * recallMaxSpeed;
         velocity = Vector3.MoveTowards(velocity, desiredVel, recallAcceleration * dt);
         if (velocity.magnitude > recallMaxSpeed)
             velocity = velocity.normalized * recallMaxSpeed;
 
-        // Collision-swept movement. The axe is kinematic and its colliders are off, so
-        // nothing stops it unless WE stop it - MovePosition just teleports. So we sweep a
-        // sphere along the intended step and, on a hit, stop at the surface and slide the
-        // leftover motion along it. This is the hard guarantee against clipping; the
-        // steering above only makes that slide look graceful. We iterate a couple of times
-        // so an inside corner (two walls) is handled in one frame instead of poking through.
+        // Collision-swept movement: the axe is kinematic with its colliders off, so we
+        // sweep a sphere along the intended step and slide along whatever it hits.
+        // Iterated a couple of times so an inside corner is handled in one frame.
         Vector3 pos = rb.position;
         Vector3 remaining = velocity * dt;
 
@@ -446,12 +411,9 @@ public class ThrownAxe : MonoBehaviour
                     stepLen + skinWidth, recallObstacleMask, QueryTriggerInteraction.Ignore)
                 && !IsSelf(hit.collider) && !IsIgnored(hit.collider))
             {
-                // Advance to just short of the surface.
                 float travel = Mathf.Max(0f, hit.distance - skinWidth);
                 pos += stepDir * travel;
 
-                // Project both the leftover step and the velocity onto the wall so the
-                // axe hugs and slides instead of stopping dead or punching through.
                 remaining = Vector3.ProjectOnPlane(remaining - stepDir * travel, hit.normal);
                 velocity = Vector3.ProjectOnPlane(velocity, hit.normal);
             }
@@ -462,7 +424,6 @@ public class ThrownAxe : MonoBehaviour
             }
         }
 
-        // Spin, and bias the axis so the head leads the flight - reads as purposeful.
         spinAxis = ComputeSpinAxis(velocity);
         Quaternion spinStep = Quaternion.AngleAxis(recallSpin * dt, spinAxis);
         Quaternion faceFlight = Quaternion.Slerp(rb.rotation,
@@ -474,15 +435,14 @@ public class ThrownAxe : MonoBehaviour
         rb.MoveRotation(nextRot);
     }
 
-    /// Hard stop of a recall, e.g. if the owner cancels or the axe is destroyed. Leaves
-    /// the axe floating in place, not stuck.
+    /// Hard stop of a recall. Leaves the axe floating in place, not stuck.
     public void CancelRecall()
     {
         if (!recalling) return;
         recalling = false;
         velocity = Vector3.zero;
     }
-    
+
     public bool IsLoose => dropped && !recalling;
 
     /// Skips the embed cooldown. Used by the zip pull, which is its own gate.
@@ -512,14 +472,13 @@ public class ThrownAxe : MonoBehaviour
         bool found = false;
         float bestDist = float.MaxValue;
 
-        // Fat probe first so glancing hits on edges still register.
         if (radius > 0.001f)
         {
             RaycastHit[] sphereHits = Physics.SphereCastAll(from, radius, dir, castDist, stickMask, qti);
             found = PickBest(sphereHits, ref best, ref bestDist);
         }
 
-        // Thin probe as a backstop: catches the case where the sphere started already
+        // Thin probe backstop: catches the case where the sphere started already
         // overlapping something and reported a degenerate zero-distance hit.
         RaycastHit[] rayHits = Physics.RaycastAll(from, dir, castDist, stickMask, qti);
         found |= PickBest(rayHits, ref best, ref bestDist);
@@ -590,8 +549,6 @@ public class ThrownAxe : MonoBehaviour
         if (embed.sqrMagnitude < 0.001f) embed = -hit.normal;
         embed.Normalize();
 
-        // Rotate whatever axis the head actually sits on so it points into the surface.
-        // Works regardless of how the model is oriented.
         Vector3 headDirLocal = headLocalOffset.sqrMagnitude > 0.0001f
             ? headLocalOffset.normalized
             : Vector3.forward;
@@ -612,12 +569,11 @@ public class ThrownAxe : MonoBehaviour
 
         aligned *= Quaternion.Euler(stickEulerOffset);
 
-        // Place the pivot so the HEAD lands buried at the hit point, not the origin.
         Vector3 headTarget = hit.point + embed * stickDepth;
         Vector3 finalPos = headTarget - HeadWorldOffset(aligned);
 
-        // Grab the collider we hit BEFORE reparenting, so a wall that destroys itself in
-        // response still gives us a valid reference this frame.
+        // Grab the collider we hit before reparenting, so a wall that destroys itself
+        // in response still gives us a valid reference this frame.
         Collider hitCollider = hit.collider;
 
         rb.isKinematic = true;
@@ -629,7 +585,6 @@ public class ThrownAxe : MonoBehaviour
         if (parentToSurface && hitCollider != null && hitCollider.attachedRigidbody == null)
             transform.SetParent(hitCollider.transform, true);
 
-        // Judder, bending around the axis perpendicular to the buried head.
         wobbleAxisLocal = Vector3.Cross(headDirLocal, Vector3.up);
         if (wobbleAxisLocal.sqrMagnitude < 0.001f)
             wobbleAxisLocal = Vector3.Cross(headDirLocal, Vector3.forward);
@@ -643,7 +598,6 @@ public class ThrownAxe : MonoBehaviour
         if (trail != null)
             trail.emitting = false;
 
-        // Impact juice, scaled by how hard it was travelling.
         float force = Mathf.Clamp01(impactSpeed / Mathf.Max(1f, impactReferenceSpeed));
 
         JuiceFX fx = JuiceFX.Instance;
@@ -654,9 +608,8 @@ public class ThrownAxe : MonoBehaviour
             CameraShaker.Instance.AddTraumaAtPoint(hit.point, impactShake * force,
                 impactShakeFullRange, impactShakeMaxRange);
 
-        // Tell whatever we hit that a thrown axe stuck in it. A BreakableWall listens for
-        // this and shatters; anything else simply ignores the message. Sent AFTER our own
-        // juice so the wall's shatter feedback layers on top rather than being pre-empted.
+        // A BreakableWall listens for this and shatters; anything else ignores it. Sent
+        // after our own juice so a wall's shatter feedback layers on top.
         if (hitCollider != null)
             hitCollider.SendMessageUpwards("OnThrownAxeStuck", hit.point,
                 SendMessageOptions.DontRequireReceiver);
@@ -665,11 +618,9 @@ public class ThrownAxe : MonoBehaviour
             MakeGrappable();
     }
 
-    // Called when the surface the axe stuck into is destroyed out from under it (a
-    // BreakableWall shattering, say). The axe is already unparented by the caller; here
-    // it stops being a frozen kinematic prop and falls under gravity as a loose body,
-    // while staying grappleable and recallable. If it lands on a shard or the floor it
-    // simply rests there. Does nothing if the axe was never stuck.
+    // Called when the surface the axe stuck into is destroyed out from under it. The
+    // axe is already unparented by the caller; here it stops being a frozen kinematic
+    // prop and falls under gravity as a loose body, staying grappleable and recallable.
     public void DropFromSurface()
     {
         if (!stuck || dropped) return;
@@ -685,14 +636,12 @@ public class ThrownAxe : MonoBehaviour
             rb.interpolation = RigidbodyInterpolation.Interpolate;
             rb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
 
-            // Give it a small nudge so it topples off the break plane instead of dropping
-            // dead straight, which looks stuck-in-air for a frame.
             rb.linearVelocity = Vector3.down * 1.5f + Random.insideUnitSphere * 0.6f;
             rb.angularVelocity = Random.insideUnitSphere * 2f;
-            
+
             if (looseStopsBeingGrappleTarget) RemoveGrappleTargeting();
         }
-        
+
         void RemoveGrappleTargeting()
         {
             if (grappleTrigger != null) { Destroy(grappleTrigger); grappleTrigger = null; }
@@ -703,9 +652,9 @@ public class ThrownAxe : MonoBehaviour
                 gameObject.tag = string.IsNullOrEmpty(originalTag) ? "Untagged" : originalTag;
         }
 
-        // The grapple trigger colliders were turned into triggers when it stuck. Make the
-        // real ones solid again so it can land on shards and the floor, but leave the
-        // added grapple sphere (if any) as a trigger.
+        // The grapple trigger colliders were turned into triggers when it stuck; make
+        // the real ones solid again so it can land, but leave the added grapple sphere
+        // (if any) as a trigger.
         if (ownColliders != null)
         {
             foreach (Collider c in ownColliders)
@@ -717,17 +666,12 @@ public class ThrownAxe : MonoBehaviour
         }
     }
 
+    // Idempotent: safe to call again (e.g. when a gave-up recall re-embeds the axe in
+    // place) without undoing the solid/loose state a dropped axe is already in.
     void MakeGrappable()
     {
-        // A dropped axe (its surface was destroyed) keeps SOLID colliders so it can land
-        // on shards and the floor - we must not flip them back to triggers here, or it
-        // falls through the world. It still gets the layer and tag below so the grapple's
-        // overlap search and recall can find it where it lands.
         if (!dropped)
         {
-            // Colliders come back on as triggers: solid enough for the grapple's overlap
-            // search to find, invisible to the player's capsule and to the grapple's
-            // line-of-sight raycast (which ignores triggers).
             if (ownColliders != null)
             {
                 foreach (Collider c in ownColliders)
@@ -744,17 +688,6 @@ public class ThrownAxe : MonoBehaviour
                 grappleTrigger.isTrigger = true;
                 grappleTrigger.center = headLocalOffset;
                 grappleTrigger.radius = grappleRadius / Mathf.Max(0.0001f, Mathf.Abs(transform.lossyScale.x));
-            }
-
-            else
-            {
-                // Came back from a recall that gave up. Restore it as a solid, falling object.
-                if (ownColliders != null)
-                    foreach (Collider c in ownColliders)
-                        if (c != null) { c.enabled = true; c.isTrigger = false; }
-
-                if (rb != null) { rb.isKinematic = false; rb.useGravity = true; }
-                stuck = false;
             }
         }
 
@@ -782,15 +715,13 @@ public class ThrownAxe : MonoBehaviour
 
         trail = go.AddComponent<TrailRenderer>();
         trail.time = trailTime;
-        trail.numCapVertices = 0;      // hard corners read better than soft ones
+        trail.numCapVertices = 0;
         trail.numCornerVertices = 0;
         trail.alignment = LineAlignment.View;
         trail.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
         trail.receiveShadows = false;
         trail.autodestruct = false;
 
-        // Flat colour that tapers to a point by WIDTH, not by alpha, so it stays a
-        // solid cel-shaded ribbon instead of a soft sprite smear.
         Color solid = new Color(trailColor.r, trailColor.g, trailColor.b, 1f);
         trail.startColor = solid;
         trail.endColor = solid;

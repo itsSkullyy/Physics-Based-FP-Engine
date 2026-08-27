@@ -1,8 +1,7 @@
 using UnityEngine;
 
-// Watches the character controller's public state and fires juice off it.
-// Requires no edits to FirstPersonCharacterController - it reads existing getters.
-// Put this on the Player root.
+// Watches the character controller's public state and fires juice off it, reading
+// existing getters so the controller itself needs no changes. Put this on the Player root.
 [DefaultExecutionOrder(120)]
 public class PlayerJuice : MonoBehaviour
 {
@@ -386,8 +385,6 @@ public class PlayerJuice : MonoBehaviour
         wasAxeStuck = stuck;
     }
 
-    // A steady trickle of trauma while charging. Trauma decays on its own, so feeding
-    // it per second settles at a low hum that grows with the charge instead of spiking.
     void TrackAxeCharge(float dt)
     {
         if (axe == null || shaker == null || chargeHumTrauma <= 0f) return;
@@ -418,8 +415,6 @@ public class PlayerJuice : MonoBehaviour
             input.Rumble(chargeFullRumbleLow, chargeFullRumbleHigh, chargeFullRumbleTime);
     }
 
-    // Fires immediately before AxeThrown, so this is the bonus on top of the normal
-    // throw juice rather than a replacement for it.
     void OnAxeChargeReleased(float charge)
     {
         if (shaker == null || charge <= 0f) return;

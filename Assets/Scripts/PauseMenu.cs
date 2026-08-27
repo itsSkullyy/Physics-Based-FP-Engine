@@ -1,15 +1,12 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
 
-// Escape (or gamepad Start) pause menu. Freeze input, free the cursor, restore both
-// on close, and additionally freeze time itself via Time.timeScale - the same trick
-// JuiceFX's hitstop uses - so physics and the course clock both actually stop while
-// paused instead of just hiding behind a menu.
+// Escape (or gamepad Start) pause menu. Freezes input, frees the cursor, restores both
+// on close, and freezes Time.timeScale so physics and the course clock actually stop.
 //
-// The open/close toggle reads Keyboard/Gamepad directly rather than going through
-// PlayerInputRouter, same as RebindMenu does - router.inputEnabled gets set false the
-// moment the menu opens, which would disable a routed action too and make it impossible
-// to ever press the button that closes the menu again.
+// Reads Keyboard/Gamepad directly rather than through PlayerInputRouter, since opening
+// the menu sets router.inputEnabled false - going through a routed action would make it
+// impossible to press the button that closes the menu again.
 [DefaultExecutionOrder(-400)]
 public class PauseMenu : MonoBehaviour
 {
@@ -66,7 +63,6 @@ public class PauseMenu : MonoBehaviour
             return;
         }
 
-        // Don't fight the level-complete menu for the cursor.
         if (LevelCompleteMenu.Instance != null && LevelCompleteMenu.Instance.Showing) return;
 
         if (pressed) Open();
@@ -154,8 +150,6 @@ public class PauseMenu : MonoBehaviour
         GUILayout.EndArea();
     }
 
-    // Solid black panel, white title, plain white buttons with black text - no gradients,
-    // no transparency, deliberately as plain as a first pass gets.
     void EnsureStyles()
     {
         if (whiteTex == null)
@@ -195,8 +189,6 @@ public class PauseMenu : MonoBehaviour
         buttonStyle.hover.textColor = Color.black;
         buttonStyle.active.textColor = Color.white;
 
-        // Same button, colours flipped - this is what marks the gamepad's current
-        // selection, since there is no mouse hover to lean on for that.
         selectedButtonStyle = new GUIStyle(buttonStyle);
         selectedButtonStyle.normal.background = blackTex;
         selectedButtonStyle.normal.textColor = Color.white;

@@ -2,23 +2,15 @@ using System;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
-// One rebindable action. This replaces the old InputBinding class.
+// One rebindable action, wrapping a real Unity InputAction so callers keep the shape
+// they already use - input.jump.Pressed, input.slide.Held, input.axePickup.Label -
+// while getting gamepad support, multiple bindings, composites and runtime rebinding.
 //
-// It wraps a real Unity InputAction, so callers keep the exact same shape they
-// already use - input.jump.Pressed, input.slide.Held, input.axePickup.Label -
-// while underneath they get gamepad support, several bindings per action,
-// composites, processors and runtime rebinding.
+// Supply the action inline (edited in the inspector, default) or via an
+// InputActionReference from an asset, which wins over the inline one if set.
 //
-// Two ways to supply the action:
-//   - Inline (default). The action and its bindings live on the component and
-//     are edited in the inspector with the normal binding UI. No asset to wire up.
-//   - Reference. Drop in an InputActionReference from an InputActionAsset and it
-//     wins over the inline one. That means you can migrate to a full asset with
-//     control schemes later without touching a single caller.
-//
-// Named GameAction rather than InputBinding on purpose: UnityEngine.InputSystem
-// already owns the name InputBinding, and the old collision was a trap waiting
-// to fire the first time someone added a using to the wrong file.
+// Named GameAction rather than InputBinding since UnityEngine.InputSystem already
+// owns that name.
 [Serializable]
 public class GameAction
 {
@@ -107,8 +99,8 @@ public class GameAction
 
     // ---------------------------------------------------------------- reading
 
-    // Held is safe to read from FixedUpdate. Pressed and Released are frame edges,
-    // so read those from Update - or use ConsumePressed from FixedUpdate.
+    // Held is safe to read from FixedUpdate. Pressed/Released are frame edges - read
+    // those from Update, or use ConsumePressed from FixedUpdate.
     public bool Held
     {
         get { InputAction a = Action; return a != null && a.IsPressed(); }
@@ -124,9 +116,8 @@ public class GameAction
         get { InputAction a = Action; return a != null && a.WasReleasedThisFrame(); }
     }
 
-    /// FixedUpdate can run several times per rendered frame, and Pressed would be
-    /// true in every one of them. This hands the press to exactly one caller per
-    /// frame, which is what you want for things like a jump that must not double up.
+    /// Hands the press to exactly one caller per frame, so a jump polled from
+    /// FixedUpdate (which can run several times per rendered frame) can't double-fire.
     public bool ConsumePressed()
     {
         if (!Pressed) return false;
@@ -154,8 +145,7 @@ public class GameAction
 
     // ---------------------------------------------------------------- display
 
-    /// Prompt text for the device currently in use. BattleAxe's pickup prompt reads
-    /// this, so it flips from "G" to "X" the moment someone picks up a controller.
+    /// Prompt text for the device currently in use.
     public string Label
     {
         get
@@ -179,8 +169,8 @@ public class GameAction
         string path = a.bindings[bindingIndex].effectivePath;
         if (string.IsNullOrEmpty(path)) return fallback;
 
-        // Ask the live device first. That is what turns "<Gamepad>/buttonSouth" into
-        // "A" on an Xbox pad and "Cross" on a DualSense instead of "Button South".
+        // Ask the live device first, so "<Gamepad>/buttonSouth" becomes "A" on an
+        // Xbox pad or "Cross" on a DualSense instead of "Button South".
         if (IsGamepadPath(path) && Gamepad.current != null)
         {
             InputControl control = InputControlPath.TryFindControl(Gamepad.current, path);

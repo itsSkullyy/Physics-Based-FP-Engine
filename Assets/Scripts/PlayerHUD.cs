@@ -2,15 +2,12 @@ using UnityEngine;
 
 // Player HUD. Put this on the Player root - it finds everything itself.
 //
-//   bottom left   health bar, then the speed bar under it. Horizontal, no text, no
-//                 frame: a coloured square that fills and changes colour, nothing else.
-//   bottom right  the three weapon slots as plain numbered icons, no boxes.
+//   bottom left   health bar, then the speed bar under it - a coloured square that
+//                 fills and changes colour, no text or frame.
+//   bottom right  the three weapon slots as plain numbered icons.
 //
-// IMGUI on purpose, same as the pickup prompt, the grapple reticle and the rebind menu.
-// No canvas, no prefab, no TextMeshPro - drop the component on and it works.
-//
-// Icons: assign axeIcon / grappleIcon to use your own sprites. Left empty, the HUD draws
-// generated ones so there is nothing to import before you can see it running.
+// IMGUI, matching the rest of the project's UI. Assign axeIcon / grappleIcon for your
+// own sprites; left empty, the HUD draws generated ones.
 [DefaultExecutionOrder(200)]
 public class PlayerHUD : MonoBehaviour
 {
@@ -191,7 +188,6 @@ public class PlayerHUD : MonoBehaviour
         }
     }
 
-    // A square that fills left to right and changes colour. That is the whole thing.
     void DrawBar(Rect r, float t, Color fill)
     {
         if (barTrack.a > 0.001f)
@@ -267,8 +263,6 @@ public class PlayerHUD : MonoBehaviour
 
         if (!thrown || !showRecallProgress) return;
 
-        // Thin recall cooldown bar under the axe icon. The axe can be called back from
-        // any slot, so this is just telling you when the button will do something.
         ThrownAxe live = axe.ActiveAxe;
         if (live == null) return;
 
@@ -340,8 +334,7 @@ public class PlayerHUD : MonoBehaviour
 
     // ---------------------------------------------------------------- generated icons
 
-    // White silhouettes in an alpha texture, tinted at draw time. Built from simple shape
-    // tests with a 2x2 supersample, the same way the grapple reticle textures are made.
+    // White silhouettes in an alpha texture, tinted at draw time.
     static Texture2D MakeIcon(int size, System.Func<Vector2, bool> inside)
     {
         Texture2D tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
@@ -377,7 +370,6 @@ public class PlayerHUD : MonoBehaviour
         return tex;
     }
 
-    // Handle running bottom left to top right with a blade flaring off the top.
     static bool AxeShape(Vector2 p)
     {
         if (SegDist(p, new Vector2(0.26f, 0.10f), new Vector2(0.70f, 0.90f)) < 0.055f)
@@ -390,7 +382,6 @@ public class PlayerHUD : MonoBehaviour
             new Vector2(0.68f, 0.88f));
     }
 
-    // Shaft into a hook, open toward the lower right.
     static bool GrappleShape(Vector2 p)
     {
         if (SegDist(p, new Vector2(0.28f, 0.08f), new Vector2(0.50f, 0.50f)) < 0.055f)
@@ -404,7 +395,6 @@ public class PlayerHUD : MonoBehaviour
         return ang >= 20f && ang <= 300f;
     }
 
-    // Empty hands: a plain dash.
     static bool EmptyShape(Vector2 p)
     {
         return Mathf.Abs(p.y - 0.5f) < 0.03f && Mathf.Abs(p.x - 0.5f) < 0.2f;
@@ -420,7 +410,6 @@ public class PlayerHUD : MonoBehaviour
         return (p - (a + ab * t)).magnitude;
     }
 
-    // Convex quad given clockwise. Inside when the point sits right of every edge.
     static bool InQuad(Vector2 p, Vector2 a, Vector2 b, Vector2 c, Vector2 d)
     {
         return Side(p, a, b) && Side(p, b, c) && Side(p, c, d) && Side(p, d, a);

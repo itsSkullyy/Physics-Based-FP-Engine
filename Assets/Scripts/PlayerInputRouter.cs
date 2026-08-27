@@ -8,7 +8,6 @@ using UnityEngine.InputSystem.Utilities;
 
 // Every caller keeps the API it already had: Move, LookDelta, ScrollY, and
 // jump/slide/dart/grapple/axe actions with .Held, .Pressed, .Released and .Label.
-// FirstPersonCharacterController, Grappling, BattleAxe and GunSway need zero edits.
 [DefaultExecutionOrder(-500)]
 public class PlayerInputRouter : MonoBehaviour
 {
@@ -48,9 +47,8 @@ public class PlayerInputRouter : MonoBehaviour
     [Header("Axe Pickup (works on every slot)")]
     public GameAction axePickup = Default("axePickup");
 
-    // Aliases so BattleAxe and Grappling keep the exact call shape they already use.
-    // Properties, not fields, so BuildRegistry's reflection pass never sees them and the
-    // rebind menu still lists one row per real action.
+    // Aliases so BattleAxe and Grappling keep their existing call shape. Properties, not
+    // fields, so BuildRegistry's reflection pass never sees them.
     public GameAction grappleSwing => primary;
     public GameAction grapplePull  => zip;
     public GameAction axeSwing     => primary;
@@ -113,9 +111,8 @@ public class PlayerInputRouter : MonoBehaviour
 
     // ---------------------------------------------------------------- defaults
 
-    // One place that knows every default. Field initializers use it, and so does the
-    // repair pass, so an action added in code later cannot end up silently unbound on
-    // a prefab that was serialized before it existed.
+    // One place that knows every default, used by both the field initializers and the
+    // registry rebuild below.
     public static GameAction Default(string field)
     {
         switch (field)
@@ -145,7 +142,6 @@ public class PlayerInputRouter : MonoBehaviour
             case "zip":          return GameAction.Button("Zip", "<Mouse>/rightButton", "<Gamepad>/leftTrigger");
             case "axePickup":    return GameAction.Button("Axe Pickup", "<Keyboard>/g", "<Gamepad>/buttonWest");
 
-            // D-pad up/down is left alone: that is the scroll axis, which reels the rope.
             case "slot1":        return GameAction.Button("Slot 1", "<Keyboard>/1");
             case "slot2":        return GameAction.Button("Slot 2", "<Keyboard>/2");
             case "slot3":        return GameAction.Button("Slot 3", "<Keyboard>/3");
@@ -178,7 +174,6 @@ public class PlayerInputRouter : MonoBehaviour
         lastEnabled = inputEnabled;
         ApplyEnabledState();
 
-        // Cheaper and more reliable than sweeping every control every frame.
         buttonWatch = InputSystem.onAnyButtonPress.Call(OnAnyButton);
     }
 
@@ -212,8 +207,6 @@ public class PlayerInputRouter : MonoBehaviour
 
     void ApplyEnabledState()
     {
-        // Disabling the actions themselves means nothing leaks through, rather than
-        // relying on every call site to remember to check a flag.
         for (int i = 0; i < registry.Count; i++)
         {
             if (inputEnabled) registry[i].action.Enable();
@@ -237,13 +230,9 @@ public class PlayerInputRouter : MonoBehaviour
         {
             if (f.FieldType != typeof(GameAction)) continue;
 
-            // Bindings live in Default(), not in the scene file. Unity rebuilds a
-            // serialized GameAction with its own copy of the old binding array, which
-            // leaves the singleton action and its hidden map holding two different
-            // arrays - that is the "bindings array must match" assert, and it makes
-            // the action resolve against stale controls. Building fresh sidesteps it
-            // entirely, and an action added in code can never come back unbound on an
-            // object that was serialized before it existed.
+            // Rebuild from Default() rather than trust the serialized copy - a stale
+            // deserialized GameAction can end up with a binding array that no longer
+            // matches its own action's internal state.
             GameAction fresh = Default(f.Name);
             if (fresh != null) f.SetValue(this, fresh);
 
@@ -283,8 +272,7 @@ public class PlayerInputRouter : MonoBehaviour
         }
     }
 
-    /// Frame delta in mouse units. Stick input is converted into the same units, so
-    /// the controller's mouseSensitivity keeps meaning the same thing for both.
+    /// Frame delta in mouse units - stick input is converted into the same units.
     public Vector2 LookDelta
     {
         get
@@ -309,8 +297,6 @@ public class PlayerInputRouter : MonoBehaviour
         Vector2 stick = ShapeStick(lookStick.ReadVector());
         if (stick != Vector2.zero)
         {
-            // Unscaled on purpose. Hitstop drops timeScale to a crawl and stick aim
-            // would crawl with it while mouse aim carried on at full speed.
             d += stick * gamepadLookSpeed * Time.unscaledDeltaTime;
         }
 
@@ -380,8 +366,7 @@ public class PlayerInputRouter : MonoBehaviour
 
     // ---------------------------------------------------------------- rumble
 
-    /// Low and high are the two motors, 0..1. Hook this into PlayerJuice next to the
-    /// existing shaker calls - a landing or an axe hit is the obvious place.
+    /// Low and high are the two motors, 0..1.
     public void Rumble(float low, float high, float duration)
     {
         if (!enableRumble || !inputEnabled || duration <= 0f) return;
@@ -402,7 +387,6 @@ public class PlayerInputRouter : MonoBehaviour
         float end = Time.unscaledTime + duration;
         while (Time.unscaledTime < end)
         {
-            // Fades out, and survives the pad being yanked mid-shake.
             if (Gamepad.current == null) break;
 
             float k = Mathf.InverseLerp(end, end - duration, Time.unscaledTime);
@@ -490,8 +474,8 @@ public class PlayerInputRouter : MonoBehaviour
 
     // ---------------------------------------------------------------- resolve
 
-    // Called from other scripts' Awake. Finds the router, or drops one in with
-    // default bindings so nothing silently dies when it is missing.
+    // Called from other scripts' Awake. Finds the router, or adds one with default
+    // bindings if none exists yet.
     public static PlayerInputRouter Resolve(Component owner)
     {
         if (Instance != null) return Instance;

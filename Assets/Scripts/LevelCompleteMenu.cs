@@ -1,8 +1,7 @@
 using UnityEngine;
 
 // Level-complete popup. LevelGoal calls Show() with the final time and rank; this owns
-// freezing the game and offering Try Again / Close Game. IMGUI, matching every other menu
-// in this project - no canvas, no prefab, nothing to import.
+// freezing the game and offering Try Again / Close Game. IMGUI, matching the other menus.
 public class LevelCompleteMenu : MonoBehaviour
 {
     public static LevelCompleteMenu Instance { get; private set; }
@@ -123,10 +122,6 @@ public class LevelCompleteMenu : MonoBehaviour
         GUILayout.EndArea();
     }
 
-    // Same flat black-panel / white-text look as PauseMenu, plus a colour-flipped button
-    // twin so the gamepad's current selection has something to show for itself without a
-    // mouse hover to lean on. The rank letter is the one deliberate spot of colour - that
-    // is the actual information this screen exists to show.
     void EnsureStyles()
     {
         if (buttonStyle != null) return;

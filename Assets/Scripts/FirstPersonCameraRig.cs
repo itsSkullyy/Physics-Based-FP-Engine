@@ -51,7 +51,7 @@ public class FirstPersonCameraRig : MonoBehaviour
 
         if (shaker == null) shaker = GetComponent<CameraShaker>();
         if (shaker == null) shaker = CameraShaker.Instance;
-        if (shaker != null) shaker.MarkDriven();   // the rig owns this transform
+        if (shaker != null) shaker.MarkDriven();
 
         if (controller != null && controller.cameraTransform == transform)
             Debug.LogError("Rig is on the CameraAnchor. Put it on a child (CameraFX).", this);

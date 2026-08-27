@@ -1,11 +1,6 @@
 using UnityEngine;
 
-// Always-on course clock, pinned to the top of the screen. CourseTimer starts counting
-// the instant the scene loads and LevelGoal (or FinishZone) stops it, so this never has
-// to ask whether a run is "in progress" - it just mirrors CourseTimer.Elapsed.
-//
-// IMGUI, same reasoning as every other HUD piece in this project: no canvas, no prefab,
-// nothing to import before it's on screen.
+// Always-on course clock, pinned to the top of the screen. Mirrors CourseTimer.Elapsed.
 public class CourseHUD : MonoBehaviour
 {
     [Header("Clock")]

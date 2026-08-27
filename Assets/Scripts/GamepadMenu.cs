@@ -1,33 +1,22 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
 
-// Tiny gamepad-and-keyboard navigation helper for the project's IMGUI popups. IMGUI only
-// reacts to real mouse clicks - a gamepad press or an arrow key never becomes a
-// GUI.Button click on its own - so every button menu (PauseMenu, LevelCompleteMenu)
-// needs a manual "selected index + confirm" loop. Centralized here so they all navigate
-// and highlight the same way instead of each reimplementing it slightly differently.
+// Gamepad-and-keyboard navigation helper for the project's IMGUI popups. IMGUI only
+// reacts to real mouse clicks, so every button menu (PauseMenu, LevelCompleteMenu)
+// needs a manual "selected index + confirm" loop - centralized here so they all
+// navigate and highlight the same way.
 public static class GamepadMenu
 {
-    // OnGUI fires several times per rendered frame (a Layout pass, a Repaint pass, and
-    // more for input events) - reading wasPressedThisFrame on every one of those calls
-    // would apply the same key press several times in what is visually a single frame.
-    // With an even button count that cancels out completely (advance twice on a 2-button
-    // row lands back where it started, which is exactly why the rank screen looked dead),
-    // and with an odd count it skips unpredictably. Poll ignores every call within a frame
-    // after its first; Confirm answers true on only the first of those calls, so a menu
-    // action tied to it (Restart, QuitGame, ...) fires exactly once per press.
+    // OnGUI fires several times per rendered frame (Layout, Repaint, input events), so
+    // reading wasPressedThisFrame on every call would apply one press multiple times
+    // within what is visually a single frame. Poll and Confirm each only act on the
+    // first call per frame.
     static int pollFrame = -1;
     static int confirmFrame = -1;
 
-    /// Call once per OnGUI before drawing any buttons. Moves `selected` with the dpad or
-    /// the arrow keys - up/right for a vertical stack (PauseMenu) or a horizontal row
-    /// (LevelCompleteMenu's Try Again / Close Game), down/left for the other way. All
-    /// four directions work regardless of a given menu's layout, since responding to an
-    /// axis it doesn't use is harmless and some players will reach for either.
-    //
-    // dpad.up / dpad.down read backwards from their physical buttons on at least one
-    // controller tested with this project - swapped here rather than trusting the InputSystem
-    // labels, so "press down, selection moves down" actually holds on real hardware.
+    /// Call once per OnGUI before drawing any buttons. Moves `selected` with the dpad
+    /// or arrow keys - up/right one way, down/left the other, regardless of whether
+    /// the menu lays its buttons out vertically or horizontally.
     public static void Poll(ref int selected, int count)
     {
         if (count <= 0) return;
@@ -49,9 +38,8 @@ public static class GamepadMenu
         else if (backward) selected = (selected - 1 + count) % count;
     }
 
-    /// True on the first call this frame if the confirm input (gamepad South / A / Cross,
-    /// or keyboard Enter) is pressed - false on every later call in the same frame, so the
-    /// button action it triggers can't fire more than once per press.
+    /// True on the first call this frame if confirm (gamepad South / A / Cross, or
+    /// keyboard Enter) is pressed.
     public static bool Confirm()
     {
         if (confirmFrame == Time.frameCount) return false;

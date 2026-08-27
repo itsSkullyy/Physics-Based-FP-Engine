@@ -3,21 +3,12 @@ using UnityEngine;
 
 // ULTRAKILL-style impact frame. One in the scene (auto-spawned if missing).
 //
-//   ImpactFrames.Hit(worldPoint);                       // default punch
-//   ImpactFrames.Get().Freeze(0.1f, 0.28f, 1f);         // freeze, overlay, intensity
+//   ImpactFrames.Hit(worldPoint);
+//   ImpactFrames.Get().Freeze(0.1f, 0.28f, 1f);   // freeze, overlay, intensity
 //
-// Three things happen at once:
-//   - a HARD time freeze (timeScale 0) held on unscaled time, distinct from
-//     JuiceFX.Hitstop which only SLOWS time and caps at 0.2s. This is the full stop.
-//   - the whole screen is recoloured into black-and-red: it grabs the frame at the
-//     moment of impact, crushes it to luminance, and ramps that through black -> deep
-//     red -> hot white. The world genuinely turns red for the beat, not just a wash
-//     laid over the top. Grabbed ONCE and held frozen, which is cheap and reads as a
-//     comic-panel freeze rather than a live filter.
-//   - sharp speed-lines and a chromatic split streak in over that.
-//
-// The recolour is done with a runtime-built shader and a screen grab, so it needs no
-// OnRenderImage hook and works under Built-in, URP and HDRP alike.
+// A hard time freeze (timeScale 0, distinct from JuiceFX.Hitstop which only slows
+// time), a screen grab recoloured into black-and-red, and speed lines with a
+// chromatic split layered over that.
 [DefaultExecutionOrder(-70)]
 public class ImpactFrames : MonoBehaviour
 {
@@ -54,8 +45,7 @@ public class ImpactFrames : MonoBehaviour
     [Range(0f, 2f)] public float vignetteStrength = 0.9f;
 
     [Header("Grain")]
-    [Tooltip("Film-grain noise mixed into the image, and into the black/red edge so it " +
-             "breaks up rough and sharp instead of a clean line.")]
+    [Tooltip("Film-grain noise mixed into the image and the black/red edge.")]
     [Range(0f, 1f)] public float grain = 0.35f;
     [Tooltip("Noise cell size in pixels. Smaller = finer grain.")]
     public float grainScale = 1.5f;
@@ -63,8 +53,7 @@ public class ImpactFrames : MonoBehaviour
     [Range(0f, 1f)] public float grainSpike = 0.5f;
 
     [Header("Edges")]
-    [Tooltip("Bright hot lines drawn where the world has real brightness edges - this is " +
-             "what makes everything look sharp and spiky. 0 = off.")]
+    [Tooltip("Bright hot lines drawn along real brightness edges in the frame. 0 = off.")]
     [Range(0f, 2f)] public float edgeLines = 0.6f;
     [Tooltip("Higher = only the hardest edges light up, thinner and sharper.")]
     [Range(0.5f, 4f)] public float edgePower = 1.5f;
@@ -105,10 +94,6 @@ public class ImpactFrames : MonoBehaviour
 
     public bool IsFrozen => frozen;
 
-    // The recolour is driven by the ImpactRedWorld.shader asset (ships alongside this
-    // file). Drop that .shader anywhere in Assets and it is found by name at runtime -
-    // no material to assign. If it is missing, recolourWorld falls back to the flat flash.
-
     public static ImpactFrames Get()
     {
         if (Instance != null) return Instance;
@@ -144,9 +129,6 @@ public class ImpactFrames : MonoBehaviour
     {
         if (!recolourWorld) return;
 
-        // Resolves the ImpactRedWorld.shader asset by name. Unity has no public runtime
-        // "compile from string" call, so the .shader file must be in the project (and in
-        // Always Included Shaders if you strip on build).
         Shader s = Shader.Find("Hidden/ImpactRedWorld");
         if (s == null)
         {
@@ -206,7 +188,7 @@ public class ImpactFrames : MonoBehaviour
             lineSeed = Random.value * 1000f;
 
             if (recolourWorld && recolourMat != null)
-                grabQueued = true;   // grabbed at end of frame, see OnEndOfFrame
+                grabQueued = true;
         }
 
         freezeSeconds = Mathf.Min(freezeSeconds, maxFreeze);
@@ -218,8 +200,6 @@ public class ImpactFrames : MonoBehaviour
     {
         frozen = true;
 
-        // Grab the frame BEFORE stopping time, at the end of this render, so the frozen
-        // world image is the last live frame the player saw.
         if (grabQueued)
             yield return StartCoroutine(GrabFrame());
 
@@ -253,7 +233,6 @@ public class ImpactFrames : MonoBehaviour
             grabbedFrame.hideFlags = HideFlags.HideAndDontSave;
         }
 
-        // Pipeline-agnostic screen copy: reads the composited backbuffer into our RT.
         ScreenCapture.CaptureScreenshotIntoRenderTexture(grabbedFrame);
     }
 
@@ -288,14 +267,12 @@ public class ImpactFrames : MonoBehaviour
 
         float w = Screen.width;
         float h = Screen.height;
-        float e = overlayT * overlayT;                 // sharp attack, fast fall
+        float e = overlayT * overlayT;
         float a = Mathf.Min(maxOverlayAlpha, e * overlayIntensity);
 
         Vector2 focus = new Vector2(impactScreen.x * w, (1f - impactScreen.y) * h);
         Color prev = GUI.color;
 
-        // 1. Recoloured world, if we grabbed a frame. ScreenCapture writes the RT with
-        //    its origin flipped on some platforms, so it is drawn with a flipped rect.
         if (recolourWorld && recolourMat != null && grabbedFrame != null && Event.current.type == EventType.Repaint)
         {
             recolourMat.SetColor("_Shadow", shadowColor);
@@ -315,8 +292,6 @@ public class ImpactFrames : MonoBehaviour
             recolourMat.SetFloat("_EdgePower", edgePower);
             recolourMat.SetFloat("_Time01", Time.realtimeSinceStartup);
 
-            // DrawTexture does not always populate _MainTex_TexelSize, which the edge
-            // detector needs, so set it from the grabbed frame's real dimensions.
             recolourMat.SetVector("_MainTex_TexelSize", new Vector4(
                 1f / grabbedFrame.width, 1f / grabbedFrame.height,
                 grabbedFrame.width, grabbedFrame.height));
@@ -324,15 +299,11 @@ public class ImpactFrames : MonoBehaviour
             Graphics.DrawTexture(new Rect(0, h, w, -h), grabbedFrame, recolourMat);
         }
 
-        // 2. A soft red bloom over the whole frame at the moment of impact. No edge bars -
-        //    the shader's radial vignette handles edge darkening smoothly, so there is no
-        //    boxy border any more.
         Color flash = flashColor;
         flash.a = Mathf.Min(maxFlashAlpha, flashColor.a) * a;
         GUI.color = flash;
         GUI.DrawTexture(new Rect(0, 0, w, h), whiteTex);
 
-        // 3. Sharp lines.
         if (drawLines)
             DrawSpeedLines(w, h, focus, a);
 

@@ -4,17 +4,13 @@ using UnityEngine.InputSystem;
 
 // Player health. Put this on the Player root (same object as the Rigidbody).
 //
-// There is nothing in the game that hurts you yet, so this is deliberately a plain
-// container with a clean API to hook damage into later:
-//
 //   health.Damage(12f);
 //   health.Heal(25f);
 //   health.Kill();
 //   health.Damaged += amount => ...;
 //   health.Died    += () => ...;
 //
-// The Deathplane routes through Kill() so death always takes one code path and the HUD
-// only ever has one thing to read.
+// Deathplane routes through Kill() so death always takes one code path.
 [DefaultExecutionOrder(-200)]
 public class PlayerHealth : MonoBehaviour
 {

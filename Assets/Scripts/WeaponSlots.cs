@@ -8,13 +8,9 @@ using UnityEngine;
 //   Slot 2  Swing grapple   - primary fires and holds the rope, release lets go.
 //   Slot 3  Empty hands     - nothing equipped.
 //
-// The whole point is that the axe and the grapple SHARE the primary and secondary
-// buttons; which one they drive is decided here, not by the weapons themselves. The
-// zip grapple deliberately sits outside all of this - it is bound to its own action and
-// works on every slot, including the empty one.
-//
-// Throwing the axe drops you one slot down onto the grapple. Switch back to slot 1 to
-// recall it (the recall cooldown ring stays visible in the world meanwhile).
+// The axe and grapple share the primary/secondary buttons; which one they drive is
+// decided here rather than by the weapons themselves. Zip sits outside this - its own
+// action, works on every slot including empty hands.
 [DefaultExecutionOrder(-450)]   // after PlayerInputRouter (-500), before the weapons
 public class WeaponSlots : MonoBehaviour
 {
@@ -86,8 +82,8 @@ public class WeaponSlots : MonoBehaviour
 
     void Start()
     {
-        // Applied here rather than in Awake so the weapons have finished their own Awake
-        // and their renderers are cached before we start hiding things.
+        // Applied here rather than Awake so the weapons have finished their own Awake
+        // and cached their renderers before this starts hiding things.
         started = true;
         Apply();
         SlotChanged?.Invoke(Current);
@@ -113,7 +109,6 @@ public class WeaponSlots : MonoBehaviour
 
     void HandleScroll()
     {
-        // The wheel belongs to the rope while it is out.
         if (grappling != null && grappling.IsSwinging) { scrollLatched = false; return; }
 
         float s = input.ScrollY;
@@ -155,8 +150,6 @@ public class WeaponSlots : MonoBehaviour
         SlotChanged?.Invoke(Current);
     }
 
-    // Single place that decides what "equipped" means for each weapon. Nothing else
-    // touches those flags, so there is no way for the two to end up both live.
     void Apply()
     {
         if (axe != null)
@@ -166,8 +159,6 @@ public class WeaponSlots : MonoBehaviour
         {
             grappling.swingEquipped = GrappleEquipped;
 
-            // Putting the grapple away mid-swing has to cut the rope, otherwise the
-            // solver keeps hauling on a player who is holding an axe.
             if (!GrappleEquipped && grappling.IsSwinging)
                 grappling.Detach(false);
         }

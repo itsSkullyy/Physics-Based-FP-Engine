@@ -4,11 +4,11 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 
 // Runtime rebinding. Nothing here knows about UI, so drive it from an in-game
-// options menu, the sample RebindMenu, or an editor tool - whatever you build.
+// options menu, the sample RebindMenu, or an editor tool.
 //
 //   var op = InputRebinding.Begin(router.jump, index, gamepad: false, (ok, msg) => { ... });
-//   op is disposed for you when it finishes or cancels. Hold onto it only if you
-//   want to abort early with op.Cancel().
+//   op is disposed for you when it finishes or cancels; hold onto it only to abort
+//   early with op.Cancel().
 public static class InputRebinding
 {
     public class Result
@@ -26,8 +26,8 @@ public static class InputRebinding
     }
 
     /// Listens for the next control the player actuates and writes it into the given
-    /// binding. gamepad restricts listening to pad controls, so a keyboard rebind can
-    /// never eat a stick twitch and vice versa.
+    /// binding. gamepad restricts listening to pad controls so a keyboard rebind can't
+    /// eat a stick twitch, and vice versa.
     public static InputActionRebindingExtensions.RebindingOperation Begin(
         GameAction target,
         int bindingIndex,
@@ -43,7 +43,7 @@ public static class InputRebinding
         }
 
         bool wasEnabled = action.enabled;
-        action.Disable();   // the rebinding operation requires this
+        action.Disable();
 
         InputActionRebindingExtensions.RebindingOperation op =
             action.PerformInteractiveRebinding(bindingIndex)
@@ -61,8 +61,6 @@ public static class InputRebinding
         }
         else
         {
-            // Keep pad input out of a keyboard/mouse slot, otherwise the two device
-            // columns drift and prompts start lying about which button does what.
             op.WithControlsExcluding("<Gamepad>");
         }
 
@@ -96,8 +94,7 @@ public static class InputRebinding
     }
 
     /// Every other binding that now resolves to the same control. Reported rather than
-    /// auto-cleared - some overlaps are deliberate here, slide and dart share a key on
-    /// purpose, so silently wiping one would break the movement kit.
+    /// auto-cleared, since some overlaps (slide and dart sharing a key) are intentional.
     public static List<Conflict> FindConflicts(PlayerInputRouter router, GameAction target, int bindingIndex)
     {
         List<Conflict> found = new List<Conflict>();
@@ -132,7 +129,6 @@ public static class InputRebinding
 
         bool wasEnabled = action.enabled;
         if (wasEnabled) action.Disable();
-        // Applying an empty override is how you clear one by index.
         action.ApplyBindingOverride(bindingIndex, default(UnityEngine.InputSystem.InputBinding));
         if (wasEnabled) action.Enable();
     }

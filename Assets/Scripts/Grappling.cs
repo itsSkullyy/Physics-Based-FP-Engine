@@ -12,8 +12,7 @@ public class Grappling : MonoBehaviour
     public PlayerInputRouter input;
 
     [Header("Slots")]
-    [Tooltip("Owned by WeaponSlots. Swing grappling only works while the grapple slot is " +
-             "up; zipping is deliberately always allowed, whatever you are holding.")]
+    [Tooltip("Owned by WeaponSlots. Swing only works while the grapple slot is equipped; zip always works.")]
     public bool swingEquipped = true;
     
     [Header("Targeting")]
@@ -27,13 +26,9 @@ public class Grappling : MonoBehaviour
     public float minTargetDistance = 2f;
 
     [Header("Centre Anchoring")]
-    [Tooltip("Every grappleable object anchors at the centre of its collider bounds " +
-             "instead of wherever the aim happens to graze it. Aim assist still scores " +
-             "against the nearest point, so big props are no harder to pick out.")]
+    [Tooltip("Anchors at the centre of the target's collider bounds instead of the aim point.")]
     public bool attachToObjectCenter = true;
-    [Tooltip("Stops the rope reeling you inside a large target now that the anchor sits " +
-             "in its middle. The rope can never shorten past the target's own radius plus " +
-             "this clearance.")]
+    [Tooltip("Stops the rope reeling you inside a large target - it can't shorten past the target's radius plus clearance.")]
     public bool respectTargetRadius = true;
     public float anchorClearance = 0.6f;
 
@@ -143,8 +138,6 @@ public class Grappling : MonoBehaviour
     Vector3 zipPoint;
     float zipRadius;
 
-    // Half-size of whatever we are anchored to. Keeps the rope from reeling the player
-    // into the middle of a large grapple volume now that the anchor lives there.
     float anchorRadius;
 
     Vector3 currentRopeEnd;
@@ -269,7 +262,7 @@ public class Grappling : MonoBehaviour
             }
             else if (isSwinging)
             {
-                Detach(false);   // slot changed out from under a live rope
+                Detach(false);
             }
 
             if (input.grapplePull.Pressed) TryStartZip();
@@ -351,8 +344,6 @@ public class Grappling : MonoBehaviour
             if (c.attachedRigidbody == rb) continue;
             if (!string.IsNullOrEmpty(grappleTag) && !c.CompareTag(grappleTag)) continue;
 
-            // Scored against the nearest point so a big cube is as easy to look at as a
-            // small one, but anchored at the centre so every object behaves the same.
             Vector3 nearest = c.bounds.ClosestPoint(camT.position);
             Vector3 toNearest = nearest - camT.position;
             float nearDist = toNearest.magnitude;
@@ -381,7 +372,6 @@ public class Grappling : MonoBehaviour
             }
         }
 
-        // A new object snaps the reticle in again, which is the whole read of the effect.
         if (hasTarget && bestCollider != lockTarget)
         {
             lockTarget = bestCollider;
@@ -410,9 +400,8 @@ public class Grappling : MonoBehaviour
         return nearest;
     }
 
-    /// Line of sight test that tolerates the target's own geometry. Aiming at a centre
-    /// point means the ray always passes through the target's own surface first, and a
-    /// prop built from several colliders would otherwise block itself.
+    /// Line of sight test that tolerates the target's own geometry (a multi-collider
+    /// prop shouldn't block its own centre-anchored ray).
     bool IsBlocked(Vector3 origin, Vector3 dir, float dist, Collider target)
     {
         float check = dist - 0.05f;
@@ -532,8 +521,6 @@ public class Grappling : MonoBehaviour
         Vector3 toPoint = zipPoint - Pos;
         float dist = toPoint.magnitude;
 
-        // Arrival is measured from the target's surface, not its centre, so zipping to
-        // a large object no longer flies you into the middle of it before letting go.
         if (dist <= zipArrivalDistance + zipRadius)
         {
             if (controller.TryZipWallRun())
@@ -890,8 +877,6 @@ public class Grappling : MonoBehaviour
 
     // ---------------------------------------------------------------- reticle
 
-    // Animated here rather than in OnGUI, which runs more than once per frame and would
-    // otherwise advance the snap and the spin at double speed.
     void UpdateReticle(float dt)
     {
         reticleSpin += reticleSpinSpeed * dt;
@@ -938,8 +923,8 @@ public class Grappling : MonoBehaviour
         GUI.color = old;
     }
 
-    // Four bracket arcs turning one way, four chevrons converging inward the other way.
-    // The whole thing snaps down from oversized on acquisition, which is what sells it.
+    // Bracket ring turning one way, chevrons converging inward the other way, snapping
+    // down from oversized on acquisition.
     void DrawReticle(Vector2 screen, float size, Color tint, bool locked)
     {
         float ease = 1f - Mathf.Pow(1f - Mathf.Clamp01(lockT), 3f);
@@ -956,12 +941,10 @@ public class Grappling : MonoBehaviour
 
         Matrix4x4 baseMatrix = GUI.matrix;
 
-        // Outer bracket ring.
         GUIUtility.RotateAroundPivot(reticleSpin, screen);
         GUI.DrawTexture(new Rect(screen.x - s * 0.5f, screen.y - s * 0.5f, s, s), arcTex);
         GUI.matrix = baseMatrix;
 
-        // Chevrons, sat between the brackets and sliding in as the lock completes.
         float radius = s * Mathf.Lerp(0.95f, 0.46f, ease);
         float bladeSize = s * 0.2f;
 
@@ -970,7 +953,6 @@ public class Grappling : MonoBehaviour
             float ang = 45f + i * 90f - reticleSpin * 0.55f;
             float rad = ang * Mathf.Deg2Rad;
 
-            // GUI space has y running down, so "up" is -y and positive angles turn clockwise.
             Vector2 dir = new Vector2(Mathf.Sin(rad), -Mathf.Cos(rad));
             Vector2 p = screen + dir * radius;
 
@@ -980,7 +962,6 @@ public class Grappling : MonoBehaviour
             GUI.matrix = baseMatrix;
         }
 
-        // Centre pip so the anchor point itself is readable.
         float pip = Mathf.Max(3f, s * 0.045f);
         GUI.DrawTexture(new Rect(screen.x - pip * 0.5f, screen.y - pip * 0.5f, pip, pip), dotTex);
     }
@@ -1006,8 +987,6 @@ public class Grappling : MonoBehaviour
         return tex;
     }
 
-    /// Ring broken into segments with an inward tick at each segment centre - the bit
-    /// that makes it read as a scope rather than a plain circle.
     static Texture2D MakeArcTexture(int size, float thickness, int segments,
                                     float gap, float tickLength)
     {
@@ -1025,7 +1004,6 @@ public class Grappling : MonoBehaviour
             {
                 float a = 0f;
 
-                // 2x2 supersample, since these are drawn scaled and rotated.
                 for (int sy = 0; sy < 2; sy++)
                 {
                     for (int sx = 0; sx < 2; sx++)
@@ -1042,8 +1020,6 @@ public class Grappling : MonoBehaviour
                         bool onRing = Mathf.Abs(local) <= halfFill &&
                                       Mathf.Abs(d - ringR) <= thickness * 0.5f;
 
-                        // Perpendicular distance from the segment's centre ray, so the
-                        // tick keeps a constant pixel width all the way in.
                         float perp = Mathf.Abs(d * Mathf.Sin(local * Mathf.Deg2Rad));
                         bool onTick = perp <= thickness * 0.4f &&
                                       d <= ringR && d >= ringR - tickLength;
@@ -1062,8 +1038,6 @@ public class Grappling : MonoBehaviour
         return tex;
     }
 
-    /// Hollow arrowhead pointing at the top of the image, so a 180 degree turn aims it
-    /// back at the reticle centre.
     static Texture2D MakeChevronTexture(int size, float thickness)
     {
         var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
@@ -1083,7 +1057,7 @@ public class Grappling : MonoBehaviour
                     for (int sx = 0; sx < 2; sx++)
                     {
                         float nx = (x + 0.25f + sx * 0.5f) / size;
-                        float ny = (y + 0.25f + sy * 0.5f) / size;   // 1 = top of the image
+                        float ny = (y + 0.25f + sy * 0.5f) / size;
 
                         float outerHalf = 0.5f * spread * (1f - ny);
                         bool outer = ny >= tailCut && Mathf.Abs(nx - 0.5f) <= outerHalf;

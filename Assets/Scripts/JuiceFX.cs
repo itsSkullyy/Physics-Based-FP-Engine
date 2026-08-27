@@ -2,15 +2,11 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
-// Central effects service, cel-shaded style.
-//
-// Everything is built at runtime with no assets to import:
-//  - particles are real 3D meshes (faceted low-poly spheres, anime shards), not sprites
-//  - two-tone cel shading is baked into per-facet UVs against a 2x1 palette texture,
-//    which gives a hard terminator with no custom shader
-//  - outlines are inverted hulls: a copy of the mesh with reversed winding, pushed out
-//    along its normals, rendered flat black behind the solid pass
-//  - nothing fades out, it shrinks out, because opaque materials cannot blend
+// Central effects service, cel-shaded style. Everything is built at runtime with no
+// assets to import: particles are real 3D meshes (faceted low-poly spheres, shards),
+// cel shading is baked into per-facet UVs against a 2x1 palette texture, outlines are
+// inverted hulls rendered flat black behind the solid pass, and nothing fades out -
+// opaque materials can't blend, so particles shrink out instead.
 public class JuiceFX : MonoBehaviour
 {
     public static JuiceFX Instance { get; private set; }
@@ -131,7 +127,7 @@ public class JuiceFX : MonoBehaviour
                         + normal * Random.Range(0.3f, 1.5f) * Mathf.Lerp(0.6f, 1.4f, strength);
             ep.startSize = Random.Range(0.16f, 0.44f) * Mathf.Lerp(0.7f, 1.6f, strength) * dustScale;
             ep.startLifetime = Random.Range(0.35f, 0.85f);
-            ep.rotation3D = Vector3.zero;          // keeps the cel terminator consistent
+            ep.rotation3D = Vector3.zero;
 
             EmitDust(ep);
         }
@@ -187,7 +183,6 @@ public class JuiceFX : MonoBehaviour
                 Random.Range(0.16f, 0.42f));
         }
 
-        // Big slow shards that hang for a beat - the anime impact star.
         int flash = Mathf.RoundToInt(flashShards * strength);
         for (int i = 0; i < flash; i++)
         {
@@ -257,8 +252,6 @@ public class JuiceFX : MonoBehaviour
 
     // ---------------------------------------------------------------- emitting
 
-    // Core and outline get byte-identical params, and every module is deterministic,
-    // so the hull tracks its sphere exactly for the whole lifetime.
     void EmitDust(ParticleSystem.EmitParams ep)
     {
         dustCores[Random.Range(0, dustCores.Length)].Emit(ep, 1);
@@ -273,8 +266,6 @@ public class JuiceFX : MonoBehaviour
         ep.startSize = size;
         ep.startLifetime = lifetime;
 
-        // Shards point the way they travel. Mesh particles do not billboard, so the
-        // orientation is set per particle at emit time.
         ep.rotation3D = velocity.sqrMagnitude > 0.001f
             ? Quaternion.LookRotation(velocity).eulerAngles
             : Random.rotation.eulerAngles;
@@ -339,7 +330,7 @@ public class JuiceFX : MonoBehaviour
         main.startRotation = 0f;
 
         var emission = ps.emission;
-        emission.enabled = false;      // everything is emitted manually
+        emission.enabled = false;
 
         var shape = ps.shape;
         shape.enabled = false;
@@ -349,8 +340,6 @@ public class JuiceFX : MonoBehaviour
         limit.dampen = dampen;
         limit.limit = new ParticleSystem.MinMaxCurve(50f);
 
-        // Opaque materials cannot fade, so particles scale out of existence instead.
-        // The curve is deterministic, which is what keeps outline and core locked together.
         var sizeOverLife = ps.sizeOverLifetime;
         sizeOverLife.enabled = true;
 
@@ -380,14 +369,14 @@ public class JuiceFX : MonoBehaviour
         renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
         renderer.receiveShadows = false;
 
-        ps.Play();   // must be playing for manual Emit to simulate
+        ps.Play();
         return ps;
     }
 
     // ---------------------------------------------------------------- materials
 
-    /// Flat two-tone material: a 2x1 point-filtered texture, shadow on the left,
-    /// lit on the right. Facet UVs pick a side, which gives a hard cel terminator.
+    /// Flat two-tone material: a 2x1 point-filtered texture, shadow on the left, lit
+    /// on the right. Facet UVs pick a side for the hard cel terminator.
     Material ToneMaterial(Color lit)
     {
         Color dark = new Color(lit.r * shadowStrength, lit.g * shadowStrength, lit.b * shadowStrength, 1f);
@@ -458,7 +447,7 @@ public class JuiceFX : MonoBehaviour
     // ---------------------------------------------------------------- meshes
 
     /// Faceted icosphere. Every triangle gets its own vertices so each facet reads as
-    /// one flat tone - that is what makes it look chunky and hand-drawn rather than smooth.
+    /// one flat tone instead of smooth-shaded.
     static Mesh MakeIcoSphere(int subdivisions, Vector3 light, float terminator)
     {
         float t = (1f + Mathf.Sqrt(5f)) * 0.5f;
@@ -545,8 +534,8 @@ public class JuiceFX : MonoBehaviour
         return BuildFacetedMesh("CelShard", tris, light, terminator);
     }
 
-    /// Assigns each facet a UV of either the shadow pixel or the lit pixel based on how
-    /// its face normal faces the baked light. No shader needed for the cel look.
+    /// Assigns each facet a UV of the shadow or lit pixel based on its face normal
+    /// against the baked light.
     static Mesh BuildFacetedMesh(string name, List<Vector3> tris, Vector3 light, float terminator)
     {
         Vector3[] verts = new Vector3[tris.Count];
@@ -580,9 +569,8 @@ public class JuiceFX : MonoBehaviour
         return mesh;
     }
 
-    /// Inverted hull: push every vertex out along its normal and flip the winding.
-    /// Normal back-face culling then shows only the inside of the shell, which reads
-    /// as an outline around the solid mesh. Works with any opaque shader.
+    /// Inverted hull: push every vertex out along its normal and flip the winding, so
+    /// back-face culling shows only the inside of the shell as an outline.
     static Mesh MakeHull(Mesh src, float expand)
     {
         Vector3[] verts = src.vertices;

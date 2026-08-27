@@ -2,12 +2,6 @@ using UnityEngine;
 
 // Held battle axe. Attach to an AxeHolder empty under CameraFX (same place GunSway went).
 // Put the actual axe model as a child and assign it to axeVisual.
-//
-// INPUT LAYOUT
-//   axeSwing (RT / LMB)  - tap to swing, HOLD to charge a throw, release to throw.
-//   axeThrow (LT / RMB)  - optional instant throw, kept as an alternate. Switch it off
-//                          with allowDedicatedThrowButton if you want that trigger freed.
-//   axePickup / axeRecall unchanged.
 [DefaultExecutionOrder(90)]
 public class BattleAxe : MonoBehaviour
 {
@@ -40,28 +34,20 @@ public class BattleAxe : MonoBehaviour
     public float windupTime = 0.06f;
     public float swingTime = 0.09f;
     public float recoverTime = 0.14f;
-    // Wide window on purpose: the swing is short enough that a frame spike could
-    // otherwise skip clean past a narrow one and eat the hit entirely.
     [Range(0f, 1f)] public float hitWindowStart = 0.05f;
     [Range(0f, 1f)] public float hitWindowEnd = 0.95f;
 
     [Header("Charge Throw")]
-    [Tooltip("Off = the old behaviour, where the swing fires straight off the press and " +
-             "throwing lives entirely on the dedicated throw button.")]
+    [Tooltip("Off = swing fires straight off the press, throw lives on the dedicated button.")]
     public bool enableChargeThrow = true;
-    [Tooltip("Hold the swing button longer than this and it becomes a throw charge " +
-             "instead of a swing. The windup pose plays immediately either way, so the " +
-             "axe still reacts on the same frame you press.")]
+    [Tooltip("Hold the swing button longer than this and it becomes a charge instead.")]
     public float holdToChargeTime = 0.16f;
-    [Tooltip("How long a full charge takes, measured from the moment charging begins.")]
     public float chargeTime = 0.55f;
-    [Tooltip("Release below this and you get a swing instead of a limp throw. 0 = always throw.")]
+    [Tooltip("Release below this and you get a swing instead. 0 = always throw.")]
     [Range(0f, 1f)] public float minChargeToThrow = 0f;
     public bool allowDedicatedThrowButton = true;
 
     [Header("Charge Power")]
-    [Tooltip("All three default to 0, so a charged throw flies exactly like the throw does " +
-             "today and the charge is pure telegraph. Raise them to make holding pay off.")]
     public float chargeSpeedBonus = 0f;
     public float chargeUpSpeedBonus = 0f;
     public float chargeSpinBonus = 0f;
@@ -102,24 +88,18 @@ public class BattleAxe : MonoBehaviour
     public float bounceUpSpeed = 8f;
     [Range(0f, 1f)] public float surfaceNormalInfluence = 0.5f;
     [Range(0f, 1f)] public float velocityKeep = 0.25f;
-    [Tooltip("How much of your fall speed comes back as bounce height. 1 = a full mirror - " +
-             "slam into the ground at 20 and you launch back up at 20 (plus bounceUpSpeed).")]
     [Range(0f, 1.5f)] public float fallToBounce = 1f;
     public float minBounceUp = 6f;
     public float maxBounceSpeed = 45f;
     public int maxAirBounces = 0;           // 0 = unlimited
     public bool bounceWhenGrounded = true;
-    [Tooltip("Bouncing while on the rope cuts it, otherwise the rope solver eats the impulse.")]
     public bool bounceReleasesGrapple = true;
 
     [Header("Glass Smash Boost")]
-    [Tooltip("When the hit shatters a BreakableWall, skip the normal mace bounce (which " +
-             "would throw you back away from the wall) and instead launch you forward " +
-             "through the opening you just made, with extra height.")]
+    [Tooltip("Skips the normal bounce on a broken BreakableWall and launches you through the gap instead.")]
     public bool smashOnBreakableWall = true;
     public float smashForwardSpeed = 20f;
     public float smashUpSpeed = 10f;
-    [Tooltip("Fraction of your existing velocity kept before the smash boost is added on top.")]
     [Range(0f, 1f)] public float smashVelocityKeep = 0.35f;
     public float maxSmashSpeed = 45f;
 
@@ -127,15 +107,14 @@ public class BattleAxe : MonoBehaviour
     public float throwSpeed = 42f;
     public float throwUpSpeed = 2f;
     [Range(0f, 1f)] public float inheritPlayerVelocity = 0.5f;
-    public float throwSpinSpeed = 2160f;     // degrees per second, 6 rotations a second
+    public float throwSpinSpeed = 2160f;     // degrees per second
     public float throwSpawnForward = 0.6f;
     public float throwCooldown = 0.15f;
 
     [Header("Thrown Axe Runtime Setup")]
-    [Tooltip("Only used when thrownAxePrefab is empty and the axe is built from axeVisual.")]
     public LayerMask thrownStickMask = ~0;
     public bool stickToTriggers = false;
-    public float thrownScaleMultiplier = 1f;   // viewmodels are often smaller than world scale
+    public float thrownScaleMultiplier = 1f;
     public float thrownGravityScale = 0.85f;
     public float headSweepRadius = 0.08f;
     public float stickDepth = 0.12f;
@@ -146,8 +125,6 @@ public class BattleAxe : MonoBehaviour
     public Vector3 stickEulerOffset = Vector3.zero;
 
     [Header("Thrown Axe Sweep Budget")]
-    [Tooltip("Shorter steps and more substeps keep the swept arc continuous at high " +
-             "throw speeds. Raise the substep count if you push throwSpeed higher.")]
     public float thrownMaxStepDistance = 0.22f;
     public int thrownMaxSubSteps = 14;
 
@@ -159,38 +136,28 @@ public class BattleAxe : MonoBehaviour
     public float grappleDetachRadius = 3f;
 
     [Header("Recall")]
-    [Tooltip("Once the stuck axe's cooldown is up, the pickup button flies it back to you " +
-             "Mjolnir-style instead of needing you to walk over. Contact catches it.")]
     public bool recallOnPickupButton = true;
-    [Tooltip("Local point on the player the axe homes to. Roughly chest height reads best.")]
     public Vector3 recallAimLocalOffset = new Vector3(0f, 1.1f, 0f);
-    [Tooltip("How close the flying axe must get to be caught, added to its own setting.")]
     public float recallCatchRadius = 0.7f;
-    
+
     [Header("Zip Pull")]
-    [Tooltip("Aim at a loose axe and hit the zip/pull button to fly it back to you.")]
     public bool zipPullsLooseAxe = true;
-    [Tooltip("Half-angle of the aim cone, in degrees.")]
     public float zipAimAngle = 14f;
     public float zipPullRange = 60f;
-    [Tooltip("The zip is its own deliberate action, so it does not wait on the embed cooldown.")]
     public bool zipIgnoresRecallCooldown = true;
 
     [Header("Auto Pickup")]
     public bool autoPickupOnContact = true;
     public float autoPickupRadius = 1.1f;
-    [Tooltip("Off = you also collect an axe stuck in a wall by brushing past it.")]
     public bool autoPickupOnlyWhenLoose = true;
 
     [Header("Cooldown Ring UI")]
     public bool showCooldownRing = true;
-    [Tooltip("On-screen diameter of the BOTW-style ring, in pixels.")]
     public float ringSize = 54f;
     public float ringThickness = 6f;
     public Color ringBackColor = new Color(0f, 0f, 0f, 0.5f);
     public Color ringFillColor = new Color(0.5f, 0.85f, 1f, 0.95f);
     public Color ringReadyColor = new Color(0.4f, 1f, 0.6f, 1f);
-    [Tooltip("Ring pulses once it is ready to recall.")]
     public float ringReadyPulseSpeed = 6f;
 
     [Header("Debug")]
@@ -215,9 +182,6 @@ public class BattleAxe : MonoBehaviour
     float bobTimer;
     float punch;
 
-    // Captured whenever one state hands over to the next, so the pose carries on from
-    // wherever it actually got to instead of snapping to where it "should" be. That
-    // matters now that a windup can be cut short at any point by an early release.
     Vector3 poseFromPos;
     Quaternion poseFromRot = Quaternion.identity;
 
@@ -230,14 +194,13 @@ public class BattleAxe : MonoBehaviour
     Renderer[] visualRenderers;
     static Texture2D whiteTex;
 
-    // Juice hooks. PlayerJuice listens to these; hang your own VFX or audio here too.
     public event System.Action AxeThrown;
     public event System.Action AxeSwingStarted;
     public event System.Action<Vector3, Vector3, bool> AxeHit;   // point, normal, bounced
     public event System.Action AxeChargeStarted;
     public event System.Action AxeChargeFull;
     public event System.Action<float> AxeChargeReleased;         // 0..1 charge at release
-    public event System.Action AxeReturned;                      // back in hand, however it got there
+    public event System.Action AxeReturned;
 
     public bool IsSwinging => state == State.Windup || state == State.Swing;
     public bool IsCharging => state == State.Charging;
@@ -278,7 +241,7 @@ public class BattleAxe : MonoBehaviour
         idlePos = basePos;
         idleRot = baseRot;
     }
-    
+
     public void SetEquipped(bool value)
     {
         if (equipped == value) return;
@@ -286,8 +249,6 @@ public class BattleAxe : MonoBehaviour
 
         if (!equipped)
         {
-            // Cancel a swing or a charge in progress. A thrown axe is left alone - it is
-            // out in the world and that does not change just because you swapped slots.
             if (state != State.Thrown)
             {
                 state = State.Idle;
@@ -327,7 +288,6 @@ public class BattleAxe : MonoBehaviour
     {
         if (input == null) return;
 
-        // Pickup and recall sit outside the slot gate on purpose: G always works.
         if (state == State.Thrown)
         {
             HandleThrownAxe();
@@ -356,8 +316,6 @@ public class BattleAxe : MonoBehaviour
             ThrowAxe(0f);
     }
 
-    // Released early means a swing, held past the threshold means a charge. Release is
-    // tested first so a fast tap can never be misread as the start of a hold.
     void UpdateWindupIntent()
     {
         if (!enableChargeThrow) return;
@@ -376,8 +334,6 @@ public class BattleAxe : MonoBehaviour
     {
         if (input.axeSwing.Held) return;
 
-        // A charge abandoned almost immediately reads as a fumbled swing, so hand them
-        // the swing rather than a throw with nothing behind it.
         if (charge01 < minChargeToThrow)
         {
             BeginSwing();
@@ -387,9 +343,6 @@ public class BattleAxe : MonoBehaviour
         ThrowAxe(charge01);
     }
 
-    // Grappling is deliberately NOT blocking here - you can swing and throw mid-rope.
-    // Vaulting is, because the body is kinematic during a vault and any velocity
-    // change would be thrown away.
     bool CanAct()
     {
         return cooldownTimer <= 0f && !controller.IsVaulting;
@@ -460,8 +413,6 @@ public class BattleAxe : MonoBehaviour
                 swingPos = Vector3.Lerp(poseFromPos, windupOffset, e);
                 swingRot = Quaternion.Slerp(poseFromRot, windQ, e);
 
-                // With charging on, the windup holds at full pull-back and waits on the
-                // button. With it off, the timer drives the swing exactly like before.
                 if (!enableChargeThrow && t >= 1f)
                     BeginSwing();
                 break;
@@ -474,7 +425,6 @@ public class BattleAxe : MonoBehaviour
                 swingPos = Vector3.Lerp(poseFromPos, chargeOffset, e);
                 swingRot = Quaternion.Slerp(poseFromRot, Quaternion.Euler(chargeEuler), e);
 
-                // Tremble builds with the charge, so the release is telegraphed.
                 float tremble = chargeShakeAmount * charge01;
                 float ct = Time.time * chargeShakeFrequency;
                 swingPos += new Vector3(Mathf.Sin(ct) * tremble,
@@ -553,8 +503,7 @@ public class BattleAxe : MonoBehaviour
         Vector3 normal = best.normal.sqrMagnitude > 0.001f ? best.normal : -dir;
         Vector3 point = best.point.sqrMagnitude > 0.0001f ? best.point : origin + dir * swingRadius;
 
-        // Captured before OnAxeHit fires - a shattering wall deactivates itself as part of
-        // that call, and GetComponentInParent on an already-inactive object is not reliable.
+        // Captured before OnAxeHit fires - a shattering wall deactivates itself in that call.
         BreakableWall brokenWall = best.collider.GetComponentInParent<BreakableWall>();
 
         OnAxeHit(best.collider, point, normal);
@@ -568,7 +517,6 @@ public class BattleAxe : MonoBehaviour
         AxeHit?.Invoke(point, normal, bounced);
     }
 
-    // Hook for damage / impact VFX. Extend freely.
     protected virtual void OnAxeHit(Collider hitCollider, Vector3 point, Vector3 normal)
     {
         hitCollider.SendMessageUpwards("OnAxeHit", point, SendMessageOptions.DontRequireReceiver);
@@ -585,7 +533,6 @@ public class BattleAxe : MonoBehaviour
             airBounces++;
         }
 
-        // A rope or a zip would overwrite the bounce next physics step, so cut them first.
         if (grappling != null && bounceReleasesGrapple)
         {
             if (grappling.IsZipping) grappling.StopZip();
@@ -613,10 +560,6 @@ public class BattleAxe : MonoBehaviour
         return true;
     }
 
-    // Punching through a glass wall shouldn't bounce you back off it like a solid surface
-    // would - it should carry you through. Keeps a slice of your existing velocity (so a
-    // running smash still feels faster than a standing one) and adds a flat forward-and-up
-    // boost along the swing direction, i.e. straight through the hole you just made.
     bool ApplySmashBoost(Vector3 aimDir)
     {
         if (playerBody == null) return false;
@@ -705,16 +648,11 @@ public class BattleAxe : MonoBehaviour
         go.SetActive(true);
         go.transform.localScale = axeVisual.lossyScale * thrownScaleMultiplier;
 
-        // If axeVisual is the holder itself, the clone carries copies of BattleAxe and
-        // friends. Those would fight over input and state, so nothing but the model
-        // survives the trip.
         StripClone(go);
 
         ThrownAxe axe = go.GetComponent<ThrownAxe>();
         if (axe == null) axe = go.AddComponent<ThrownAxe>();
 
-        // A collider is only needed once it sticks, as a grapple target - the flight
-        // path is resolved by ThrownAxe's own sweep, not by physics collisions.
         if (go.GetComponentInChildren<Collider>() == null)
             AddFittedCollider(go);
 
@@ -729,13 +667,9 @@ public class BattleAxe : MonoBehaviour
         axe.grappleRadius = grappleRadius;
         axe.stickEulerOffset = stickEulerOffset;
 
-        // Calibrated against the speed THIS throw actually used rather than the base
-        // value, so a charged throw cannot double-scale the spin or peg the shake.
         axe.spinReferenceSpeed = launchSpeed;
         axe.impactReferenceSpeed = launchSpeed;
 
-        // At high speed a single physics step covers a lot of ground, so the swept
-        // chain needs more, shorter segments to stay continuous around the spin arc.
         axe.maxStepDistance = thrownMaxStepDistance;
         axe.maxSubSteps = thrownMaxSubSteps;
 
@@ -788,12 +722,9 @@ public class BattleAxe : MonoBehaviour
             return;
         }
 
-        // While the axe is flying back to us there is nothing to do but wait for its
-        // caught callback, which runs CollectAxe. Ignore other input until it lands.
         if (activeAxe.IsRecalling)
             return;
 
-        // Walk into it and it comes back on its own - no button.
         if (autoPickupOnContact && (!autoPickupOnlyWhenLoose || activeAxe.IsLoose))
         {
             if (Vector3.Distance(PlayerCatchPoint(), activeAxe.HeadPosition) <= autoPickupRadius)
@@ -803,7 +734,6 @@ public class BattleAxe : MonoBehaviour
             }
         }
 
-        // Zip aimed at a loose axe hauls the AXE in, rather than hauling the player out to it.
         if (zipPullsLooseAxe && activeAxe.IsLoose && input.grapplePull.Pressed && AimedAtLooseAxe())
         {
             if (zipIgnoresRecallCooldown) activeAxe.ForceRecallReady();
@@ -815,15 +745,12 @@ public class BattleAxe : MonoBehaviour
         bool stuckOk = !requireStuckToPickup || activeAxe.IsStuck;
         inPickupRange = stuckOk && dist <= pickupDistance;
 
-        // Standing right next to it: collect instantly, no need to fly it back.
         if (inPickupRange && input.axePickup.Pressed)
         {
             CollectAxe();
             return;
         }
 
-        // Pickup button at range, cooldown elapsed: launch the Mjolnir recall. The axe
-        // homes to us and CollectAxe fires the moment it reaches the hand (see below).
         if (recallOnPickupButton && input.axePickup.Pressed && activeAxe.RecallReady)
         {
             StartRecall();
@@ -835,7 +762,6 @@ public class BattleAxe : MonoBehaviour
                       "Distance " + dist.ToString("0.00") + " / " + pickupDistance +
                       ", cooldown " + activeAxe.RecallCooldownProgress.ToString("0.00"), this);
 
-        // Dedicated recall button: same gate, also flies it back rather than teleporting.
         if (allowRemoteRecall && input.axeRecall.Pressed)
         {
             if (activeAxe.RecallReady)
@@ -849,7 +775,6 @@ public class BattleAxe : MonoBehaviour
     {
         if (activeAxe == null) return;
 
-        // Aim at a point on the player, not their feet, so it flies to the hand.
         Transform aimT = controller.transform;
         System.Func<Vector3> aimPoint = () =>
             aimT.position + aimT.TransformVector(recallAimLocalOffset);
@@ -859,7 +784,6 @@ public class BattleAxe : MonoBehaviour
         if (logDebug) Debug.Log("[BattleAxe] Axe recalled - flying back.", this);
     }
 
-    // Fired by ThrownAxe when the flying axe reaches us.
     void OnRecallCaught()
     {
         CollectAxe();
@@ -897,9 +821,6 @@ public class BattleAxe : MonoBehaviour
         if (logDebug) Debug.Log("[BattleAxe] Axe back in hand.", this);
     }
 
-    // Hides the model by switching renderers off rather than deactivating the object.
-    // Deactivating would kill this component's Update if axeVisual happens to be the
-    // same GameObject BattleAxe lives on, and then nothing could ever pick it back up.
     void SetAxeVisible(bool visible)
     {
         if (axeVisual == null) return;
@@ -912,14 +833,12 @@ public class BattleAxe : MonoBehaviour
             foreach (Renderer r in visualRenderers)
                 if (r != null) r.enabled = visible;
 
-            // Recover from a scene saved while the object was switched off.
             if (visible && axeVisual != transform && !axeVisual.gameObject.activeSelf)
                 axeVisual.gameObject.SetActive(true);
 
             return;
         }
 
-        // No renderers at all - fall back to SetActive, but never on ourselves.
         if (axeVisual != transform)
             axeVisual.gameObject.SetActive(visible);
     }
@@ -987,8 +906,6 @@ public class BattleAxe : MonoBehaviour
             "[" + label + "] Pick up axe", style);
     }
 
-    // BOTW-style radial cooldown over the stuck axe. Fills clockwise as the cooldown runs,
-    // then switches to a solid ready colour and pulses. Hidden once it flies back.
     void DrawCooldownRing()
     {
         if (!showCooldownRing || state != State.Thrown) return;
@@ -999,7 +916,7 @@ public class BattleAxe : MonoBehaviour
         if (cam == null) return;
 
         Vector3 sp = cam.WorldToScreenPoint(activeAxe.HeadPosition);
-        if (sp.z <= 0f) return;   // behind us
+        if (sp.z <= 0f) return;
 
         Vector2 center = new Vector2(sp.x, Screen.height - sp.y);
         float progress = activeAxe.RecallCooldownProgress;
@@ -1014,11 +931,9 @@ public class BattleAxe : MonoBehaviour
         Color old = GUI.color;
         Rect rect = new Rect(center.x - size * 0.5f, center.y - size * 0.5f, size, size);
 
-        // Back ring (full, dim).
         GUI.color = ringBackColor;
         GUI.DrawTexture(rect, ringBackTex, ScaleMode.StretchToFill, true);
 
-        // Fill: when ready, a full solid ring; otherwise a radial wedge up to progress.
         GUI.color = ready ? ringReadyColor : ringFillColor;
         if (ready)
         {
@@ -1032,8 +947,6 @@ public class BattleAxe : MonoBehaviour
         GUI.color = old;
     }
 
-    // Radial wedge drawn by clipping the full ring into angular slices. Cheap and needs no
-    // per-frame texture work - just GUI clip rects rotated around the centre.
     void DrawRadialFill(Rect rect, float progress)
     {
         const int slices = 48;
@@ -1041,8 +954,6 @@ public class BattleAxe : MonoBehaviour
         Vector2 pivot = rect.center;
         Matrix4x4 baseMatrix = GUI.matrix;
 
-        // Each slice is a thin pie wedge approximated by a rotated half-width strip of the
-        // ring texture. Drawing only the lit count gives the clockwise fill.
         for (int i = 0; i < lit; i++)
         {
             float ang = (i / (float)slices) * 360f;
@@ -1083,7 +994,6 @@ public class BattleAxe : MonoBehaviour
                 float dx = x - c + 0.5f;
                 float dy = y - c + 0.5f;
                 float d = Mathf.Sqrt(dx * dx + dy * dy);
-                // Anti-aliased annulus: 1 inside the band, feathered at both edges.
                 float a = Mathf.Clamp01(outer - d) * Mathf.Clamp01(d - inner);
                 a = Mathf.Clamp01(a);
                 full[y * res + x] = new Color(1f, 1f, 1f, a);
@@ -1124,7 +1034,7 @@ public class BattleAxe : MonoBehaviour
 
         GUI.color = old;
     }
-    
+
     Vector3 PlayerCatchPoint()
     {
         Transform t = controller.transform;
@@ -1149,4 +1059,4 @@ public class BattleAxe : MonoBehaviour
         Gizmos.DrawWireSphere(origin, swingRadius);
         Gizmos.DrawWireSphere(origin + aimTransform.forward * swingRange, swingRadius);
     }
-}   
+}
