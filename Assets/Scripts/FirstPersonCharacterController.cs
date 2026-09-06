@@ -209,6 +209,29 @@ public class FirstPersonCharacterController : MonoBehaviour
     /// (the mace's bounce-on-hit), so the launch doesn't ride the low-jump gravity curve.
     public void SuppressJumpHold() => ignoreJumpHold = true;
 
+    /// Raised right after TeleportTo repositions the rigidbody, with the world-space
+    /// position delta that was just applied. FirstPersonCameraRig listens for this to warn
+    /// Cinemachine the move was a teleport, not organic motion - without it the brain
+    /// smoothly flies the camera across the intervening space instead of snapping.
+    public event System.Action<Vector3> Teleported;
+
+    /// Called by Portal when the player crosses through. Repositions the rigidbody
+    /// directly (safe for an interpolated body, unlike writing transform.position) and
+    /// keeps the private yaw in sync, since HandleLook() overwrites cameraTransform's
+    /// rotation from yaw/pitch every frame regardless of what the transform is doing.
+    public void TeleportTo(Vector3 worldPosition, Quaternion worldRotation, Vector3 worldVelocity)
+    {
+        Vector3 delta = worldPosition - rb.position;
+
+        rb.position = worldPosition;
+        rb.linearVelocity = worldVelocity;
+        yaw = worldRotation.eulerAngles.y;
+        if (characterVisual != null)
+            characterVisual.rotation = Quaternion.Euler(0f, yaw, 0f);
+
+        Teleported?.Invoke(delta);
+    }
+
     public bool DartWindowOpen => dartTimer > 0f;
     public bool IsDarting => dartFlashTimer > 0f;
     public int DartChain => dartChain;

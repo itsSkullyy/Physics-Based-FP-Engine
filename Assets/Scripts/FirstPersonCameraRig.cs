@@ -45,6 +45,25 @@ public class FirstPersonCameraRig : MonoBehaviour
     float lastFallSpeed;
     Vector3 baseLocalPos;
 
+    void OnEnable()
+    {
+        if (controller != null) controller.Teleported += OnPlayerTeleported;
+    }
+
+    void OnDisable()
+    {
+        if (controller != null) controller.Teleported -= OnPlayerTeleported;
+    }
+
+    // Cinemachine has no way to know a position change was a teleport rather than organic
+    // motion, so left alone it smoothly flies the camera across the gap instead of
+    // snapping. This tells it to update its internal state immediately instead.
+    void OnPlayerTeleported(Vector3 positionDelta)
+    {
+        if (cineCam != null)
+            cineCam.OnTargetObjectWarped(transform, positionDelta);
+    }
+
     void Start()
     {
         baseLocalPos = transform.localPosition;
