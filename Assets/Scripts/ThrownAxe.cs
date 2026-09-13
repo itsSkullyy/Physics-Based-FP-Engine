@@ -91,6 +91,7 @@ public class ThrownAxe : MonoBehaviour
     public float recallNoProgressTimeout = 1.75f;
 
     Rigidbody rb;
+    Matrix4x4 portalTravel = Matrix4x4.identity;
     Collider[] ownColliders;
     Collider[] ignored;
     TrailRenderer trail;
@@ -155,6 +156,7 @@ public class ThrownAxe : MonoBehaviour
         spinSpeed = spinDegreesPerSecond;
         ignored = ignoreColliders;
         age = 0f;
+        portalTravel = Matrix4x4.identity;
 
         ownColliders = GetComponentsInChildren<Collider>(true);
 
@@ -235,6 +237,24 @@ public class ThrownAxe : MonoBehaviour
             // there from being a gap between steps.
             Vector3 nextHead = nextPos + HeadWorldOffset(nextRot);
 
+            // Tested before the stick sweeps, or the axe hits whatever sits behind the
+            // portal in THIS scene instead of carrying on into the linked one. The axe
+            // flies with its colliders disabled, so the portal's trigger never sees it -
+            // it has to test the crossing itself.
+            //
+            // The head's path is checked first because the head leads the pivot and is
+            // what the stick sweeps below actually use: waiting for the pivot to reach the
+            // plane lets the head cross it and bury itself on the far side first.
+            Portal crossed = Portal.FindSegmentCrossing(lastHeadPos, nextHead, out Matrix4x4 portalMatrix);
+            if (crossed == null)
+                crossed = Portal.FindSegmentCrossing(pos, nextPos, out portalMatrix);
+
+            if (crossed != null)
+            {
+                CarryThroughPortal(portalMatrix, nextPos, nextRot);
+                return;
+            }
+
             if (SweepSegment(lastHeadPos, nextHead, sweepRadius,
                     out RaycastHit headHit, out Vector3 headDir))
             {
@@ -260,6 +280,38 @@ public class ThrownAxe : MonoBehaviour
 
         rb.MovePosition(pos);
         rb.MoveRotation(rot);
+    }
+
+    // Continues the throw on the far side of a portal. Everything the flight path is
+    // built from has to move across together: where it is, how it's turned, where it's
+    // going, the axis it spins about, and the head position the next sweep chains from -
+    // a stale head position would sweep a line across the whole world and stick the axe
+    // into the first thing that line clipped.
+    void CarryThroughPortal(Matrix4x4 portalMatrix, Vector3 crossingPos, Quaternion currentRot)
+    {
+        Vector3 exitPos = portalMatrix.MultiplyPoint3x4(crossingPos);
+        Quaternion exitRot = portalMatrix.rotation * currentRot;
+
+        velocity = portalMatrix.rotation * velocity;
+        spinAxis = portalMatrix.rotation * spinAxis;
+
+        // Running total of every portal the axe has been through, so a recall can work out
+        // where the player is relative to whichever space it currently occupies. Coming
+        // back out the way it went in cancels this back to identity.
+        portalTravel = portalMatrix * portalTravel;
+
+        // The no-progress watchdog measures distance to a target that just jumped; without
+        // this it would count the jump as "no headway" and give up mid-flight.
+        recallBestDist = float.MaxValue;
+        recallStuckTimer = 0f;
+
+        // Assigned rather than MovePosition'd: this is a teleport, and interpolating it
+        // would smear the axe across the gap between the two scenes for a frame.
+        rb.position = exitPos;
+        rb.rotation = exitRot;
+        transform.SetPositionAndRotation(exitPos, exitRot);
+
+        lastHeadPos = exitPos + HeadWorldOffset(exitRot);
     }
 
     void Update()
@@ -338,7 +390,12 @@ public class ThrownAxe : MonoBehaviour
             return;
         }
 
-        Vector3 aim = RecallAimPoint();
+        // If the axe went through a portal, the player is in a space it can't fly to
+        // directly - aiming at their real position would send it across the world. Mapping
+        // them through the same transform the axe travelled gives the point the player
+        // WOULD be at on this side, which sits through the portal, so the flight home is
+        // naturally steered back at the opening.
+        Vector3 aim = portalTravel.MultiplyPoint3x4(RecallAimPoint());
         Vector3 head = HeadPosition;
         Vector3 toTarget = aim - head;
         float dist = toTarget.magnitude;
@@ -401,6 +458,15 @@ public class ThrownAxe : MonoBehaviour
         // Iterated a couple of times so an inside corner is handled in one frame.
         Vector3 pos = rb.position;
         Vector3 remaining = velocity * dt;
+
+        // Flying home through the opening it came out of. Handled before the obstacle
+        // sweep for the same reason as on the way out - otherwise it collides with the
+        // room behind the portal instead of passing through.
+        if (Portal.FindSegmentCrossing(pos, pos + remaining, out Matrix4x4 returnMatrix) != null)
+        {
+            CarryThroughPortal(returnMatrix, pos + remaining, rb.rotation);
+            return;
+        }
 
         for (int iter = 0; iter < 3 && remaining.sqrMagnitude > 1e-8f; iter++)
         {
@@ -502,6 +568,10 @@ public class ThrownAxe : MonoBehaviour
         {
             if (h.collider == null) continue;
             if (IsSelf(h.collider) || IsIgnored(h.collider)) continue;
+            // A portal's trigger volume is a doorway, not a surface. It reaches out well
+            // in front of the opening, so without this the axe embeds itself in mid-air
+            // short of the portal instead of flying through it.
+            if (h.collider.GetComponentInParent<Portal>() != null) continue;
             if (h.distance >= bestDist) continue;
 
             best = h;

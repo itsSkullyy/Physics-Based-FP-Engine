@@ -330,46 +330,22 @@ public class Grappling : MonoBehaviour
 
         Transform camT = controller.cameraTransform;
 
-        QueryTriggerInteraction qti = allowTriggerGrapples
-            ? QueryTriggerInteraction.Collide
-            : QueryTriggerInteraction.Ignore;
-
-        Collider[] candidates = Physics.OverlapSphere(camT.position, maxGrappleDistance, grappleMask, qti);
-
         float bestScore = float.MaxValue;
         Collider bestCollider = null;
 
-        foreach (Collider c in candidates)
+        GatherTargets(camT.position, camT.forward, Matrix4x4.identity, ref bestScore, ref bestCollider);
+
+        // Aim assist has to reach through a portal as well. Its search is a sphere around
+        // the player in world space, and the linked scene is streamed in thousands of
+        // units away - so a small target like a thrown axe that went through simply isn't
+        // a candidate, and grappling it would need pixel-perfect aim with no assist at all.
+        // Searching again around where the player's eye maps to covers the far side.
+        Vector3 farEnd = camT.position + camT.forward * maxGrappleDistance;
+        if (Portal.FindSegmentCrossing(camT.position, farEnd, out Matrix4x4 portalMatrix) != null)
         {
-            if (c.attachedRigidbody == rb) continue;
-            if (!string.IsNullOrEmpty(grappleTag) && !c.CompareTag(grappleTag)) continue;
-
-            Vector3 nearest = c.bounds.ClosestPoint(camT.position);
-            Vector3 toNearest = nearest - camT.position;
-            float nearDist = toNearest.magnitude;
-            if (nearDist < minTargetDistance || nearDist > maxGrappleDistance) continue;
-
-            float angle = Vector3.Angle(camT.forward, toNearest);
-            if (angle > aimAssistAngle) continue;
-
-            Vector3 point = GrapplePointFor(c, camT.position);
-            Vector3 toPoint = point - camT.position;
-            float pointDist = toPoint.magnitude;
-            if (pointDist < 0.05f) continue;
-
-            if (IsBlocked(camT.position, toPoint / pointDist, pointDist, c)) continue;
-
-            float score = (angle / aimAssistAngle) * angleWeight +
-                          (nearDist / maxGrappleDistance) * distanceWeight;
-
-            if (score < bestScore)
-            {
-                bestScore = score;
-                hasTarget = true;
-                bestCollider = c;
-                targetPoint = point;
-                targetDisplayPoint = point;
-            }
+            GatherTargets(portalMatrix.MultiplyPoint3x4(camT.position),
+                          portalMatrix.MultiplyVector(camT.forward),
+                          portalMatrix.inverse, ref bestScore, ref bestCollider);
         }
 
         if (hasTarget && bestCollider != lockTarget)
@@ -380,6 +356,54 @@ public class Grappling : MonoBehaviour
         else if (!hasTarget)
         {
             lockTarget = null;
+        }
+    }
+
+    // Scores every grappleable collider around searchOrigin and keeps the best.
+    // toViewerSpace maps a found point back into the space the player is actually
+    // standing in - identity for targets on this side, the portal's inverse for ones
+    // seen through an opening. Angles and distances are scored in the search space,
+    // which a portal transform preserves, so both sides rank against each other fairly.
+    void GatherTargets(Vector3 searchOrigin, Vector3 searchForward, Matrix4x4 toViewerSpace,
+                       ref float bestScore, ref Collider bestCollider)
+    {
+        QueryTriggerInteraction qti = allowTriggerGrapples
+            ? QueryTriggerInteraction.Collide
+            : QueryTriggerInteraction.Ignore;
+
+        Collider[] candidates = Physics.OverlapSphere(searchOrigin, maxGrappleDistance, grappleMask, qti);
+
+        foreach (Collider c in candidates)
+        {
+            if (c.attachedRigidbody == rb) continue;
+            if (c.GetComponentInParent<Portal>() != null) continue;
+            if (!string.IsNullOrEmpty(grappleTag) && !c.CompareTag(grappleTag)) continue;
+
+            Vector3 nearest = c.bounds.ClosestPoint(searchOrigin);
+            Vector3 toNearest = nearest - searchOrigin;
+            float nearDist = toNearest.magnitude;
+            if (nearDist < minTargetDistance || nearDist > maxGrappleDistance) continue;
+
+            float angle = Vector3.Angle(searchForward, toNearest);
+            if (angle > aimAssistAngle) continue;
+
+            Vector3 point = GrapplePointFor(c, searchOrigin);
+            Vector3 toPoint = point - searchOrigin;
+            float pointDist = toPoint.magnitude;
+            if (pointDist < 0.05f) continue;
+
+            if (IsBlocked(searchOrigin, toPoint / pointDist, pointDist, c)) continue;
+
+            float score = (angle / aimAssistAngle) * angleWeight +
+                          (nearDist / maxGrappleDistance) * distanceWeight;
+
+            if (score >= bestScore) continue;
+
+            bestScore = score;
+            hasTarget = true;
+            bestCollider = c;
+            targetPoint = toViewerSpace.MultiplyPoint3x4(point);
+            targetDisplayPoint = targetPoint;
         }
     }
 
@@ -452,30 +476,94 @@ public class Grappling : MonoBehaviour
             return true;
         }
 
+        Ray ray = new Ray(camT.position, camT.forward);
+        Vector3 farEnd = ray.origin + ray.direction * maxGrappleDistance;
+
+        // If the aim ray leaves through a portal, the reachable world carries on past it.
+        // Scan up to the opening first - something on this side still wins, and anything
+        // solid there blocks the shot entirely - then continue the ray into the linked
+        // scene from the matching point on the far side.
+        Portal portal = Portal.FindSegmentCrossing(ray.origin, farEnd, out Matrix4x4 portalMatrix);
+        float distanceToPortal = maxGrappleDistance;
+
+        if (portal != null && portal.TryGetSegmentCrossing(ray.origin, farEnd, out float crossing))
+            distanceToPortal = crossing * maxGrappleDistance;
+        else
+            portal = null;
+
+        if (ScanForGrapplePoint(ray, distanceToPortal, out point, out hitCollider, out bool blocked))
+            return true;
+
+        if (portal == null || blocked) return false;
+
+        Ray farRay = new Ray(
+            portalMatrix.MultiplyPoint3x4(ray.origin + ray.direction * distanceToPortal),
+            portalMatrix.MultiplyVector(ray.direction));
+
+        if (!ScanForGrapplePoint(farRay, maxGrappleDistance - distanceToPortal,
+                out Vector3 farPoint, out hitCollider, out _))
+            return false;
+
+        // Mapped back onto this side of the portal. A portal shows the linked scene as if
+        // it were sitting there, so this virtual point is exactly where the player SEES
+        // the target through the opening - which is what the rope should pull toward
+        // while they're still on this side. When they cross, Portal.TryTeleport runs the
+        // same matrix over the anchor and it becomes the real point.
+        point = portalMatrix.inverse.MultiplyPoint3x4(farPoint);
+        return true;
+    }
+
+    bool ScanForGrapplePoint(Ray ray, float maxDistance, out Vector3 point,
+                             out Collider hitCollider, out bool blocked)
+    {
+        point = default;
+        hitCollider = null;
+        blocked = false;
+
+        if (maxDistance <= 0f) return false;
+
         QueryTriggerInteraction qti = allowTriggerGrapples
             ? QueryTriggerInteraction.Collide
             : QueryTriggerInteraction.Ignore;
 
-        Ray ray = new Ray(camT.position, camT.forward);
-        RaycastHit[] hits = Physics.RaycastAll(ray, maxGrappleDistance, grappleMask, qti);
+        RaycastHit[] hits = Physics.RaycastAll(ray, maxDistance, grappleMask, qti);
         System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
 
         foreach (RaycastHit h in hits)
         {
+            // A portal's own trigger volume is a doorway, never a thing to hook onto -
+            // and it must not count as blocking either, or you could never grapple
+            // through one.
+            if (h.collider.GetComponentInParent<Portal>() != null) continue;
+
             bool tagOk = string.IsNullOrEmpty(grappleTag) || h.collider.CompareTag(grappleTag);
 
             if (tagOk)
             {
-                point = GrapplePointFor(h.collider, camT.position);
+                point = GrapplePointFor(h.collider, ray.origin);
                 hitCollider = h.collider;
                 return true;
             }
 
             if (!h.collider.isTrigger)
+            {
+                blocked = true;
                 return false;
+            }
         }
 
         return false;
+    }
+
+    /// Called by Portal when the player travels through, so anything the rope is holding
+    /// in world space comes across with them instead of yanking them back at the seam.
+    public void ApplyPortalTransform(Matrix4x4 portalMatrix)
+    {
+        anchor = portalMatrix.MultiplyPoint3x4(anchor);
+        zipPoint = portalMatrix.MultiplyPoint3x4(zipPoint);
+        targetPoint = portalMatrix.MultiplyPoint3x4(targetPoint);
+        targetDisplayPoint = portalMatrix.MultiplyPoint3x4(targetDisplayPoint);
+        currentRopeEnd = portalMatrix.MultiplyPoint3x4(currentRopeEnd);
     }
 
     static float RadiusOf(Collider c)

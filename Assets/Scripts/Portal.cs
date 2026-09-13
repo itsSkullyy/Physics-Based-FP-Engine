@@ -1,5 +1,7 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Rendering;
+using UnityEngine.Rendering.Universal;
 
 // A seamless, cross-scene portal (walk/run/dart through it at full speed, no loading
 // screen - the linked scene streams in ahead of time). Put this on the Portal prefab's
@@ -32,15 +34,26 @@ public class Portal : MonoBehaviour
     [Tooltip("Depth of the crossing trigger volume, centered on the surface.")]
     public float triggerDepth = 1.5f;
 
+    [Header("Frame")]
+    [Tooltip("Width of the recessed lip around the opening, sticking outward from portalSize. Gives the portal real edge thickness so it reads as a physical opening rather than a flat card at a grazing angle - the single biggest cue a plain flat quad is missing.")]
+    public float frameWidth = 0.12f;
+    [Tooltip("Depth of the lip along the portal's own forward axis, split evenly in front of and behind the surface plane so the cue reads from either approach direction.")]
+    public float frameDepth = 0.18f;
+    public Color frameColor = new Color(0.05f, 0.05f, 0.05f);
+
     [Header("References")]
     public Transform surfaceTransform;
     public MeshRenderer surfaceRenderer;
     public Camera portalCamera;
+    public Transform frameTop;
+    public Transform frameBottom;
+    public Transform frameLeft;
+    public Transform frameRight;
 
     [Header("Rendering")]
     [Range(0.25f, 1f)] public float resolutionScale = 1f;
-    [Tooltip("Trims geometry behind the linked portal's wall from extreme angles. Off by default - this is a small polish feature, not required to see through the portal, and its sign convention is easy to get wrong for a given portal orientation. Only turn it on once the base view looks correct, then check both this and flipClipPlane.")]
-    public bool useObliqueClip = false;
+    [Tooltip("Pulls the portal camera's near plane onto the linked portal's surface so the destination room's near-side floor/walls can't bleed into the opening. If the view through a portal ever goes blank, this plane's facing is inverted for that orientation - tick flipClipPlane.")]
+    public bool useObliqueClip = true;
     public bool flipClipPlane = false;
     public float clipPlaneOffset = 0.05f;
 
@@ -49,41 +62,137 @@ public class Portal : MonoBehaviour
     public float exitPush = 0.05f;
     public float teleportCooldown = 0.15f;
 
+    // Read by PortalCompositeFeature, which composites every ready portal's render
+    // texture directly into whichever camera it's rendering for - stencil-clipped to
+    // the surface silhouette - instead of this portal showing it via a textured quad in
+    // the normal render queue. PortalCameras lets that feature skip re-compositing
+    // portals visible from within another portal's own camera (no recursive portals).
+    public static readonly List<Portal> ActivePortals = new List<Portal>();
+    public static readonly HashSet<Camera> PortalCameras = new HashSet<Camera>();
+
+    public bool IsRenderReady => linkedPortal != null && renderTexture != null;
+    public RenderTexture PortalRenderTexture => renderTexture;
+    public Matrix4x4 SurfaceMatrix => surfaceTransform != null ? surfaceTransform.localToWorldMatrix : Matrix4x4.identity;
+    public Mesh SurfaceMesh =>
+        surfaceTransform != null && surfaceTransform.TryGetComponent(out MeshFilter mf) ? mf.sharedMesh : null;
+
+    public bool IsLinked => linkedPortal != null;
+
+    /// Maps a pose on this portal's side into the linked portal's space. Apply it to
+    /// anything that travels through - a body's position/rotation/velocity, or a world
+    /// point something still on this side is anchored to.
+    public Matrix4x4 TeleportMatrix => linkedPortal != null ? PortalMatrix() : Matrix4x4.identity;
+
+    /// Does the segment from->to pass through this portal's opening, entering from the
+    /// approach (local +Z) side? t is how far along the segment the crossing happens.
+    public bool TryGetSegmentCrossing(Vector3 from, Vector3 to, out float t)
+    {
+        t = 0f;
+        if (linkedPortal == null) return false;
+
+        Vector3 localFrom = transform.InverseTransformPoint(from);
+        Vector3 localTo = transform.InverseTransformPoint(to);
+
+        // Same front-to-back convention the player's own crossing test uses, so a thing
+        // that just came OUT of a portal moving away can never immediately re-enter it.
+        if (localFrom.z <= 0f || localTo.z > 0f) return false;
+
+        float span = localFrom.z - localTo.z;
+        if (span <= Mathf.Epsilon) return false;
+
+        t = localFrom.z / span;
+        Vector3 crossing = Vector3.Lerp(localFrom, localTo, t);
+        return Mathf.Abs(crossing.x) <= portalSize.x * 0.5f
+            && Mathf.Abs(crossing.y) <= portalSize.y * 0.5f;
+    }
+
+    /// First portal the segment passes through, if any, with the transform to apply on
+    /// the far side. Used by things that move themselves rather than relying on trigger
+    /// callbacks - a thrown axe flies with its colliders disabled, and an aim ray has no
+    /// collider at all.
+    public static Portal FindSegmentCrossing(Vector3 from, Vector3 to, out Matrix4x4 matrix)
+    {
+        matrix = Matrix4x4.identity;
+
+        Portal nearest = null;
+        float nearestT = float.MaxValue;
+
+        for (int i = 0; i < ActivePortals.Count; i++)
+        {
+            Portal portal = ActivePortals[i];
+            if (portal == null) continue;
+            if (!portal.TryGetSegmentCrossing(from, to, out float t)) continue;
+            if (t >= nearestT) continue;
+
+            nearestT = t;
+            nearest = portal;
+        }
+
+        if (nearest == null) return null;
+
+        matrix = nearest.TeleportMatrix;
+        return nearest;
+    }
+
     Portal linkedPortal;
     RenderTexture renderTexture;
-    Material surfaceMaterial;
+    Material frameMaterial;
 
     Rigidbody trackedBody;
     FirstPersonCharacterController trackedController;
     float trackedPrevLocalZ;
+    float trackedPrevCameraLocalZ;
+    bool cameraTracked;
     float teleportLockout;
 
     BoxCollider triggerCollider;
+
+    const float SurfaceFlatThickness = 0.01f;
+    const float CrossingMargin = 0.15f;
+    const float ObliqueMinFarCornerDistance = 1f;
 
     void Awake()
     {
         triggerCollider = GetComponent<BoxCollider>();
         ApplyPortalSize();
 
+        // The surface mesh is no longer drawn through Unity's normal per-object
+        // rendering - PortalCompositeFeature draws it manually (twice: mask, then
+        // composite) from a custom render pass instead. Disabling the renderer here
+        // stops it from ALSO being drawn a third time, untextured, by the regular
+        // opaque queue.
         if (surfaceRenderer != null)
+            surfaceRenderer.enabled = false;
+
+        Shader frameShader = Shader.Find("Universal Render Pipeline/Lit");
+        if (frameShader == null) frameShader = Shader.Find("Standard");
+        if (frameShader != null)
         {
-            Shader shader = Shader.Find("Universal Render Pipeline/Unlit");
-            if (shader == null) shader = Shader.Find("Unlit/Texture");
-            if (shader != null)
-            {
-                surfaceMaterial = new Material(shader) { hideFlags = HideFlags.HideAndDontSave };
-                surfaceRenderer.material = surfaceMaterial;
-            }
+            frameMaterial = new Material(frameShader) { hideFlags = HideFlags.HideAndDontSave };
+            frameMaterial.color = frameColor;
+            ApplyFrameMaterial();
         }
 
         if (portalCamera != null)
             portalCamera.enabled = false;
     }
 
+    void ApplyFrameMaterial()
+    {
+        if (frameMaterial == null) return;
+        if (frameTop != null && frameTop.TryGetComponent(out MeshRenderer top)) top.material = frameMaterial;
+        if (frameBottom != null && frameBottom.TryGetComponent(out MeshRenderer bottom)) bottom.material = frameMaterial;
+        if (frameLeft != null && frameLeft.TryGetComponent(out MeshRenderer left)) left.material = frameMaterial;
+        if (frameRight != null && frameRight.TryGetComponent(out MeshRenderer right)) right.material = frameMaterial;
+    }
+
     void OnEnable()
     {
         PortalManager.Get().RegisterPortal(this);
         PortalManager.Get().RequestSceneLoad(linkedSceneName);
+
+        ActivePortals.Add(this);
+        if (portalCamera != null) PortalCameras.Add(portalCamera);
 
         RenderPipelineManager.beginCameraRendering += OnBeginCameraRendering;
         RenderPipelineManager.endCameraRendering += OnEndCameraRendering;
@@ -93,6 +202,9 @@ public class Portal : MonoBehaviour
     {
         RenderPipelineManager.beginCameraRendering -= OnBeginCameraRendering;
         RenderPipelineManager.endCameraRendering -= OnEndCameraRendering;
+
+        ActivePortals.Remove(this);
+        if (portalCamera != null) PortalCameras.Remove(portalCamera);
 
         if (PortalManager.Instance != null)
         {
@@ -107,7 +219,7 @@ public class Portal : MonoBehaviour
 
     void OnDestroy()
     {
-        if (surfaceMaterial != null) Destroy(surfaceMaterial);
+        if (frameMaterial != null) Destroy(frameMaterial);
         ReleaseRenderTexture();
     }
 
@@ -121,12 +233,40 @@ public class Portal : MonoBehaviour
     {
         if (surfaceTransform != null)
         {
-            // Unity's built-in Quad mesh faces local -Z, not +Z, so the surface is turned
-            // 180 degrees here to bring its visible face in line with this portal's own
-            // +Z (outward/exit) convention - otherwise the rendered preview only shows on
-            // the side you can't actually cross from.
-            surfaceTransform.localRotation = Quaternion.Euler(0f, 180f, 0f);
-            surfaceTransform.localScale = new Vector3(portalSize.x, portalSize.y, 1f);
+            // A box, not a quad: ProtectSurfaceFromClipping() needs real depth to grow
+            // into while the player is mid-crossing. Its facing doesn't matter (the
+            // composite shader samples by screen position, not by the mesh's own UVs), so
+            // no orientation fixup is needed here.
+            surfaceTransform.localRotation = Quaternion.identity;
+            surfaceTransform.localScale = new Vector3(portalSize.x, portalSize.y, SurfaceFlatThickness);
+            surfaceTransform.localPosition = Vector3.zero;
+        }
+
+        // A thin recessed lip around the opening, centered on the surface plane and
+        // sticking out on both the +Z and -Z sides, so a grazing-angle view from either
+        // approach direction still shows real edge thickness instead of a knife-edge
+        // silhouette - the parallax cue a flat quad has none of.
+        float bw = Mathf.Max(0.01f, frameWidth);
+        float bd = Mathf.Max(0.01f, frameDepth);
+        if (frameTop != null)
+        {
+            frameTop.localPosition = new Vector3(0f, portalSize.y * 0.5f + bw * 0.5f, 0f);
+            frameTop.localScale = new Vector3(portalSize.x + bw * 2f, bw, bd);
+        }
+        if (frameBottom != null)
+        {
+            frameBottom.localPosition = new Vector3(0f, -(portalSize.y * 0.5f + bw * 0.5f), 0f);
+            frameBottom.localScale = new Vector3(portalSize.x + bw * 2f, bw, bd);
+        }
+        if (frameLeft != null)
+        {
+            frameLeft.localPosition = new Vector3(-(portalSize.x * 0.5f + bw * 0.5f), 0f, 0f);
+            frameLeft.localScale = new Vector3(bw, portalSize.y, bd);
+        }
+        if (frameRight != null)
+        {
+            frameRight.localPosition = new Vector3(portalSize.x * 0.5f + bw * 0.5f, 0f, 0f);
+            frameRight.localScale = new Vector3(bw, portalSize.y, bd);
         }
 
         BoxCollider box = triggerCollider != null ? triggerCollider : GetComponent<BoxCollider>();
@@ -142,6 +282,95 @@ public class Portal : MonoBehaviour
     {
         if (linkedPortal == null)
             TryResolveLink();
+    }
+
+    // Runs after all movement for the frame, so the surface is already sized correctly by
+    // the time anything renders it.
+    void LateUpdate()
+    {
+        ProtectSurfaceFromClipping();
+        CheckCameraCrossing();
+    }
+
+    // The teleport is driven from physics at a fixed 50Hz, but the camera renders
+    // interpolated between those steps. At speed that leaves a window - up to a whole
+    // physics step - where the view has already passed through the opening while the body
+    // hasn't been stepped across yet, and every frame drawn in that window shows the room
+    // the player just left. So the crossing is tested against the camera as well, once per
+    // rendered frame: it's the camera's position that decides what actually gets drawn.
+    //
+    // Teleporting a touch early is harmless - the body maps through still slightly short
+    // of the exit plane and simply continues outward from there - and the shared
+    // teleportLockout keeps this and the physics check from both firing.
+    void CheckCameraCrossing()
+    {
+        if (trackedBody == null)
+        {
+            cameraTracked = false;
+            return;
+        }
+
+        Camera main = Camera.main;
+        if (main == null)
+        {
+            cameraTracked = false;
+            return;
+        }
+
+        Vector3 local = transform.InverseTransformPoint(main.transform.position);
+        bool inBounds = Mathf.Abs(local.x) <= portalSize.x * 0.5f
+                     && Mathf.Abs(local.y) <= portalSize.y * 0.5f;
+
+        if (cameraTracked && Time.time >= teleportLockout && inBounds
+            && trackedPrevCameraLocalZ > 0f && local.z <= 0f)
+        {
+            TryTeleport();
+            cameraTracked = false;
+            return;
+        }
+
+        trackedPrevCameraLocalZ = local.z;
+        cameraTracked = true;
+    }
+
+    // The camera's near plane sits AHEAD of the camera itself, so it slices into a
+    // paper-thin portal surface slightly before the player actually reaches the opening -
+    // punching a hole that shows the room behind the portal for the last few centimetres
+    // of walking through. Giving the surface real depth toward the viewer for exactly that
+    // stretch keeps geometry in front of the near plane the whole way across.
+    void ProtectSurfaceFromClipping()
+    {
+        if (surfaceTransform == null) return;
+
+        Camera main = Camera.main;
+        if (main == null) return;
+
+        float distanceToPlane = Mathf.Abs(
+            Vector3.Dot(main.transform.position - transform.position, transform.forward));
+
+        float halfHeight = main.nearClipPlane * Mathf.Tan(main.fieldOfView * 0.5f * Mathf.Deg2Rad);
+        float halfWidth = halfHeight * main.aspect;
+        float nearCornerDistance = new Vector3(halfWidth, halfHeight, main.nearClipPlane).magnitude;
+
+        // Centred on the plane and grown BOTH ways, rather than toward one side. The
+        // teleport fires from physics at a fixed 50Hz while the camera renders
+        // interpolated, so for up to a physics step the camera can already be past the
+        // plane with the body not yet moved - and a slab sitting only on the approach side
+        // would be entirely behind the near plane by then, reopening the same hole. A slab
+        // straddling the plane always leaves surface further out than the near plane
+        // whichever side the camera is really on.
+        // Floored well above the near-plane corner. With a small near clip that corner is
+        // only a centimetre or two out, which covers the clipping but leaves no margin for
+        // the single frame on which the crossing itself happens - the slab has to still
+        // surround the camera on the frame it steps across.
+        float halfThickness = Mathf.Max(nearCornerDistance, CrossingMargin);
+
+        float thickness = distanceToPlane < halfThickness
+            ? halfThickness * 2f
+            : SurfaceFlatThickness;
+
+        surfaceTransform.localScale = new Vector3(portalSize.x, portalSize.y, thickness);
+        surfaceTransform.localPosition = Vector3.zero;
     }
 
     void TryResolveLink()
@@ -167,13 +396,24 @@ public class Portal : MonoBehaviour
 
         ReleaseRenderTexture();
 
-        renderTexture = new RenderTexture(w, h, 24, RenderTextureFormat.Default)
+        // HDR format: the portal camera renders the same HDR pipeline the main camera
+        // does (bloom, exposure, etc. all operate on pre-tonemapped values). Capturing
+        // into an LDR texture here would clip/crush that data before the surface shader
+        // ever sees it, which is a big part of why a portal ends up looking like a dull
+        // flat video feed instead of a real, correctly-lit view into another room.
+        RenderTextureFormat format = SystemInfo.SupportsRenderTextureFormat(RenderTextureFormat.DefaultHDR)
+            ? RenderTextureFormat.DefaultHDR
+            : RenderTextureFormat.Default;
+
+        int msaaSamples = UniversalRenderPipeline.asset != null ? UniversalRenderPipeline.asset.msaaSampleCount : 1;
+
+        renderTexture = new RenderTexture(w, h, 24, format)
         {
-            hideFlags = HideFlags.HideAndDontSave
+            hideFlags = HideFlags.HideAndDontSave,
+            antiAliasing = Mathf.Clamp(msaaSamples, 1, 8)
         };
 
         if (portalCamera != null) portalCamera.targetTexture = renderTexture;
-        if (surfaceMaterial != null) surfaceMaterial.mainTexture = renderTexture;
     }
 
     void ReleaseRenderTexture()
@@ -194,17 +434,28 @@ public class Portal : MonoBehaviour
         Camera main = Camera.main;
         if (main == null) return;
 
-        // Position/rotate exactly where the hand-verified portal math says the main
-        // camera would be after stepping through, then clone its projection matrix
-        // outright rather than rebuilding one from FOV/aspect/near/far. Cloning the whole
-        // matrix means the portal camera's lens can never drift out of sync with whatever
-        // the main camera is actually doing (dynamic FOV kick from speed, etc.) - there's
-        // nothing left to individually copy wrong.
+        // Position AND rotation both come from the one portal matrix - see PortalMatrix().
+        // The projection matrix is cloned outright rather than rebuilt from FOV/aspect, so
+        // the portal camera's lens can never drift out of sync with whatever the main
+        // camera is doing (dynamic FOV kick from speed, etc.), and so its output stays
+        // aligned to the main camera's screen - which the composite shader depends on,
+        // since it samples this render texture by screen position.
+        Matrix4x4 portalMatrix = PortalMatrix();
         portalCamera.transform.SetPositionAndRotation(
-            TransformPoint(main.transform.position),
-            RotationDelta() * main.transform.rotation);
+            portalMatrix.MultiplyPoint3x4(main.transform.position),
+            portalMatrix.rotation * main.transform.rotation);
         portalCamera.projectionMatrix = main.projectionMatrix;
         portalCamera.cullingMask = main.cullingMask;
+        portalCamera.allowHDR = main.allowHDR;
+
+        // Post-processing stays OFF on this camera deliberately: PortalCompositeFeature
+        // writes this render texture straight into the MAIN camera's own color buffer,
+        // which then goes through its own post stack once, same as everything else in
+        // the frame. If this camera also graded/tonemapped its output, that would
+        // happen a second time on top - a subtly wrong double pass that's a real
+        // contributor to a portal reading as "footage" rather than a real view.
+        UniversalAdditionalCameraData portalData = portalCamera.GetUniversalAdditionalCameraData();
+        if (portalData != null) portalData.renderPostProcessing = false;
 
         if (useObliqueClip)
             ApplyObliqueClip(portalCamera);
@@ -227,18 +478,44 @@ public class Portal : MonoBehaviour
 
     void ApplyObliqueClip(Camera cam)
     {
-        // -forward here matches the verified reference implementation this technique is
-        // taken from; flipClipPlane exists as an escape hatch back to +forward if a given
-        // portal orientation ever needs it.
-        Vector3 normal = linkedPortal.transform.forward * (flipClipPlane ? 1f : -1f);
-        Vector3 pos = linkedPortal.transform.position + normal * clipPlaneOffset;
+        // Pulls the portal camera's near plane onto the linked portal's own surface, so
+        // the destination room's near-side geometry (the floor and walls sitting between
+        // that camera and the opening) can't bleed into the view through it. The kept
+        // half-space is the one the linked portal faces.
+        //
+        // Only the depth row of the projection is rewritten - x/y projection is untouched,
+        // so the render stays aligned to the main camera's screen and the composite
+        // shader's screen-space sampling keeps working.
+        Transform exit = linkedPortal.transform;
+        Vector3 normal = exit.forward * (flipClipPlane ? -1f : 1f);
 
-        Matrix4x4 worldToCamera = cam.worldToCameraMatrix;
-        Vector3 cPos = worldToCamera.MultiplyPoint(pos);
-        Vector3 cNormal = worldToCamera.MultiplyVector(normal).normalized;
-        Vector4 clipPlane = new Vector4(cNormal.x, cNormal.y, cNormal.z, -Vector3.Dot(cPos, cNormal));
+        // Right as the player crosses, this camera sits essentially ON the clip plane and
+        // an oblique matrix built there is degenerate - it blows the projection out and
+        // the view through the opening garbles for a frame or two. Leave the projection
+        // alone for that last stretch; there's nothing left to trim by then anyway.
+        float cameraToPlane = Vector3.Dot(exit.position - cam.transform.position, normal);
+        if (cameraToPlane <= clipPlaneOffset + 0.01f) return;
 
-        cam.projectionMatrix = cam.CalculateObliqueMatrix(clipPlane);
+        float distance = -Vector3.Dot(normal, exit.position) - clipPlaneOffset;
+        Vector4 worldPlane = new Vector4(normal.x, normal.y, normal.z, distance);
+
+        Vector4 cameraPlane = Matrix4x4.Transpose(Matrix4x4.Inverse(cam.worldToCameraMatrix)) * worldPlane;
+
+        // The oblique matrix is only well-formed while the clip plane actually cuts through
+        // this camera's view frustum. The portal camera renders every frame, so most of the
+        // time the linked portal is behind it, off to the side, or edge-on - and there the
+        // rebuilt far plane collapses or flips inside-out, which Unity reports from its own
+        // frustum-corner un-projection as "Screen position out of view frustum". Same test
+        // CalculateObliqueMatrix is built around: take the far corner furthest along the
+        // plane's normal and require it to sit clearly past the plane. When it doesn't, the
+        // opening can't be meaningfully in view, so the plain projection loses nothing.
+        Vector4 farCorner = cam.projectionMatrix.inverse *
+            new Vector4(Mathf.Sign(cameraPlane.x), Mathf.Sign(cameraPlane.y), 1f, 1f);
+        if (farCorner.w <= 0f) return;
+        float farCornerPastPlane = Vector4.Dot(cameraPlane, farCorner) / farCorner.w;
+        if (farCornerPastPlane < ObliqueMinFarCornerDistance) return;
+
+        cam.projectionMatrix = cam.CalculateObliqueMatrix(cameraPlane);
     }
 
     struct EnvSnapshot
@@ -331,8 +608,9 @@ public class Portal : MonoBehaviour
         FirstPersonCharacterController controller = trackedController;
         Rigidbody body = trackedBody;
 
-        Quaternion rotDelta = RotationDelta();
-        Vector3 newPos = TransformPoint(body.position);
+        Matrix4x4 portalMatrix = PortalMatrix();
+        Quaternion rotDelta = portalMatrix.rotation;
+        Vector3 newPos = portalMatrix.MultiplyPoint3x4(body.position);
         Quaternion currentYaw = Quaternion.LookRotation(controller.FlatForward, Vector3.up);
         Quaternion newRot = rotDelta * currentYaw;
         Vector3 newVel = rotDelta * body.linearVelocity;
@@ -340,6 +618,13 @@ public class Portal : MonoBehaviour
         newPos += linkedPortal.transform.forward * exitPush;
 
         controller.TeleportTo(newPos, newRot, newVel);
+
+        // A grapple anchored through the opening was stored as the virtual point the
+        // player could SEE there - the real target mapped back onto this side. Now that
+        // they're through, the same matrix turns that virtual point into the real one, so
+        // the rope stays attached to the thing it was always aimed at.
+        Grappling grappling = controller.transform.root.GetComponentInChildren<Grappling>(true);
+        if (grappling != null) grappling.ApplyPortalTransform(portalMatrix);
 
         linkedPortal.SeedTracking(controller, body, exitPush);
         teleportLockout = Time.time + teleportCooldown;
@@ -356,32 +641,22 @@ public class Portal : MonoBehaviour
         teleportLockout = Time.time + teleportCooldown;
     }
 
-    // Rotation delta for anything that represents a FACING or direction of travel
-    // (rotation, velocity, the camera's view basis). Crossing a portal continues your
-    // motion outward from the other side, which - numerically - means reversing which way
-    // you're pointed relative to the world, unless the two portals happen to be counter-
-    // rotated to compensate. Hence the 180-degree flip baked in here.
-    Quaternion RotationDelta()
+    // The portal transform: express a world pose in this portal's local frame, flip it
+    // 180 degrees (you go in one face and come out the other), then re-express it in the
+    // linked portal's frame.
+    //
+    // Position and rotation MUST both be derived from this single matrix. They were
+    // previously computed from two different transforms - the rotation included the flip
+    // and the position deliberately left it out - which is geometrically incoherent: it
+    // puts the render eye somewhere that doesn't match the direction it's pointed, so the
+    // view through the portal swims and warps as the player moves instead of holding
+    // still like a window. (With a linked pair whose rooms are identical untilted copies,
+    // this matrix correctly reduces to a pure translation with no rotation at all, so the
+    // view through the opening matches the room around it exactly.)
+    Matrix4x4 PortalMatrix()
     {
         Matrix4x4 flip = Matrix4x4.TRS(Vector3.zero, Quaternion.Euler(0f, 180f, 0f), Vector3.one);
-        return (linkedPortal.transform.localToWorldMatrix * flip * transform.worldToLocalMatrix).rotation;
-    }
-
-    // Maps a world POINT through the portal. Deliberately does NOT include the 180-degree
-    // flip that RotationDelta() has: a point that is d units in front of this portal (on
-    // the room side) must map to a point d units in front of the linked portal, also on
-    // ITS room side - positions are simply re-expressed in the linked portal's frame, not
-    // reversed the way facing/velocity need to be. (Using the same flipped transform for
-    // positions was the bug behind the camera looking too far away/small from a distance -
-    // it put the render eye behind the linked portal's wall instead of in front of it,
-    // adding a phantom gap that grew with how far back you actually stood. Actual
-    // teleporting never showed the bug because it only happens right at the crossing
-    // plane, where that gap is nearly zero either way.)
-    Vector3 TransformPoint(Vector3 worldPoint)
-    {
-        Quaternion relativeRotation = linkedPortal.transform.rotation * Quaternion.Inverse(transform.rotation);
-        Vector3 offset = worldPoint - transform.position;
-        return linkedPortal.transform.position + relativeRotation * offset;
+        return linkedPortal.transform.localToWorldMatrix * flip * transform.worldToLocalMatrix;
     }
 
     void OnDrawGizmos()
