@@ -137,6 +137,7 @@ public class Grappling : MonoBehaviour
     bool isZipping;
     Vector3 zipPoint;
     float zipRadius;
+    IZipTarget zipTarget;
 
     float anchorRadius;
 
@@ -160,6 +161,7 @@ public class Grappling : MonoBehaviour
 
     public bool IsSwinging => isSwinging;
     public bool IsZipping => isZipping;
+    public IZipTarget ZipTarget => isZipping ? zipTarget : null;
     public Vector3 Anchor => anchor;
     public float RopeLength => ropeLength;
 
@@ -344,6 +346,9 @@ public class Grappling : MonoBehaviour
             if (c.attachedRigidbody == rb) continue;
             if (!string.IsNullOrEmpty(grappleTag) && !c.CompareTag(grappleTag)) continue;
 
+            IZipTarget zt = c.GetComponentInParent<IZipTarget>();
+            if (zt != null && !zt.ZipTargetValid) continue;
+
             Vector3 nearest = c.bounds.ClosestPoint(camT.position);
             Vector3 toNearest = nearest - camT.position;
             float nearDist = toNearest.magnitude;
@@ -491,7 +496,10 @@ public class Grappling : MonoBehaviour
         if (isZipping || isSwinging || controller.IsVaulting) return;
         if (!TryGetGrapplePoint(out Vector3 point, out Collider col)) return;
 
-        zipPoint = point;
+        zipTarget = col != null ? col.GetComponentInParent<IZipTarget>() : null;
+        if (zipTarget != null && !zipTarget.ZipTargetValid) { zipTarget = null; return; }
+
+        zipPoint = zipTarget != null ? zipTarget.ZipPoint : point;
         zipRadius = attachToObjectCenter && respectTargetRadius ? RadiusOf(col) : 0f;
         isZipping = true;
         controller.IsZipping = true;
@@ -505,6 +513,7 @@ public class Grappling : MonoBehaviour
         isZipping = false;
         controller.IsZipping = false;
         zipRadius = 0f;
+        zipTarget = null;
 
         if (ropeLine != null)
             ropeLine.positionCount = 0;
@@ -518,11 +527,32 @@ public class Grappling : MonoBehaviour
             return;
         }
 
+        // moving target (enemy)
+        if (zipTarget != null)
+        {
+            if (!zipTarget.ZipTargetValid)
+            {
+                StopZip();
+                return;
+            }
+            zipPoint = zipTarget.ZipPoint;
+        }
+
         Vector3 toPoint = zipPoint - Pos;
         float dist = toPoint.magnitude;
 
-        if (dist <= zipArrivalDistance + zipRadius)
+        float arrival = zipTarget != null
+            ? zipTarget.ZipArrivalRadius + rb.linearVelocity.magnitude * Time.fixedDeltaTime
+            : zipArrivalDistance + zipRadius;
+
+        if (dist <= arrival)
         {
+            if (zipTarget != null && zipTarget.OnZipArrive(controller, rb))
+            {
+                StopZip();
+                return;
+            }
+
             if (controller.TryZipWallRun())
             {
                 StopZip();
@@ -557,6 +587,9 @@ public class Grappling : MonoBehaviour
         if (isSwinging || isZipping || cooldownTimer > 0f) return;
         if (controller.IsVaulting) return;
         if (!TryGetGrapplePoint(out Vector3 point, out Collider col)) return;
+
+        // no swinging from enemies
+        if (col != null && col.GetComponentInParent<IZipTarget>() != null) return;
 
         float dist = Vector3.Distance(Pos, point);
         if (dist < minSwingDistance || dist > maxSwingDistance) return;

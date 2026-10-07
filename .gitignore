@@ -179,3 +179,8 @@ $RECYCLE.BIN/
 *.lnk
 
 # End of https://www.toptal.com/developers/gitignore/api/windows,unity,rider
+
+# ML-Agents training output and editor timers
+results/
+Assets/ML-Agents/
+Assets/ML-Agents.meta
