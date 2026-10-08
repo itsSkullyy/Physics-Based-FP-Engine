@@ -170,13 +170,7 @@ public class BreakableWall : MonoBehaviour
 
     void DetachStuckAxe()
     {
-        ThrownAxe[] children = GetComponentsInChildren<ThrownAxe>(true);
-        foreach (ThrownAxe axe in children)
-        {
-            if (axe == null) continue;
-            axe.transform.SetParent(null, true);
-            axe.DropFromSurface();
-        }
+        ThrownAxe.DropAllStuckIn(transform);
     }
 
     public void OnRunThrough(Rigidbody playerBody, Vector3 contactPoint)

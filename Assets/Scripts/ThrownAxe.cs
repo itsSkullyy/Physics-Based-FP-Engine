@@ -1,4 +1,6 @@
+using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Serialization;
 
 // Thrown axe. Simulates its own arc and sweeps a continuous chain of segments along the
 // axe head's real path (plus the pivot's path) every physics step, so it never has a
@@ -38,7 +40,9 @@ public class ThrownAxe : MonoBehaviour
     [Range(0f, 1f)] public float stickNormalBlend = 0.55f;
     public Vector3 stickEulerOffset = Vector3.zero;
     public bool levelRoll = true;
-    public bool parentToSurface = true;
+    [Tooltip("Keep the axe locked to whatever it hit, so it rides along with moving enemies and platforms.")]
+    [FormerlySerializedAs("parentToSurface")]
+    public bool followSurface = true;
 
     [Header("Loose On Ground")]
     [Tooltip("A loose axe stops being a grapple anchor, so a zip pulls it back to you instead of pulling you to it.")]
@@ -113,12 +117,25 @@ public class ThrownAxe : MonoBehaviour
     float recallBestDist;
     float recallStuckTimer;
 
+    // The axe isn't parented to what it hits. Parenting breaks on rigidbodies, shears
+    // under non-uniformly scaled primitives and makes the axe count as part of the
+    // enemy for grapple/sight checks. Instead it remembers its pose relative to the
+    // collider and copies it every frame. stuckLocalRot is world space when there is
+    // no surface to follow.
+    Collider surfaceCollider;
+    bool hasSurface;
+    Vector3 stuckLocalPos;
     Quaternion stuckLocalRot;
     Vector3 wobbleAxisLocal = Vector3.right;
     float wobbleTimer;
 
+    static readonly List<ThrownAxe> live = new List<ThrownAxe>();
+
     public bool IsStuck => stuck;
     public bool IsRecalling => recalling;
+    public bool IsFlying => launched && !stuck && !dropped;
+    public Vector3 Velocity => velocity;
+    public static IReadOnlyList<ThrownAxe> Live => live;
     public Vector3 StickPoint => transform.position;
     public Vector3 HeadPosition => transform.position + HeadWorldOffset(transform.rotation);
 
@@ -137,6 +154,24 @@ public class ThrownAxe : MonoBehaviour
         rb.isKinematic = true;
         rb.interpolation = RigidbodyInterpolation.Interpolate;
         rb.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
+    }
+
+    void OnEnable() { live.Add(this); }
+    void OnDisable() { live.Remove(this); }
+
+    /// Drops every axe stuck in a collider at or under root. Call this when that object
+    /// is about to break apart or vanish.
+    public static void DropAllStuckIn(Transform root)
+    {
+        if (root == null) return;
+
+        for (int i = live.Count - 1; i >= 0; i--)
+        {
+            ThrownAxe axe = live[i];
+            if (axe == null || !axe.hasSurface || axe.surfaceCollider == null) continue;
+            if (axe.surfaceCollider.transform.IsChildOf(root))
+                axe.DropFromSurface();
+        }
     }
 
     public void Launch(Vector3 launchVelocity, float spinDegreesPerSecond, Collider[] ignoreColliders)
@@ -262,20 +297,47 @@ public class ThrownAxe : MonoBehaviour
         rb.MoveRotation(rot);
     }
 
-    void Update()
+    // LateUpdate so it runs after animation, nav agents and rigidbody interpolation
+    // have put the surface where it'll be drawn this frame.
+    void LateUpdate()
     {
-        if (!stuck || wobbleTimer <= 0f) return;
+        if (!stuck || dropped) return;
 
-        wobbleTimer -= Time.deltaTime;
-        float elapsed = stickWobbleDuration - Mathf.Max(0f, wobbleTimer);
+        if (hasSurface && (surfaceCollider == null || !surfaceCollider.enabled
+                           || !surfaceCollider.gameObject.activeInHierarchy))
+        {
+            DropFromSurface();
+            return;
+        }
 
-        float amp = stickWobbleAngle * Mathf.Exp(-stickWobbleDamp * elapsed);
-        float angle = Mathf.Sin(elapsed * stickWobbleFrequency) * amp;
+        bool wobbling = wobbleTimer > 0f;
+        if (!hasSurface && !wobbling) return;
 
-        transform.localRotation = stuckLocalRot * Quaternion.AngleAxis(angle, wobbleAxisLocal);
+        Quaternion rot = stuckLocalRot;
+        if (hasSurface) rot = surfaceCollider.transform.rotation * rot;
 
-        if (wobbleTimer <= 0f)
-            transform.localRotation = stuckLocalRot;
+        if (wobbling)
+        {
+            wobbleTimer -= Time.deltaTime;
+            if (wobbleTimer > 0f)
+            {
+                float elapsed = stickWobbleDuration - wobbleTimer;
+                float amp = stickWobbleAngle * Mathf.Exp(-stickWobbleDamp * elapsed);
+                float angle = Mathf.Sin(elapsed * stickWobbleFrequency) * amp;
+                rot *= Quaternion.AngleAxis(angle, wobbleAxisLocal);
+            }
+        }
+
+        if (hasSurface)
+            transform.SetPositionAndRotation(surfaceCollider.transform.TransformPoint(stuckLocalPos), rot);
+        else
+            transform.rotation = rot;
+    }
+
+    void ClearSurface()
+    {
+        hasSurface = false;
+        surfaceCollider = null;
     }
 
     // ---------------------------------------------------------------- recall
@@ -301,7 +363,7 @@ public class ThrownAxe : MonoBehaviour
         recallBestDist = float.MaxValue;
         recallStuckTimer = 0f;
 
-        transform.SetParent(null, true);
+        ClearSurface();
 
         if (rb == null) rb = GetComponent<Rigidbody>();
         rb.isKinematic = true;
@@ -572,8 +634,8 @@ public class ThrownAxe : MonoBehaviour
         Vector3 headTarget = hit.point + embed * stickDepth;
         Vector3 finalPos = headTarget - HeadWorldOffset(aligned);
 
-        // Grab the collider we hit before reparenting, so a wall that destroys itself
-        // in response still gives us a valid reference this frame.
+        // Grab the collider up front, so a wall that destroys itself in response still
+        // gives us a valid reference this frame.
         Collider hitCollider = hit.collider;
 
         rb.isKinematic = true;
@@ -582,8 +644,18 @@ public class ThrownAxe : MonoBehaviour
         rb.position = finalPos;
         rb.rotation = aligned;
 
-        if (parentToSurface && hitCollider != null && hitCollider.attachedRigidbody == null)
-            transform.SetParent(hitCollider.transform, true);
+        hasSurface = followSurface && hitCollider != null;
+        surfaceCollider = hasSurface ? hitCollider : null;
+        if (hasSurface)
+        {
+            Transform s = hitCollider.transform;
+            stuckLocalPos = s.InverseTransformPoint(finalPos);
+            stuckLocalRot = Quaternion.Inverse(s.rotation) * aligned;
+        }
+        else
+        {
+            stuckLocalRot = aligned;
+        }
 
         wobbleAxisLocal = Vector3.Cross(headDirLocal, Vector3.up);
         if (wobbleAxisLocal.sqrMagnitude < 0.001f)
@@ -592,7 +664,6 @@ public class ThrownAxe : MonoBehaviour
             ? wobbleAxisLocal.normalized
             : Vector3.right;
 
-        stuckLocalRot = transform.localRotation;
         wobbleTimer = stickWobbleDuration;
 
         if (trail != null)
@@ -608,24 +679,29 @@ public class ThrownAxe : MonoBehaviour
             CameraShaker.Instance.AddTraumaAtPoint(hit.point, impactShake * force,
                 impactShakeFullRange, impactShakeMaxRange);
 
-        // A BreakableWall listens for this and shatters; anything else ignores it. Sent
-        // after our own juice so a wall's shatter feedback layers on top.
+        // Before the message below: if the hit breaks the wall or kills the enemy the axe
+        // gets dropped, and that has to come after this or the loose axe ends up
+        // grappleable again.
+        if (becomesGrappable)
+            MakeGrappable();
+
+        // A BreakableWall listens for this and shatters; enemies take damage; anything
+        // else ignores it. Sent after our own juice so a wall's shatter feedback layers
+        // on top.
         if (hitCollider != null)
             hitCollider.SendMessageUpwards("OnThrownAxeStuck", hit.point,
                 SendMessageOptions.DontRequireReceiver);
-
-        if (becomesGrappable)
-            MakeGrappable();
     }
 
-    // Called when the surface the axe stuck into is destroyed out from under it. The
-    // axe is already unparented by the caller; here it stops being a frozen kinematic
-    // prop and falls under gravity as a loose body, staying grappleable and recallable.
+    // Called when the surface the axe stuck into is destroyed, disabled or breaks apart.
+    // The axe stops being a frozen kinematic prop and falls under gravity as a loose
+    // body, staying recallable.
     public void DropFromSurface()
     {
         if (!stuck || dropped) return;
         dropped = true;
 
+        ClearSurface();
         wobbleTimer = 0f;
 
         if (rb == null) rb = GetComponent<Rigidbody>();

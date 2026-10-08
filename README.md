@@ -52,7 +52,7 @@ The controller is one Rigidbody pushed around in `FixedUpdate`. There's no Chara
 - **Darting** is an air dash that only works in a short window after a wall kick or jump. Chaining darts stacks a speed bonus up to five times, and a dart refunds a wall kick so you can keep going up a shaft.
 - **Zip into wall run.** Finishing a grapple zip next to a wall-run wall drops you straight into a wall run with a speed boost.
 
-`FirstPersonCameraRig.cs` sits on top of this. It drives a Cinemachine camera as a hard first person mount and adds FOV that widens with speed, strafe/slide/wall-run tilt, a landing dip that scales with fall speed, and a roll on vaults.
+`FirstPersonCameraRig.cs` sits on top of this. It drives a Cinemachine camera as a hard first person mount and adds FOV that widens with speed, strafe/slide/wall-run tilt, a landing dip that only kicks in on falls harder than a normal jump, softened when you land fast or into a slide, and a roll on vaults. The pause menu has a Landing Shake setting (Full / Low / Off) that scales the dip and the landing shake.
 
 ### Grapple
 
@@ -184,8 +184,9 @@ Rifle soldiers who work in squads of up to six: a leader and followers split int
 
 **Combat details.**
 - Bullets are slow tracers you can dodge, and an axe swing deflects them. They sweep a sphere every frame instead of using a collider, so they can't tunnel.
-- Leaders throw grenades: a red cube that beeps faster until it explodes. Hit it with the axe and it flies at the nearest Grunt. The explosion (`ExplosionFX`) is built at runtime the same way as JuiceFX, with a flash, fireball, smoke, debris, a shockwave ring and "BOOM" text.
+- Leaders throw grenades: a red cube that beeps faster until it explodes. The fuse is 4 seconds, long enough to run up and hit it with the axe, which sends it flying at the nearest Grunt. The swing bats any live grenade within 45 degrees of where you're aiming, so you don't have to hit the cube exactly. A leader won't throw at his own feet or while you're rushing him, and any Grunt near a live grenade runs from it after a short, random reaction time (slow ones still get caught). A grenade you batted back can't be dodged. The explosion (`ExplosionFX`) is built at runtime the same way as JuiceFX, with a flash, fireball, smoke, debris, a shockwave ring and "BOOM" text.
 - Zipping into a standing Grunt bounces you up off him and staggers him. Zipping in while sliding hits him and carries you through without losing speed.
+- Zipping is easy to see coming, so they get good at shooting it. When you grapple a Grunt he and up to two squadmates who can see you flash "!", wait 0.15 to 0.3 s, then snap-fire short tight bursts aimed ahead along your zip line. The kill is still one hit, it just costs health now. Swinging the axe still deflects the bullets.
 
 ### Stillwalker
 
@@ -193,29 +194,53 @@ Rifle soldiers who work in squads of up to six: a leader and followers split int
 
 A stone figure that freezes as soon as you look at it. It counts as "seen" when it's within 35 degrees of your view, closer than 70 m, and there's nothing blocking the line between your camera and its chest.
 
-- While unseen it stalks you, staying about 9 to 16 m away. If it falls behind it speeds up based on distance.
+- It wakes when you come within 25 m, when it sees you, or when it hears you. After that it always knows where you are and measures distance along the NavMesh, so it walks around walls to follow you.
+- While unseen it stalks you. It starts out about 12 m away and creeps closer the longer you go without looking at it, down to 5 m after 8 seconds. Spotting it knocks that build-up back by half. It moves faster while you're facing away or it's out of your sight, and if it falls far behind it runs to catch up.
+- When you're moving it looks a couple of seconds ahead along your route for a spot that's out of your sight, looks onto where you'll be, and that it can reach first (EQS AmbushPos). It runs there, goes still with its eyes dimmed, and jumps you when you come within 12 m.
+- If it creeps within 7 m without being seen it pounces, whether you've landed or not. The first time it gets within 9 m behind you there's a stone scrape, so a jump from behind is never silent.
 - When you land on the ground within 20 m, it winds up for 0.2 seconds and launches at where it predicts you'll be. A ring marks the landing spot. You can dodge it, but it's hard.
 - Swinging the axe does nothing to it. It only cracks from a falling pogo hit or a thrown axe. Four cracks shatter it, and cracks heal if you leave it alone for 3 seconds.
-- States: Dormant / Hunting (Stalking: Moving or Watched, Launching: Windup or Flight, Recovering) / Shattered. Where it chooses to stalk from is decided by utility AI (Creep, CatchUp, HoldBack), or by a trained ML policy if one is assigned.
+- Looking at it stops it walking, not reacting. A crack makes it jerk away from the hit even while you watch, then it retreats until the cracks heal. The more cracked it is, the further and faster it runs (24 / 32 / 40 m). It backs away facing you, steered by the ML policy or, without one, an EQS query that looks for a spot out of your sight. It only launches while retreating if you land within 6 m.
+- One hit from death it bolts: 18 m/s, keeps running even while you look at it, and never launches.
+- Glowing red cracks show how close it is to breaking. Each crack grows a jagged line from where it was hit. More cracks means longer lines, a brighter glow and a faster pulse, and one hit from death it splits all over and flickers. The cracks fade when it heals.
+- Once it's cracked it can sidestep a pogo coming down on it. The chance goes up with each crack, with a cooldown after each dodge, so the thrown axe becomes the reliable way to finish it.
+- You can zip at it, but it sidesteps at the last moment and swats you as you fly past (45 damage and a big knockback). If it has no room to dodge you hit it face first and get swatted anyway. The exception is the second after a launch when it's stuck: zip into it then and you bounce straight up over it, ready to pogo.
+- States: Dormant / Hunting (Stalking: Moving or Watched, Retreating: Fleeing or Frozen, Dodging, Launching: Windup or Flight, Recovering) / Shattered. Where it moves while stalking or retreating is decided by a trained ML policy if one is assigned, otherwise by utility AI (CloseIn, CatchUp, Ambush, Lurk, HoldBack) and the EQS flee query. The policy only does the early part of stalking: it steers when it can see you within 22 m on a short path, and hands over to the rules once it has been unseen long enough to want to be closer than 10 m (it was trained to hold about 12 m). Behind walls, while ambushing, or if it stands still for 0.6 s while you can't see it, the rules drive too. The F6 menu shows its state, who's steering and why, the unseen build-up and ambush status, and has buttons to wake it, max out the creep-in, set up an ambush where you're looking, force an intent, or play the creep sound. Dodging, flinching and launching are always hand-written.
 
 ### ML-Agents (Stillwalker)
 
-`StillwalkerAgent.cs`, `Training/stillwalker.yaml`, `Scenes/Stillwalker Training.unity`
+`StillwalkerAgent.cs`, `StillwalkerHunterBot.cs`, `Training/stillwalker.yaml`, `Scenes/Stillwalker Training.unity`
 
-The ML policy only decides where the Stillwalker positions itself (a direction and whether to hurry). All the actual rules (freezing when seen, launching, cracking) stay hand-written in `Stillwalker.cs`. That keeps it fair and stops the training from finding exploits.
+The ML policy decides where the Stillwalker goes (a direction and whether to hurry), both while it stalks you and while it runs away hurt. All the actual rules (freezing when seen, launching, cracking, dodging, bolting at one hit from death) stay hand-written in `Stillwalker.cs`. That keeps it fair and stops the training from finding exploits.
 
-- **Observations:** where the player is and where they're predicted to be (in the Stillwalker's local space), the player's height and vertical speed, whether they're grounded and for how long, how long they've been airborne, crack count, whether a launch is ready, whether it's being looked at, and distance.
-- **Actions:** a continuous move direction plus a discrete "go fast" choice.
-- **Rewards:** a small penalty every step it's being watched, rewards when the player lands in launch range and when a launch or contact hit connects, penalties when the player lands out of range, for missed launches, for cracks, and a big one for being shattered (which ends the episode).
-- **Training:** PPO with a 2x128 network and normalised inputs. The training scene replays F8 recordings of real play as a ghost player. The first run (`stillwalker01`) got to about 1.03M steps. The `results/` folder is gitignored, so the trained `.onnx` files only exist locally.
+- **Observations (51):**
+  - Where the player is, where they're predicted to be and how they're moving, all in the Stillwalker's local space.
+  - Their height, vertical speed and time grounded or airborne, plus whether they're swinging, zipping, wall running or sliding.
+  - Whether it's being looked at, how far off-centre it is on screen, and whether it's out in the open at all.
+  - Threats: a zip aimed at it, or a thrown axe about to hit.
+  - Its own state: cracks, whether it's one hit from death, how close the cracks are to healing, launch ready, its own velocity.
+  - Escape probes: in 8 directions around it, how much room it has to run and whether 6 m that way is hidden from you.
+  - A player profile: running averages of how fast you move, how much you're airborne, how much you watch it, whether you close in or keep your distance, and how often you come down on top of it.
+- **Memory:** the network has an LSTM (about 6 seconds of decisions). Together with the profile, that's what lets it pick up a player's habits instead of only reacting to the current frame.
+- **Actions:** a continuous move direction plus a discrete "go fast" choice. Small moves count as standing still.
+- **Rewards:**
+  - Attacking: rewards when the player lands in launch range and when a launch or contact hit connects. Penalties when the player lands out of range and for missed launches.
+  - Staying alive: a small penalty every step it's being watched, penalties for cracks, and a big one for being shattered (which ends the episode).
+  - Escaping: while hurt, a reward for being far away and out of sight and a penalty for being within 8 m, both bigger at one hit from death. A reward when its cracks heal, and when a thrown axe misses. The heal reward is kept small enough that getting hit on purpose never pays.
+- **Training data:** episodes alternate between two fake players.
+  - F8 recordings of real runs, which show how players actually move.
+  - `StillwalkerHunterBot`, which hunts it down on the NavMesh, jumps to pogo it and bounces off. Each episode it picks a style (Diver, Circler, Kiter) and a skill level.
+  - Both throw simulated axes that lead the target and miss if it moved or got behind cover. Some episodes start it already cracked so it gets plenty of practice running.
+- **Curriculum:** the trainer config ramps the hunter's skill from clumsy to good, and starts with more pre-cracked episodes.
+- **Training:** PPO, 3x256 network, normalised inputs, LSTM memory, set to 6M steps. The `stillwalker02` run was stopped at about 2.74M steps. Its checkpoints, TensorBoard logs and config are in `results/stillwalker02`, and the model the game uses is `Assets/Enemies/Stillwalker/Stillwalker.onnx`.
 
-If no model is assigned, or the ML-Agents package isn't installed, the Stillwalker falls back to the utility brain.
+The old `stillwalker01` model (15 observations) won't load with this version. If a model doesn't match, the agent logs a warning, switches itself off, and the Stillwalker uses the hand-written rules until a retrained model is assigned. The same happens with no model at all, or without the ML-Agents package.
 
 ```bash
-mlagents-learn Assets/Scripts/AI/Stillwalker/Training/stillwalker.yaml --run-id=stillwalker01
+mlagents-learn Assets/Scripts/AI/Stillwalker/Training/stillwalker.yaml --run-id=stillwalker02
 ```
 
-Then press Play in `Stillwalker Training.unity`.
+Then press Play in `Stillwalker Training.unity`. More F8 recordings (different styles: careful, aggressive, lots of grappling) give it more players to learn from.
 
 ---
 

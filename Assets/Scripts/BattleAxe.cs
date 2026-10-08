@@ -80,6 +80,9 @@ public class BattleAxe : MonoBehaviour
     public LayerMask hitMask = 0;           // 0 = copy controller.groundMask
     public float swingRange = 3.2f;
     public float swingRadius = 0.4f;
+    [Tooltip("Live grenades within this angle of the swing get batted even if the swing missed them.")]
+    public float grenadeAssistAngle = 45f;
+    public float grenadeAssistExtraRange = 1f;
     public float castStartOffset = 0.25f;
 
     [Header("Mace Bounce")]
@@ -477,6 +480,15 @@ public class BattleAxe : MonoBehaviour
     {
         Vector3 origin = aimTransform.position + aimTransform.forward * castStartOffset;
         Vector3 dir = aimTransform.forward;
+
+        if (GruntGrenade.TryBat(aimTransform.position, dir, swingRange + castStartOffset + grenadeAssistExtraRange,
+                grenadeAssistAngle, out Vector3 batPoint))
+        {
+            hitRegistered = true;
+            punch = 1f;
+            AxeHit?.Invoke(batPoint, -dir, false);
+            return;
+        }
 
         RaycastHit[] hits = Physics.SphereCastAll(origin, swingRadius, dir, swingRange,
             hitMask, QueryTriggerInteraction.Ignore);

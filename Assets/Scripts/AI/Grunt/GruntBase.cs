@@ -46,6 +46,27 @@ public abstract class GruntBase : EnemyAgent, IZipTarget
     public float staggerTime = 1.1f;
     public float passThroughTime = 0.6f;
 
+    [Header("Zip Lock-On")]
+    [Tooltip("Grappling a Grunt makes him and his nearby squadmates snap-fire at you while you zip in.")]
+    public bool zipLockOn = true;
+    [Tooltip("Squadmates within this range of the zipped Grunt join in, if they can see you.")]
+    public float zipLockRange = 35f;
+    [Tooltip("Max Grunts helping the zipped one.")]
+    public int zipLockHelpers = 2;
+    [Tooltip("Delay before the first shot (min, max). This is your warning.")]
+    public Vector2 zipLockReaction = new Vector2(0.15f, 0.3f);
+    public int zipLockShots = 3;
+    public int zipLockHelperShots = 2;
+    public float zipLockInterval = 0.1f;
+    [Tooltip("Shot spread in degrees while locked on. Normal shots are several times wider.")]
+    public float zipLockSpread = 1.2f;
+
+    [Header("Grenade Panic")]
+    [Tooltip("Runs from live grenades that land within this many blast radii of him.")]
+    public float grenadeFearRadius = 1.3f;
+    [Tooltip("Seconds before he notices a grenade near him (min, max). Slow ones still get caught.")]
+    public Vector2 grenadeNoticeTime = new Vector2(0.2f, 0.6f);
+
     [Header("Awareness")]
     [Tooltip("Seconds of looking right at you before he's sure it's you: up close, and at the edge of his sight range.")]
     public float noticeTimeNear = 0.3f;
@@ -121,6 +142,19 @@ public abstract class GruntBase : EnemyAgent, IZipTarget
     float lastAxeTrail = -99f;
     float bodyFoundTime = -99f;
     Vector3 bodyFoundPos;
+
+    // zip lock-on, shared so a zip is only answered once per grunt
+    static int zipFrame = -1;
+    static int zipSerial;
+    static GruntBase zipTargetNow;
+    static int zipHelpersJoined;
+    int lockSerial = -1;
+    int lockShotsLeft;
+    float lockNextShot;
+    bool lockLaser;
+
+    GruntGrenade fleeingFrom;
+    float grenadeNoticeDelay = -1f;
 
     EQSItem pendingResult;
     bool waitingForQuery;
@@ -426,6 +460,7 @@ public abstract class GruntBase : EnemyAgent, IZipTarget
     {
         staggered.OnEnter = () =>
         {
+            ClearMoveOverride();
             StopMoving();
             ReleaseShootToken();
             SetLaser(false);
@@ -767,6 +802,8 @@ public abstract class GruntBase : EnemyAgent, IZipTarget
             gunPivot.rotation = Quaternion.Slerp(gunPivot.rotation, look, 1f - Mathf.Exp(-18f * Time.deltaTime));
         }
 
+        TickZipLock();
+        TickGrenadePanic();
         AnimFloat("Speed", Velocity.magnitude);
         Footsteps();
 
@@ -800,6 +837,170 @@ public abstract class GruntBase : EnemyAgent, IZipTarget
     }
 
     protected virtual Quaternion VisualWobble() => Quaternion.identity;
+
+    // ---------------------------------------------------------------- grenade panic
+
+    void TickGrenadePanic()
+    {
+        GruntGrenade g = NearestThreat();
+        if (g == null || Brain.IsInState(StaggerState))
+        {
+            grenadeNoticeDelay = -1f;
+            if (fleeingFrom != null && fleeingFrom != g) ClearMoveOverride();
+            fleeingFrom = null;
+            return;
+        }
+
+        if (g == fleeingFrom) return;
+
+        if (grenadeNoticeDelay < 0f) grenadeNoticeDelay = Random.Range(grenadeNoticeTime.x, grenadeNoticeTime.y);
+        if (g.Age < grenadeNoticeDelay) return;
+
+        Vector3? spot = EscapeFrom(g);
+        if (spot == null) return;
+
+        fleeingFrom = g;
+        OverrideMove(spot.Value, runSpeed * 1.2f, g.FuseLeft + 0.2f);
+        director.Say(this, "GRENADE!", "grenade");
+    }
+
+    GruntGrenade NearestThreat()
+    {
+        GruntGrenade best = null;
+        float bestDist = float.MaxValue;
+        foreach (GruntGrenade g in GruntGrenade.Live)
+        {
+            // a batted one is your payoff, they don't get to dodge it
+            if (g == null || !g.HurtsGrunts || g.Batted) continue;
+            Vector3 d = g.transform.position - transform.position;
+            d.y = 0f;
+            float dist = d.magnitude;
+            if (dist < g.Radius * grenadeFearRadius && dist < bestDist)
+            {
+                bestDist = dist;
+                best = g;
+            }
+        }
+        return best;
+    }
+
+    Vector3? EscapeFrom(GruntGrenade g)
+    {
+        Vector3 away = transform.position - g.transform.position;
+        away.y = 0f;
+        if (away.sqrMagnitude < 0.01f) away = -transform.forward;
+        away.Normalize();
+
+        float want = g.Radius * 1.6f;
+        foreach (float angle in new[] { 0f, 40f, -40f, 80f, -80f })
+        {
+            Vector3 p = g.transform.position + Quaternion.Euler(0f, angle, 0f) * away * want;
+            if (NavMesh.SamplePosition(p, out NavMeshHit hit, 3f, NavMesh.AllAreas)) return hit.position;
+        }
+        return null;
+    }
+
+    // ---------------------------------------------------------------- zip lock-on
+
+    static void TrackZip(Grappling g)
+    {
+        if (zipFrame == Time.frameCount) return;
+        zipFrame = Time.frameCount;
+
+        GruntBase t = g != null && g.IsZipping ? g.ZipTarget as GruntBase : null;
+        if (t != null && t != zipTargetNow)
+        {
+            zipSerial++;
+            zipHelpersJoined = 0;
+        }
+        zipTargetNow = t;
+    }
+
+    // a zip into a Grunt is easy to see coming and dead straight, so they get very good at shooting it
+    void TickZipLock()
+    {
+        TrackZip(director != null ? director.Grapple : null);
+        GruntBase target = zipTargetNow;
+
+        if (target == null || target.IsDead)
+        {
+            EndZipLock();
+            return;
+        }
+
+        if (lockSerial != zipSerial)
+        {
+            lockSerial = zipSerial;
+            lockShotsLeft = 0;
+            if (!JoinZipLock(target)) return;
+
+            lockShotsLeft = target == this ? zipLockShots : zipLockHelperShots;
+            lockNextShot = Time.time + Random.Range(zipLockReaction.x, zipLockReaction.y);
+            Awareness = 1f;
+            SpottedAt = Time.time;
+            lastStimulus = Time.time;
+
+            if (!laserOn)
+            {
+                SetLaser(true);
+                lockLaser = true;
+            }
+            EnemySounds.PlayAt(chargeSound != null ? chargeSound : EnemySounds.LaserCharge, muzzle.position, 1f, 1.3f);
+            if (target == this) director.Say(this, Random.value < 0.5f ? "I SEE YOU!" : "COME ON THEN!", "ziplock");
+        }
+
+        if (lockShotsLeft <= 0) return;
+        if (Brain.IsInState(StaggerState) || zipDodging)
+        {
+            EndZipLock();
+            return;
+        }
+
+        aiming = true;
+        AimPoint = ZipLead();
+        FaceTowards(player.Center, turnSpeed * 2f);
+        if (lockLaser)
+        {
+            laser.startWidth = 0.05f;
+            laser.endWidth = 0.025f;
+            laser.startColor = laser.endColor = new Color(1f, 0.1f, 0.05f, 1f);
+        }
+
+        if (Time.time < lockNextShot) return;
+        Fire((AimPoint - muzzle.position).normalized, zipLockSpread);
+        lockShotsLeft--;
+        lockNextShot = Time.time + zipLockInterval;
+        if (lockShotsLeft <= 0) EndZipLock();
+    }
+
+    bool JoinZipLock(GruntBase target)
+    {
+        if (!zipLockOn || !PlayerVisible || muzzle == null) return false;
+        if (Brain.IsInState(StaggerState)) return false;
+        if (target == this) return true;
+
+        bool mate = Squad != null && Squad == target.Squad;
+        if (!mate && Vector3.Distance(transform.position, target.transform.position) > zipLockRange) return false;
+        if (zipHelpersJoined >= target.zipLockHelpers) return false;
+        zipHelpersJoined++;
+        return true;
+    }
+
+    void EndZipLock()
+    {
+        lockShotsLeft = 0;
+        if (!lockLaser) return;
+        lockLaser = false;
+        SetLaser(false);
+    }
+
+    // first order lead is enough, the zip is a straight line at a steady speed
+    Vector3 ZipLead()
+    {
+        Vector3 from = muzzle.position;
+        float t = Vector3.Distance(from, player.Center) / Mathf.Max(1f, bulletSpeed);
+        return player.Center + player.Velocity * t;
+    }
 
     // ---------------------------------------------------------------- zip impact
 
@@ -858,6 +1059,10 @@ public abstract class GruntBase : EnemyAgent, IZipTarget
     public override void ResetAgent()
     {
         laserOn = false;
+        lockLaser = false;
+        lockShotsLeft = 0;
+        fleeingFrom = null;
+        grenadeNoticeDelay = -1f;
         freshContact = true;
         warningShotDue = false;
         staggerTilt = 0f;

@@ -8,11 +8,11 @@ using UnityEngine.InputSystem;
 
 // Tracks the player's movement for the AI: prediction, landing point, how predictable
 // they're moving, landings and noises. F8 records runs to CSV, which the Stillwalker
-// training scene plays back as a fake player.
+// training scene plays back as a fake player. Scripted mode lets a training bot drive it.
 [DefaultExecutionOrder(50)]
 public class PlayerMotionTracker : MonoBehaviour
 {
-    public enum Mode { Live, Playback }
+    public enum Mode { Live, Playback, Scripted }
 
     [Header("Mode")]
     public Mode mode = Mode.Live;
@@ -108,6 +108,8 @@ public class PlayerMotionTracker : MonoBehaviour
     float playbackTime;
     Vector3 playbackOrigin;
 
+    Sample scripted;
+
     public static PlayerMotionTracker Find()
     {
         PlayerMotionTracker t = FindFirstObjectByType<PlayerMotionTracker>();
@@ -136,6 +138,7 @@ public class PlayerMotionTracker : MonoBehaviour
         else
         {
             LoadPlayback();
+            scripted = CurrentPlaybackSample();
         }
 
         SampleNow();
@@ -230,7 +233,7 @@ public class PlayerMotionTracker : MonoBehaviour
         }
         else
         {
-            s = CurrentPlaybackSample();
+            s = mode == Mode.Scripted ? scripted : CurrentPlaybackSample();
             FeetOffset = playbackFeetOffset;
             CameraPosition = s.center + Vector3.up * 0.6f;
         }
@@ -482,6 +485,27 @@ public class PlayerMotionTracker : MonoBehaviour
         playbackData = data;
         LoadPlayback();
         RestartPlayback(0f);
+    }
+
+    // Scripted mode: call before this FixedUpdate runs (execution order 50) to set where the fake player is
+    public void Drive(Vector3 center, Vector3 velocity, Flags flags, Vector3 camForward)
+    {
+        scripted = new Sample { center = center, velocity = velocity, flags = flags, camForward = camForward };
+        transform.position = center;
+    }
+
+    // where the recording is right now, even before the next FixedUpdate samples it
+    public Vector3 PlaybackCenter => CurrentPlaybackSample().center;
+
+    // swaps between replaying a recording and being driven, keeping the current spot
+    public void SetScripted(bool on)
+    {
+        Mode want = on ? Mode.Scripted : Mode.Playback;
+        if (mode == want) return;
+        scripted = new Sample { center = Center, velocity = Velocity, flags = State, camForward = CameraForward };
+        mode = want;
+        history.Clear();
+        GroundedTime = AirTime = StationaryTime = 0f;
     }
 
     public void RestartPlayback(float normalized)

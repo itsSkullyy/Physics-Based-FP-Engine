@@ -34,6 +34,14 @@ public class GruntGrenade : MonoBehaviour
     Material mat;
     Vector3 baseScale;
 
+    // live grenades, so Grunts can get away from them
+    public static readonly List<GruntGrenade> Live = new List<GruntGrenade>();
+    public float FuseLeft => fuseLeft;
+    public float Radius => settings.radius;
+    public bool HurtsGrunts => settings.hurtsGrunts && !exploded;
+    public bool Batted => batted;
+    public float Age { get; private set; }
+
     public static GruntGrenade Spawn(Vector3 position, Vector3 velocity, GruntBase thrower, Settings settings)
     {
         if (cubeMesh == null)
@@ -82,6 +90,7 @@ public class GruntGrenade : MonoBehaviour
         fuseLeft = s.fuse;
         thrower = owner;
         baseScale = transform.localScale;
+        Live.Add(this);
 
         mat = EnemyVisuals.Unlit(BodyColor);
         mr.sharedMaterial = mat;
@@ -101,6 +110,7 @@ public class GruntGrenade : MonoBehaviour
     {
         if (exploded) return;
 
+        Age += Time.deltaTime;
         fuseLeft -= Time.deltaTime;
         if (fuseLeft <= 0f)
         {
@@ -122,6 +132,8 @@ public class GruntGrenade : MonoBehaviour
         EnemyVisuals.SetColor(mat, lit ? BlinkColor : BodyColor);
         transform.localScale = baseScale * (lit ? 1.25f : 1f);
     }
+
+    void OnDestroy() => Live.Remove(this);
 
     // ---------------------------------------------------------------- batting it back
 
@@ -165,6 +177,31 @@ public class GruntGrenade : MonoBehaviour
         EnemySounds.PlayAt(EnemySounds.Ricochet, transform.position, 1f, 0.8f);
     }
 
+    // Swing assist: bats a live grenade roughly in front of the swing even if the sphere cast
+    // missed it, since a small cube rolling at your feet is hard to hit exactly.
+    public static bool TryBat(Vector3 origin, Vector3 dir, float range, float maxAngle, out Vector3 point)
+    {
+        point = origin;
+        GruntGrenade best = null;
+        float bestDist = float.MaxValue;
+        foreach (GruntGrenade g in Live)
+        {
+            if (g == null || g.exploded) continue;
+            Vector3 to = g.transform.position - origin;
+            float dist = to.magnitude;
+            if (dist > range || dist >= bestDist) continue;
+            if (Vector3.Angle(dir, to) > maxAngle) continue;
+            if (!Clear(origin, g.transform.position)) continue;
+            best = g;
+            bestDist = dist;
+        }
+        if (best == null) return false;
+
+        point = best.transform.position;
+        best.OnAxeHit(point);
+        return true;
+    }
+
     // nearest grunt, favouring ones in front of the camera
     static GruntBase NearestGrunt(Vector3 camPos, Vector3 camFwd)
     {
@@ -206,6 +243,7 @@ public class GruntGrenade : MonoBehaviour
     {
         if (exploded) return;
         exploded = true;
+        Live.Remove(this);
 
         Vector3 pos = transform.position;
         float r = settings.radius;

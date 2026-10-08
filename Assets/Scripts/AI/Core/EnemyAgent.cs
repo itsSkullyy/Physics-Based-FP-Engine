@@ -263,6 +263,7 @@ public abstract class EnemyAgent : MonoBehaviour
     {
         if (IsDead) return;
         IsDead = true;
+        overrideMoveUntil = -1f;
         StopMoving();
 
         OnDeath(hit);
@@ -302,6 +303,7 @@ public abstract class EnemyAgent : MonoBehaviour
         PlayerVisible = false;
         Board.Clear();
         fallbackMoving = false;
+        overrideMoveUntil = -1f;
 
         ragdoll.Restore(spawnPos, spawnRot);
         SetPlayerCollision(true);
@@ -340,8 +342,22 @@ public abstract class EnemyAgent : MonoBehaviour
 
     public Vector3 Velocity => NavReady ? nav.velocity : fallbackVelocity;
 
+    // while set, normal MoveTo/StopMoving calls are ignored (running from a grenade)
+    float overrideMoveUntil = -1f;
+    protected bool MoveOverridden => Time.time < overrideMoveUntil;
+
+    protected void OverrideMove(Vector3 point, float speed, float seconds)
+    {
+        overrideMoveUntil = -1f;
+        MoveTo(point, speed);
+        overrideMoveUntil = Time.time + seconds;
+    }
+
+    protected void ClearMoveOverride() => overrideMoveUntil = -1f;
+
     public void MoveTo(Vector3 point, float speed)
     {
+        if (MoveOverridden) return;
         if (NavReady)
         {
             nav.isStopped = false;
@@ -364,6 +380,7 @@ public abstract class EnemyAgent : MonoBehaviour
 
     public void StopMoving()
     {
+        if (MoveOverridden) return;
         fallbackMoving = false;
         fallbackVelocity = Vector3.zero;
         if (NavReady)

@@ -117,6 +117,8 @@ public static class BB
     public const string LandedAt      = "LandedAt";
     public const string StalkTarget   = "StalkTarget";
     public const string LaunchTarget  = "LaunchTarget";
+    public const string AmbushPos     = "AmbushPos";
+    public const string PathDistance  = "PathDistance";
 
     // Squad board (one per Grunt leader)
     public const string SquadOrder    = "SquadOrder";

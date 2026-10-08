@@ -173,12 +173,36 @@ public class AIDebugMenu : MonoBehaviour
         Stillwalker nearest = walkers[0];
         foreach (Stillwalker s in walkers)
             if (Distance(s) < Distance(nearest)) nearest = s;
-        GUILayout.Label($"Nearest: {nearest.name} ({Distance(nearest):0}m)");
+        GUILayout.Label($"Nearest: {nearest.name} ({Distance(nearest):0}m, {nearest.PathDist:0}m walking)");
+        GUILayout.Label($"State: {nearest.DebugState}   intent: {nearest.DebugIntent}");
+        GUILayout.Label("Steering: " + (nearest.DebugModelSteering ? "trained model" : "rules (" + nearest.DebugWhyRules + ")"));
+        GUILayout.Label($"Unseen build-up {nearest.DebugTension01 * 100f:0}%  wants to be {nearest.DebugWantDistance:0.0}m away");
+        GUILayout.Label("Ambush: " + nearest.DebugAmbush);
 
         GUILayout.BeginHorizontal();
+        if (GUILayout.Button("Wake up")) { nearest.DebugWake(); Report("It's awake. It knows where you are now."); }
         if (GUILayout.Button("Launch at me")) { nearest.DebugLaunch(); Report("Launch!"); }
+        GUILayout.EndHorizontal();
+
+        GUILayout.BeginHorizontal();
+        if (GUILayout.Button("Max creep-in")) { nearest.DebugMaxTension(); Report("Full build-up: it creeps to 5m and pounces when you look away."); }
+        if (GUILayout.Button("Ambush where I'm looking"))
+        {
+            Vector3 at = LookPointOr(d.Player.Feet + d.Player.CameraForward * 15f);
+            Report(nearest.DebugAmbushAt(at)
+                ? "It's heading for a hiding spot near there. Look away, then walk over."
+                : "No hiding spot near there that's out of your sight. Try looking at a corner.");
+        }
+        GUILayout.EndHorizontal();
+
+        GUILayout.BeginHorizontal();
+        if (GUILayout.Button("Creep sound")) { nearest.DebugCreepCue(); Report("Scrape."); }
+        if (GUILayout.Button("Crack")) { nearest.DebugCrack(); Report($"Cracked ({nearest.Cracks}/{nearest.cracksToShatter})."); }
         if (GUILayout.Button("Shatter")) { nearest.DebugShatter(); Report("Shattered."); }
         GUILayout.EndHorizontal();
+
+        GUILayout.Label("Its intents (forced for 6s, rules drive, look away to see them)");
+        Grid(nearest.IntentNames, n => { nearest.DebugForceIntent(n); Report("Forcing " + n + "."); });
 
         bool ignore = GUILayout.Toggle(nearest.DebugIgnorePolicy, " Ignore trained model (hand-written stalking)");
         if (ignore != nearest.DebugIgnorePolicy)

@@ -45,6 +45,7 @@ Character: anything tall and thin. "Y Bot" or "X Bot" works well with the stone 
 | Stillwalker_Walk | zombie walk / creepy walk / stiff walk | yes |
 | Stillwalker_LungeWindup | crouch, ready / zombie scream (the 0.2s before a launch) | no |
 | Stillwalker_Lunge | jump attack / mutant jumping (the launch itself) | no |
+| Stillwalker_Dodge | dodge / quick step / hit reaction (the 0.18s sidestep or flinch) | no |
 
 The script freezes the animator the instant you look at it and speeds the walk up when it's catching up, so a slow, stiff walk reads best.
 
@@ -53,7 +54,7 @@ The script freezes the animator the instant you look at it and speeds the walk u
 1. Set each FBX's Rig to **Humanoid** (animations copy the avatar from the character).
 2. Make an Animator Controller per enemy. The scripts set these parameters (any that are missing are ignored):
    - Grunt: `Speed` (float), `Alert`, `Aiming`, `Panic` (bools), `Fire`, `Stagger`, `Dive`, `Throw` (triggers)
-   - Stillwalker: `Speed` (float), `LungeWindup`, `Lunge` (triggers)
+   - Stillwalker: `Speed` (float), `LungeWindup`, `Lunge`, `Dodge` (triggers)
 3. Drop the character under the enemy as a child called `Model`, give it the controller, and turn off the `Placeholder` child.
 4. For ragdoll deaths, select the Model and use **GameObject > 3D Object > Ragdoll...**. `EnemyRagdoll` picks up the bones by itself.
 

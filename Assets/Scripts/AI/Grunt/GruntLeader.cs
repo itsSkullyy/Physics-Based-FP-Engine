@@ -66,10 +66,13 @@ public class GruntLeader : GruntBase
     public float grenadeMinRange = 7f;
     public float grenadeMaxRange = 30f;
     public float throwWindup = 0.45f;
-    public float grenadeFuse = 2.4f;
+    [Tooltip("Long enough to run up and bat it back with the axe.")]
+    public float grenadeFuseTime = 4f;
     public float grenadeRadius = 5f;
     public float grenadeDamage = 45f;
     public bool grenadeHurtsGrunts = true;
+    [Tooltip("Won't throw while you're closing in on him faster than this.")]
+    public float grenadeRushSpeed = 9f;
 
     public float LastGrenadeTime { get; private set; } = -99f;
     public bool GrenadeReady => !IsDead && Time.time >= nextGrenadeTime;
@@ -936,6 +939,13 @@ public class GruntLeader : GruntBase
             return false;
         }
 
+        // never at his own feet, and not while you're rushing him (you'd be on top of him when it lands)
+        if (FlatDistance(target, transform.position) < grenadeRadius * 1.3f || PlayerRushing())
+        {
+            grenadeBlockedUntil = Time.time + 1f;
+            return false;
+        }
+
         Vector3 origin = HandPosition;
         float baseTime = Mathf.Clamp(Vector3.Distance(origin, target) / 14f, 0.7f, 1.6f);
         foreach (float mult in new[] { 1f, 1.35f, 1.75f, 2.2f })
@@ -973,14 +983,39 @@ public class GruntLeader : GruntBase
         return true;
     }
 
+    float FlatDistance(Vector3 a, Vector3 b)
+    {
+        a.y = b.y = 0f;
+        return Vector3.Distance(a, b);
+    }
+
+    bool PlayerRushing()
+    {
+        Vector3 to = transform.position - player.Center;
+        to.y = 0f;
+        float dist = to.magnitude;
+        if (dist > grenadeMinRange * 2f) return false;
+        float closing = Vector3.Dot(player.Velocity, to / Mathf.Max(0.01f, dist));
+        return closing > grenadeRushSpeed;
+    }
+
     void ThrowGrenade()
     {
         thrown = true;
+
+        // you closed in during the windup, keep the pin in
+        if (FlatDistance(player.Center, transform.position) < grenadeRadius * 1.2f || PlayerRushing())
+        {
+            nextGrenadeTime = Time.time + 1.5f;
+            director.Say(this, "TOO CLOSE!", "frag-abort");
+            return;
+        }
+
         LastGrenadeTime = Time.time;
         nextGrenadeTime = Time.time + grenadeInterval * Random.Range(0.85f, 1.3f);
         GruntGrenade.Spawn(HandPosition, grenadeVelocity, this, new GruntGrenade.Settings
         {
-            fuse = grenadeFuse,
+            fuse = grenadeFuseTime,
             radius = grenadeRadius,
             maxDamage = grenadeDamage,
             minDamage = grenadeDamage * 0.2f,

@@ -17,6 +17,10 @@ public class PlayerJuice : MonoBehaviour
     public bool landDust = true;
     public float landMinSpeed = 4f;
     public float landBigSpeed = 24f;
+    [Tooltip("Shake, kick and FOV punch only start above this fall speed. Dust still uses landMinSpeed.")]
+    public float landShakeMinSpeed = 14f;
+    public float landShakeFullSpeed = 32f;
+    [Range(0f, 1f)] public float fastLandingShakeKeep = 0.3f;
     public float landShake = 0.4f;
     public float landFovPunch = -2.5f;
     public Vector3 landKick = new Vector3(0f, -0.05f, 0f);
@@ -194,11 +198,13 @@ public class PlayerJuice : MonoBehaviour
             if (landDust && fx != null && TryGetGround(out Vector3 point, out Vector3 normal))
                 fx.LandDust(point, normal, strength);
 
-            if (shaker != null)
+            float hard = Mathf.InverseLerp(landShakeMinSpeed, landShakeFullSpeed, lastFallSpeed);
+            hard *= FirstPersonCameraRig.LandingSoftness(controller, fastLandingShakeKeep);
+            if (shaker != null && hard > 0f)
             {
-                shaker.AddTrauma(landShake * strength);
-                shaker.AddKick(landKick * strength, new Vector3(2.5f * strength, 0f, 0f));
-                shaker.AddFovPunch(landFovPunch * strength);
+                shaker.AddTrauma(landShake * hard);
+                shaker.AddKick(landKick * hard, new Vector3(2.5f * hard, 0f, 0f));
+                shaker.AddFovPunch(landFovPunch * hard);
             }
         }
 
