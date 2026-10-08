@@ -19,8 +19,14 @@ public static class GamepadMenu
     /// the menu lays its buttons out vertically or horizontally.
     public static void Poll(ref int selected, int count)
     {
-        if (count <= 0) return;
-        if (pollFrame == Time.frameCount) return;
+        if (count <= 0)
+        {
+            return;
+        }
+        if (pollFrame == Time.frameCount)
+        {
+            return;
+        }
         pollFrame = Time.frameCount;
 
         Gamepad pad = Gamepad.current;
@@ -34,19 +40,31 @@ public static class GamepadMenu
             backward |= kb[Key.DownArrow].wasPressedThisFrame || kb[Key.LeftArrow].wasPressedThisFrame;
         }
 
-        if (forward) selected = (selected + 1) % count;
-        else if (backward) selected = (selected - 1 + count) % count;
+        if (forward)
+        {
+            selected = (selected + 1) % count;
+        }
+        else if (backward)
+        {
+            selected = (selected - 1 + count) % count;
+        }
     }
 
     /// True on the first call this frame if confirm (gamepad South / A / Cross, or
     /// keyboard Enter) is pressed.
     public static bool Confirm()
     {
-        if (confirmFrame == Time.frameCount) return false;
+        if (confirmFrame == Time.frameCount)
+        {
+            return false;
+        }
         confirmFrame = Time.frameCount;
 
         Gamepad pad = Gamepad.current;
-        if (pad != null && pad.buttonSouth.wasPressedThisFrame) return true;
+        if (pad != null && pad.buttonSouth.wasPressedThisFrame)
+        {
+            return true;
+        }
 
         Keyboard kb = Keyboard.current;
         return kb != null && (kb[Key.Enter].wasPressedThisFrame || kb[Key.NumpadEnter].wasPressedThisFrame);

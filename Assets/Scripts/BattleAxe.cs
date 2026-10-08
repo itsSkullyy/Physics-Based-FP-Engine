@@ -213,7 +213,10 @@ public class BattleAxe : MonoBehaviour
 
     void Awake()
     {
-        if (controller == null) controller = GetComponentInParent<FirstPersonCharacterController>();
+        if (controller == null)
+        {
+            controller = GetComponentInParent<FirstPersonCharacterController>();
+        }
         if (controller == null)
         {
             Debug.LogError("BattleAxe needs a FirstPersonCharacterController.", this);
@@ -221,24 +224,55 @@ public class BattleAxe : MonoBehaviour
             return;
         }
 
-        if (playerBody == null) playerBody = controller.GetComponent<Rigidbody>();
-        if (input == null) input = PlayerInputRouter.Resolve(this);
-        if (aimTransform == null) aimTransform = controller.cameraTransform;
-        if (aimTransform == null) aimTransform = transform;
-        if (grappling == null) grappling = controller.GetComponent<Grappling>();
-        if (hitMask == 0) hitMask = controller.groundMask;
+        FindReferences();
+        CacheVisuals();
+        CacheRestPose();
+    }
 
-        playerColliders = controller.GetComponentsInChildren<Collider>(true);
-
-        if (axeVisual != null)
+    // everything it can work out from the player if it wasn't set in the inspector
+    void FindReferences()
+    {
+        if (playerBody == null)
         {
-            visualRenderers = axeVisual.GetComponentsInChildren<Renderer>(true);
-
-            if (axeVisual == transform)
-                Debug.LogWarning("BattleAxe: axeVisual is this same GameObject. That works, but " +
-                                 "a child object holding just the model is cleaner.", this);
+            playerBody = controller.GetComponent<Rigidbody>();
+        }
+        if (input == null)
+        {
+            input = PlayerInputRouter.Resolve(this);
+        }
+        if (aimTransform == null)
+        {
+            aimTransform = controller.cameraTransform != null ? controller.cameraTransform : transform;
+        }
+        if (grappling == null)
+        {
+            grappling = controller.GetComponent<Grappling>();
+        }
+        if (hitMask == 0)
+        {
+            hitMask = controller.groundMask;
         }
 
+        playerColliders = controller.GetComponentsInChildren<Collider>(true);
+    }
+
+    void CacheVisuals()
+    {
+        if (axeVisual == null)
+        {
+            return;
+        }
+
+        visualRenderers = axeVisual.GetComponentsInChildren<Renderer>(true);
+        if (axeVisual == transform)
+        {
+            Debug.LogWarning("BattleAxe: axeVisual is this same GameObject. That works, but " +
+                             "a child object holding just the model is cleaner.", this);
+        }
+    }
+
+    void CacheRestPose()
+    {
         basePos = transform.localPosition;
         baseRot = transform.localRotation;
         idlePos = basePos;
@@ -247,7 +281,10 @@ public class BattleAxe : MonoBehaviour
 
     public void SetEquipped(bool value)
     {
-        if (equipped == value) return;
+        if (equipped == value)
+        {
+            return;
+        }
         equipped = value;
 
         if (!equipped)
@@ -281,7 +318,9 @@ public class BattleAxe : MonoBehaviour
         ApplyPose();
 
         if (controller.IsGrounded && !wasGrounded)
+        {
             airBounces = 0;
+        }
         wasGrounded = controller.IsGrounded;
     }
 
@@ -289,7 +328,10 @@ public class BattleAxe : MonoBehaviour
 
     void HandleInput()
     {
-        if (input == null) return;
+        if (input == null)
+        {
+            return;
+        }
 
         if (state == State.Thrown)
         {
@@ -297,7 +339,10 @@ public class BattleAxe : MonoBehaviour
             return;
         }
 
-        if (!equipped) return;
+        if (!equipped)
+        {
+            return;
+        }
 
         if (state == State.Windup)
         {
@@ -311,17 +356,27 @@ public class BattleAxe : MonoBehaviour
             return;
         }
 
-        if (state != State.Idle || !CanAct()) return;
+        if (state != State.Idle || !CanAct())
+        {
+            return;
+        }
 
         if (input.axeSwing.Pressed)
+        {
             StartWindup();
+        }
         else if (allowDedicatedThrowButton && input.axeThrow.Pressed)
+        {
             ThrowAxe(0f);
+        }
     }
 
     void UpdateWindupIntent()
     {
-        if (!enableChargeThrow) return;
+        if (!enableChargeThrow)
+        {
+            return;
+        }
 
         if (!input.axeSwing.Held)
         {
@@ -330,12 +385,17 @@ public class BattleAxe : MonoBehaviour
         }
 
         if (stateTimer >= Mathf.Max(0.01f, holdToChargeTime))
+        {
             BeginCharge();
+        }
     }
 
     void UpdateChargeIntent()
     {
-        if (input.axeSwing.Held) return;
+        if (input.axeSwing.Held)
+        {
+            return;
+        }
 
         if (charge01 < minChargeToThrow)
         {
@@ -417,7 +477,9 @@ public class BattleAxe : MonoBehaviour
                 swingRot = Quaternion.Slerp(poseFromRot, windQ, e);
 
                 if (!enableChargeThrow && t >= 1f)
+                {
                     BeginSwing();
+                }
                 break;
             }
             case State.Charging:
@@ -449,7 +511,9 @@ public class BattleAxe : MonoBehaviour
                 swingRot = Quaternion.Slerp(poseFromRot, impactQ, e);
 
                 if (!hitRegistered && t >= hitWindowStart && t <= hitWindowEnd)
+                {
                     TryHit();
+                }
 
                 if (t >= 1f)
                 {
@@ -499,15 +563,24 @@ public class BattleAxe : MonoBehaviour
 
         foreach (RaycastHit h in hits)
         {
-            if (IsPlayerCollider(h.collider)) continue;
-            if (h.distance >= bestDist) continue;
+            if (IsPlayerCollider(h.collider))
+            {
+                continue;
+            }
+            if (h.distance >= bestDist)
+            {
+                continue;
+            }
 
             best = h;
             bestDist = h.distance;
             found = true;
         }
 
-        if (!found) return;
+        if (!found)
+        {
+            return;
+        }
 
         hitRegistered = true;
         punch = 1f;
@@ -522,9 +595,13 @@ public class BattleAxe : MonoBehaviour
 
         bool bounced;
         if (brokenWall != null && smashOnBreakableWall)
+        {
             bounced = ApplySmashBoost(dir);
+        }
         else
+        {
             bounced = bounceOnHit && ApplyBounce(dir, normal);
+        }
 
         AxeHit?.Invoke(point, normal, bounced);
     }
@@ -536,36 +613,63 @@ public class BattleAxe : MonoBehaviour
 
     bool ApplyBounce(Vector3 aimDir, Vector3 normal)
     {
-        if (playerBody == null) return false;
-        if (!bounceWhenGrounded && controller.IsGrounded) return false;
+        if (playerBody == null)
+        {
+            return false;
+        }
+        if (!bounceWhenGrounded && controller.IsGrounded)
+        {
+            return false;
+        }
 
         if (maxAirBounces > 0 && !controller.IsGrounded)
         {
-            if (airBounces >= maxAirBounces) return false;
+            if (airBounces >= maxAirBounces)
+            {
+                return false;
+            }
             airBounces++;
         }
 
         if (grappling != null && bounceReleasesGrapple)
         {
-            if (grappling.IsZipping) grappling.StopZip();
-            if (grappling.IsSwinging) grappling.Detach(false);
+            if (grappling.IsZipping)
+            {
+                grappling.StopZip();
+            }
+            if (grappling.IsSwinging)
+            {
+                grappling.Detach(false);
+            }
         }
 
         Vector3 away = Vector3.Lerp(-aimDir, normal, surfaceNormalInfluence);
-        if (away.sqrMagnitude < 0.001f) away = normal;
+        if (away.sqrMagnitude < 0.001f)
+        {
+            away = normal;
+        }
         away.Normalize();
 
         Vector3 vel = playerBody.linearVelocity;
         float fall = Mathf.Max(0f, -vel.y);
 
         Vector3 v = vel * velocityKeep;
-        if (v.y < 0f) v.y = 0f;
+        if (v.y < 0f)
+        {
+            v.y = 0f;
+        }
 
         v += away * bounceSpeed;
         v.y += bounceUpSpeed + fall * fallToBounce;
 
-        if (v.y < minBounceUp) v.y = minBounceUp;
-        if (v.magnitude > maxBounceSpeed) v = v.normalized * maxBounceSpeed;
+        if (v.y < minBounceUp)
+        {
+            v.y = minBounceUp;
+        }
+        if (v.magnitude > maxBounceSpeed)
+        {
+            v = v.normalized * maxBounceSpeed;
+        }
 
         playerBody.linearVelocity = v;
         controller.SuppressJumpHold();
@@ -574,12 +678,21 @@ public class BattleAxe : MonoBehaviour
 
     bool ApplySmashBoost(Vector3 aimDir)
     {
-        if (playerBody == null) return false;
+        if (playerBody == null)
+        {
+            return false;
+        }
 
         if (grappling != null && bounceReleasesGrapple)
         {
-            if (grappling.IsZipping) grappling.StopZip();
-            if (grappling.IsSwinging) grappling.Detach(false);
+            if (grappling.IsZipping)
+            {
+                grappling.StopZip();
+            }
+            if (grappling.IsSwinging)
+            {
+                grappling.Detach(false);
+            }
         }
 
         Vector3 forward = aimDir.sqrMagnitude > 0.001f ? aimDir.normalized : transform.forward;
@@ -588,7 +701,10 @@ public class BattleAxe : MonoBehaviour
         v += forward * smashForwardSpeed;
         v.y = Mathf.Max(v.y, 0f) + smashUpSpeed;
 
-        if (v.magnitude > maxSmashSpeed) v = v.normalized * maxSmashSpeed;
+        if (v.magnitude > maxSmashSpeed)
+        {
+            v = v.normalized * maxSmashSpeed;
+        }
 
         playerBody.linearVelocity = v;
         controller.SuppressJumpHold();
@@ -597,11 +713,22 @@ public class BattleAxe : MonoBehaviour
 
     bool IsPlayerCollider(Collider c)
     {
-        if (c == null) return true;
-        if (playerBody != null && c.attachedRigidbody == playerBody) return true;
+        if (c == null)
+        {
+            return true;
+        }
+        if (playerBody != null && c.attachedRigidbody == playerBody)
+        {
+            return true;
+        }
 
         for (int i = 0; i < playerColliders.Length; i++)
-            if (playerColliders[i] == c) return true;
+        {
+            if (playerColliders[i] == c)
+            {
+                return true;
+            }
+        }
 
         return false;
     }
@@ -620,11 +747,16 @@ public class BattleAxe : MonoBehaviour
         Quaternion rot = Quaternion.LookRotation(aimTransform.forward, Vector3.up);
 
         ThrownAxe axe = SpawnThrownAxe(spawn, rot, speed);
-        if (axe == null) return;
+        if (axe == null)
+        {
+            return;
+        }
 
         Vector3 velocity = aimTransform.forward * speed + Vector3.up * up;
         if (playerBody != null)
+        {
             velocity += playerBody.linearVelocity * inheritPlayerVelocity;
+        }
 
         axe.Launch(velocity, spin, playerColliders, aimTransform.position);
 
@@ -638,7 +770,9 @@ public class BattleAxe : MonoBehaviour
         chargeFullFired = false;
 
         if (axeVisual != null)
+        {
             SetAxeVisible(false);
+        }
 
         AxeChargeReleased?.Invoke(charge);
         AxeThrown?.Invoke();
@@ -647,7 +781,9 @@ public class BattleAxe : MonoBehaviour
     ThrownAxe SpawnThrownAxe(Vector3 pos, Quaternion rot, float launchSpeed)
     {
         if (thrownAxePrefab != null)
+        {
             return Instantiate(thrownAxePrefab, pos, rot);
+        }
 
         if (axeVisual == null)
         {
@@ -663,10 +799,15 @@ public class BattleAxe : MonoBehaviour
         StripClone(go);
 
         ThrownAxe axe = go.GetComponent<ThrownAxe>();
-        if (axe == null) axe = go.AddComponent<ThrownAxe>();
+        if (axe == null)
+        {
+            axe = go.AddComponent<ThrownAxe>();
+        }
 
         if (go.GetComponentInChildren<Collider>() == null)
+        {
             AddFittedCollider(go);
+        }
 
         axe.stickMask = thrownStickMask;
         axe.stickToTriggers = stickToTriggers;
@@ -691,13 +832,22 @@ public class BattleAxe : MonoBehaviour
     static void StripClone(GameObject go)
     {
         foreach (MonoBehaviour mb in go.GetComponentsInChildren<MonoBehaviour>(true))
-            if (mb != null && !(mb is ThrownAxe)) Destroy(mb);
+        {
+            if (mb != null && !(mb is ThrownAxe))
+            {
+                Destroy(mb);
+            }
+        }
 
         foreach (Camera c in go.GetComponentsInChildren<Camera>(true))
+        {
             Destroy(c);
+        }
 
         foreach (AudioListener a in go.GetComponentsInChildren<AudioListener>(true))
+        {
             Destroy(a);
+        }
     }
 
     static void AddFittedCollider(GameObject go)
@@ -712,7 +862,9 @@ public class BattleAxe : MonoBehaviour
 
         Bounds b = renderers[0].bounds;
         for (int i = 1; i < renderers.Length; i++)
+        {
             b.Encapsulate(renderers[i].bounds);
+        }
 
         Vector3 scale = go.transform.lossyScale;
         box.center = go.transform.InverseTransformPoint(b.center);
@@ -735,7 +887,9 @@ public class BattleAxe : MonoBehaviour
         }
 
         if (activeAxe.IsRecalling)
+        {
             return;
+        }
 
         if (autoPickupOnContact && (!autoPickupOnlyWhenLoose || activeAxe.IsLoose))
         {
@@ -748,7 +902,10 @@ public class BattleAxe : MonoBehaviour
 
         if (zipPullsLooseAxe && activeAxe.IsLoose && input.grapplePull.Pressed && AimedAtLooseAxe())
         {
-            if (zipIgnoresRecallCooldown) activeAxe.ForceRecallReady();
+            if (zipIgnoresRecallCooldown)
+            {
+                activeAxe.ForceRecallReady();
+            }
             StartRecall();
             return;
         }
@@ -770,22 +927,31 @@ public class BattleAxe : MonoBehaviour
         }
 
         if (input.axePickup.Pressed && !inPickupRange && !activeAxe.RecallReady && logDebug)
+        {
             Debug.Log("[BattleAxe] Pickup pressed but not in range and recall on cooldown. " +
                       "Distance " + dist.ToString("0.00") + " / " + pickupDistance +
                       ", cooldown " + activeAxe.RecallCooldownProgress.ToString("0.00"), this);
+        }
 
         if (allowRemoteRecall && input.axeRecall.Pressed)
         {
             if (activeAxe.RecallReady)
+            {
                 StartRecall();
+            }
             else if (logDebug)
+            {
                 Debug.Log("[BattleAxe] Recall pressed but still on cooldown.", this);
+            }
         }
     }
 
     void StartRecall()
     {
-        if (activeAxe == null) return;
+        if (activeAxe == null)
+        {
+            return;
+        }
 
         Transform aimT = controller.transform;
         System.Func<Vector3> aimPoint = () =>
@@ -793,7 +959,10 @@ public class BattleAxe : MonoBehaviour
 
         activeAxe.Recall(aimT, recallCatchRadius, OnRecallCaught, aimPoint);
 
-        if (logDebug) Debug.Log("[BattleAxe] Axe recalled - flying back.", this);
+        if (logDebug)
+        {
+            Debug.Log("[BattleAxe] Axe recalled - flying back.", this);
+        }
     }
 
     void OnRecallCaught()
@@ -807,7 +976,9 @@ public class BattleAxe : MonoBehaviour
         {
             if (grappling != null && grappling.IsSwinging &&
                 Vector3.Distance(grappling.Anchor, activeAxe.transform.position) < grappleDetachRadius)
+            {
                 grappling.Detach(false);
+            }
 
             Destroy(activeAxe.gameObject);
             activeAxe = null;
@@ -826,33 +997,52 @@ public class BattleAxe : MonoBehaviour
         cooldownTimer = Mathf.Max(cooldownTimer, 0.1f);
 
         if (axeVisual != null)
+        {
             SetAxeVisible(equipped);
+        }
 
         AxeReturned?.Invoke();
 
-        if (logDebug) Debug.Log("[BattleAxe] Axe back in hand.", this);
+        if (logDebug)
+        {
+            Debug.Log("[BattleAxe] Axe back in hand.", this);
+        }
     }
 
     void SetAxeVisible(bool visible)
     {
-        if (axeVisual == null) return;
+        if (axeVisual == null)
+        {
+            return;
+        }
 
         if (visualRenderers == null || visualRenderers.Length == 0)
+        {
             visualRenderers = axeVisual.GetComponentsInChildren<Renderer>(true);
+        }
 
         if (visualRenderers != null && visualRenderers.Length > 0)
         {
             foreach (Renderer r in visualRenderers)
-                if (r != null) r.enabled = visible;
+            {
+                if (r != null)
+                {
+                    r.enabled = visible;
+                }
+            }
 
             if (visible && axeVisual != transform && !axeVisual.gameObject.activeSelf)
+            {
                 axeVisual.gameObject.SetActive(true);
+            }
 
             return;
         }
 
         if (axeVisual != transform)
+        {
             axeVisual.gameObject.SetActive(visible);
+        }
     }
 
     // ---------------------------------------------------------------- pose
@@ -902,9 +1092,15 @@ public class BattleAxe : MonoBehaviour
     {
         DrawCooldownRing();
 
-        if (equipped) DrawChargeMeter();
+        if (equipped)
+        {
+            DrawChargeMeter();
+        }
 
-        if (!showPickupPrompt || !inPickupRange || state != State.Thrown) return;
+        if (!showPickupPrompt || !inPickupRange || state != State.Thrown)
+        {
+            return;
+        }
 
         GUIStyle style = new GUIStyle(GUI.skin.label)
         {
@@ -920,15 +1116,30 @@ public class BattleAxe : MonoBehaviour
 
     void DrawCooldownRing()
     {
-        if (!showCooldownRing || state != State.Thrown) return;
-        if (activeAxe == null || !activeAxe.IsStuck || activeAxe.IsRecalling) return;
+        if (!showCooldownRing || state != State.Thrown)
+        {
+            return;
+        }
+        if (activeAxe == null || !activeAxe.IsStuck || activeAxe.IsRecalling)
+        {
+            return;
+        }
 
         Camera cam = aimTransform != null ? aimTransform.GetComponent<Camera>() : null;
-        if (cam == null) cam = Camera.main;
-        if (cam == null) return;
+        if (cam == null)
+        {
+            cam = Camera.main;
+        }
+        if (cam == null)
+        {
+            return;
+        }
 
         Vector3 sp = cam.WorldToScreenPoint(activeAxe.HeadPosition);
-        if (sp.z <= 0f) return;
+        if (sp.z <= 0f)
+        {
+            return;
+        }
 
         Vector2 center = new Vector2(sp.x, Screen.height - sp.y);
         float progress = activeAxe.RecallCooldownProgress;
@@ -938,7 +1149,9 @@ public class BattleAxe : MonoBehaviour
 
         float size = ringSize;
         if (ready)
+        {
             size *= 1f + Mathf.Sin(Time.time * ringReadyPulseSpeed) * 0.06f;
+        }
 
         Color old = GUI.color;
         Rect rect = new Rect(center.x - size * 0.5f, center.y - size * 0.5f, size, size);
@@ -985,7 +1198,10 @@ public class BattleAxe : MonoBehaviour
 
     void EnsureRingTex()
     {
-        if (ringFullTex != null && ringBackTex != null) return;
+        if (ringFullTex != null && ringBackTex != null)
+        {
+            return;
+        }
 
         int res = 128;
         float outer = res * 0.5f - 1f;
@@ -1021,7 +1237,10 @@ public class BattleAxe : MonoBehaviour
 
     void DrawChargeMeter()
     {
-        if (!showChargeMeter || state != State.Charging) return;
+        if (!showChargeMeter || state != State.Charging)
+        {
+            return;
+        }
 
         if (whiteTex == null)
         {
@@ -1057,14 +1276,20 @@ public class BattleAxe : MonoBehaviour
     {
         Vector3 to = activeAxe.HeadPosition - aimTransform.position;
         float dist = to.magnitude;
-        if (dist > zipPullRange || dist < 0.001f) return false;
+        if (dist > zipPullRange || dist < 0.001f)
+        {
+            return false;
+        }
 
         return Vector3.Angle(aimTransform.forward, to / dist) <= zipAimAngle;
     }
 
     void OnDrawGizmosSelected()
     {
-        if (aimTransform == null) return;
+        if (aimTransform == null)
+        {
+            return;
+        }
 
         Gizmos.color = Color.red;
         Vector3 origin = aimTransform.position + aimTransform.forward * castStartOffset;

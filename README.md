@@ -100,7 +100,7 @@ Running through is detected by a trigger the wall spawns just in front of itself
 
 ### Game feel
 
-`JuiceFX.cs`, `ImpactFrames.cs`, `Camerashaker.cs`, `Playerjuice.cs`
+`JuiceFX.cs`, `ImpactFrames.cs`, `CameraShaker.cs`, `PlayerJuice.cs`
 
 Every hit, landing and pickup goes through the same three things:
 
@@ -155,13 +155,13 @@ Enemies are built on a small set of AI systems written for this project, all in 
 | Behaviour trees | `BehaviourTree.cs` | Built in code (sequences, selectors, decorators, leaves). `OnStop` always runs when a node finishes, fails or gets aborted, so a leaf can always give back things it reserved like a shooting token or a cover spot. Trees can watch a blackboard key and restart when it changes. |
 | Blackboards | `Blackboard.cs` | Key/value memory that chains: follower → squad → global. Reads fall through to the parent board. Every key has a version number so trees can tell when a value changed. |
 | Utility AI | `UtilityBrain.cs` | Infinite axis utility. Each action has considerations that go through response curves and get multiplied together, with Dave Mark's compensation factor so actions with more considerations aren't unfairly scored lower. |
-| GOAP | `GoapPlanner.cs` | World state is a set of true/false facts packed into a 64-bit mask. A* searches over actions until the goal's facts are true. Each planned action runs as its own behaviour tree. |
+| GOAP | `GoapPlanner.cs` | World state is a set of true/false facts packed into a 64-bit mask. A* searches over actions until the goal's facts are true, with a heuristic that never overestimates so it finds the cheapest plan. Each planned action runs as its own behaviour tree. |
 | EQS | `EnvironmentQuery.cs` | Environment queries in the style of Unreal's EQS. Generate candidate points, run weighted tests on each, and pick the best. A negative score throws a point out completely. Queries are spread across frames. |
 | Tactical map | `TacticalMap.cs` | When a level loads it samples points across the NavMesh over a few frames and records low and high cover in 8 directions for each, how exposed the spot is, plus every grapple point and wall-run wall. Squads plan using this instead of raycasting everything live. |
 | AI director | `AIDirector.cs` | Shared state for all enemies: the global blackboard, noises, squads, shooting tokens so only a few enemies fire at once, claimed positions so two enemies don't pick the same spot, bodies, the thrown axe, and the F3/F4 debug overlays. Spawns itself when the first enemy needs it. |
 | Player tracker | `PlayerMotionTracker.cs` | Watches the player for the AI: predicted position, where a jump will land, how predictable the movement is, landings and noises. F8 records runs to CSV, which the training scene replays as a fake player. |
 
-`EnemyAgent` is the base class: health, hits from the axe (melee, thrown, deflected bullet, zip slide), sight and hearing checks, NavMesh movement, animator helpers, ragdoll on death and reset.
+`EnemyAgent` is the base class: health, hits from the axe (melee, thrown, deflected bullet, zip slide), sight and hearing checks, NavMesh movement, animator helpers, ragdoll on death and reset. It also catches enemies getting stuck: if one makes no progress along its path for 1.5 seconds it snaps back onto the NavMesh and re-paths, and if it's still stuck the move fails so the behaviour tree and utility AI pick something else. A path that can't reach its target counts as failed too, instead of the enemy standing at the end of it. The F3 overlay shows STUCK or how many times it got unstuck.
 
 ### Grunts
 
@@ -198,7 +198,7 @@ A stone figure that freezes as soon as you look at it. It counts as "seen" when 
 - While unseen it stalks you. It starts out about 12 m away and creeps closer the longer you go without looking at it, down to 5 m after 8 seconds. Spotting it knocks that build-up back by half. It moves faster while you're facing away or it's out of your sight, and if it falls far behind it runs to catch up.
 - When you're moving it looks a couple of seconds ahead along your route for a spot that's out of your sight, looks onto where you'll be, and that it can reach first (EQS AmbushPos). It runs there, goes still with its eyes dimmed, and jumps you when you come within 12 m.
 - If it creeps within 7 m without being seen it pounces, whether you've landed or not. The first time it gets within 9 m behind you there's a stone scrape, so a jump from behind is never silent.
-- When you land on the ground within 20 m, it winds up for 0.2 seconds and launches at where it predicts you'll be. A ring marks the landing spot. You can dodge it, but it's hard.
+- When you land on the ground within 20 m, it winds up for 0.2 seconds and launches at where it predicts you'll be. A ring marks the landing spot. You can dodge it, but it's hard. The jump is swept against the level before it leaves, so it stops short of walls and flattens out under low ceilings instead of flying through them.
 - Swinging the axe does nothing to it. It only cracks from a falling pogo hit or a thrown axe. Four cracks shatter it, and cracks heal if you leave it alone for 3 seconds.
 - Looking at it stops it walking, not reacting. A crack makes it jerk away from the hit even while you watch, then it retreats until the cracks heal. The more cracked it is, the further and faster it runs (24 / 32 / 40 m). It backs away facing you, steered by the ML policy or, without one, an EQS query that looks for a spot out of your sight. It only launches while retreating if you land within 6 m.
 - One hit from death it bolts: 18 m/s, keeps running even while you look at it, and never launches.

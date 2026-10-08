@@ -42,10 +42,15 @@ public abstract class BTNode
 
     public void Abort()
     {
-        if (!IsRunning) return;
+        if (!IsRunning)
+        {
+            return;
+        }
 
         foreach (BTNode c in Children)
+        {
             c.Abort();
+        }
 
         IsRunning = false;
         OnStop();
@@ -74,7 +79,12 @@ public abstract class BTComposite : BTNode
     protected void AbortAllExcept(int keep)
     {
         for (int i = 0; i < children.Count; i++)
-            if (i != keep) children[i].Abort();
+        {
+            if (i != keep)
+            {
+                children[i].Abort();
+            }
+        }
     }
 }
 
@@ -91,8 +101,14 @@ public class BTSequence : BTComposite
         while (index < children.Count)
         {
             BTStatus s = children[index].Tick();
-            if (s == BTStatus.Running) return BTStatus.Running;
-            if (s == BTStatus.Failure) return BTStatus.Failure;
+            if (s == BTStatus.Running)
+            {
+                return BTStatus.Running;
+            }
+            if (s == BTStatus.Failure)
+            {
+                return BTStatus.Failure;
+            }
             index++;
         }
         return BTStatus.Success;
@@ -119,9 +135,15 @@ public class BTSelector : BTComposite
         for (int i = start; i < children.Count; i++)
         {
             BTStatus s = children[i].Tick();
-            if (s == BTStatus.Failure) continue;
+            if (s == BTStatus.Failure)
+            {
+                continue;
+            }
 
-            if (reactive) AbortAllExcept(i);
+            if (reactive)
+            {
+                AbortAllExcept(i);
+            }
             index = i;
             return s;
         }
@@ -144,7 +166,10 @@ public class BTParallel : BTComposite
 
     protected override void OnStart()
     {
-        for (int i = 0; i < finished.Length; i++) finished[i] = false;
+        for (int i = 0; i < finished.Length; i++)
+        {
+            finished[i] = false;
+        }
     }
 
     protected override BTStatus OnTick()
@@ -161,7 +186,10 @@ public class BTParallel : BTComposite
             }
 
             BTStatus s = c.Tick();
-            if (s == BTStatus.Success) finished[i] = true;
+            if (s == BTStatus.Success)
+            {
+                finished[i] = true;
+            }
             if (s == BTStatus.Failure)
             {
                 AbortAllExcept(-1);
@@ -205,7 +233,10 @@ public class BTInverter : BTDecorator
     protected override BTStatus OnTick()
     {
         BTStatus s = child.Tick();
-        if (s == BTStatus.Running) return s;
+        if (s == BTStatus.Running)
+        {
+            return s;
+        }
         return s == BTStatus.Success ? BTStatus.Failure : BTStatus.Success;
     }
 }
@@ -270,13 +301,21 @@ public class BTObserver : BTDecorator
     bool Changed()
     {
         for (int i = 0; i < keys.Length; i++)
-            if (board.Version(keys[i]) != seen[i]) return true;
+        {
+            if (board.Version(keys[i]) != seen[i])
+            {
+                return true;
+            }
+        }
         return false;
     }
 
     void Snapshot()
     {
-        for (int i = 0; i < keys.Length; i++) seen[i] = board.Version(keys[i]);
+        for (int i = 0; i < keys.Length; i++)
+        {
+            seen[i] = board.Version(keys[i]);
+        }
     }
 }
 
@@ -292,10 +331,16 @@ public class BTCooldown : BTDecorator
 
     protected override BTStatus OnTick()
     {
-        if (Time.time < readyAt) return BTStatus.Failure;
+        if (Time.time < readyAt)
+        {
+            return BTStatus.Failure;
+        }
 
         BTStatus s = child.Tick();
-        if (s != BTStatus.Running) readyAt = Time.time + seconds;
+        if (s != BTStatus.Running)
+        {
+            readyAt = Time.time + seconds;
+        }
         return s;
     }
 }
@@ -340,11 +385,17 @@ public class BTRepeat : BTDecorator
     protected override BTStatus OnTick()
     {
         BTStatus s = child.Tick();
-        if (s == BTStatus.Failure) return BTStatus.Failure;
+        if (s == BTStatus.Failure)
+        {
+            return BTStatus.Failure;
+        }
         if (s == BTStatus.Success)
         {
             done++;
-            if (count >= 0 && done >= count) return BTStatus.Success;
+            if (count >= 0 && done >= count)
+            {
+                return BTStatus.Success;
+            }
         }
         return BTStatus.Running;
     }
@@ -430,12 +481,17 @@ public class BehaviourTree
             BTNode n = Root;
             while (n != null)
             {
-                if (sb.Length > 0) sb.Append('>');
+                if (sb.Length > 0)
+                {
+                    sb.Append('>');
+                }
                 sb.Append(n.Name);
 
                 BTNode next = null;
                 foreach (BTNode c in n.Children)
+                {
                     if (c.IsRunning) { next = c; break; }
+                }
                 n = next;
             }
             return sb.ToString();

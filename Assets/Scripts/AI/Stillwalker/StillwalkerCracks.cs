@@ -53,8 +53,14 @@ public class StillwalkerCracks : MonoBehaviour
 
     public void AddCrack(Vector3 worldPoint, int newLevel)
     {
-        if (bodyRoot == null) return;
-        if (healing) ClearLines();
+        if (bodyRoot == null)
+        {
+            return;
+        }
+        if (healing)
+        {
+            ClearLines();
+        }
 
         level = newLevel;
         healing = false;
@@ -62,20 +68,30 @@ public class StillwalkerCracks : MonoBehaviour
         flash = 1f;
 
         Vector3 start = bodyRoot.InverseTransformPoint(worldPoint);
-        if (!NearBody(start)) start = RandomSurfacePoint(0.45f, 0.85f);
+        if (!NearBody(start))
+        {
+            start = RandomSurfacePoint(0.45f, 0.85f);
+        }
 
         int segments = baseSegments + segmentsPerCrack * (level - 1);
         Grow(start, segments, 2);
 
         // one hit from death: it splits everywhere
         if (level >= maxLevel - 1)
+        {
             for (int i = 0; i < 4; i++)
+            {
                 Grow(RandomSurfacePoint(0.15f, 0.95f), segments, 1);
+            }
+        }
     }
 
     public void Heal()
     {
-        if (lines.Count == 0) return;
+        if (lines.Count == 0)
+        {
+            return;
+        }
         healing = true;
     }
 
@@ -90,27 +106,49 @@ public class StillwalkerCracks : MonoBehaviour
 
     void LateUpdate()
     {
-        if (lines.Count == 0 || mat == null) return;
-
-        if (healing)
+        if (lines.Count == 0 || mat == null)
         {
-            fade -= Time.deltaTime / Mathf.Max(0.01f, healFadeTime);
-            if (fade <= 0f)
-            {
-                Clear();
-                return;
-            }
+            return;
+        }
+        if (UpdateHealFade(Time.deltaTime))
+        {
+            return;
+        }
+        UpdateGlow(Time.deltaTime);
+    }
+
+    // cracks fade out once it starts healing. True once they're gone.
+    bool UpdateHealFade(float dt)
+    {
+        if (!healing)
+        {
+            return false;
         }
 
+        fade -= dt / Mathf.Max(0.01f, healFadeTime);
+        if (fade > 0f)
+        {
+            return false;
+        }
+
+        Clear();
+        return true;
+    }
+
+    // more cracks = brighter glow and a faster pulse, with a flicker at one hit from death
+    void UpdateGlow(float dt)
+    {
         float t = Mathf.InverseLerp(1f, maxLevel - 1, level);
         float pulseSpeed = Mathf.Lerp(minPulse, maxPulse, t);
         float pulse = 0.75f + 0.25f * Mathf.Sin(Time.time * pulseSpeed * Mathf.PI * 2f);
 
-        // last legs: uneven flicker on top of the pulse
-        if (level >= maxLevel - 1 && Random.value < 0.08f) pulse *= 0.4f;
+        if (level >= maxLevel - 1 && Random.value < 0.08f)
+        {
+            pulse *= 0.4f;
+        }
 
         float glow = Mathf.Lerp(minGlow, maxGlow, t) * pulse + flash * 4f;
-        flash = Mathf.Max(0f, flash - Time.deltaTime * 5f);
+        flash = Mathf.Max(0f, flash - dt * 5f);
 
         Color c = crackColor * glow * fade;
         c.a = 1f;
@@ -170,7 +208,9 @@ public class StillwalkerCracks : MonoBehaviour
 
         lr.positionCount = rootLocal.Count;
         for (int i = 0; i < rootLocal.Count; i++)
+        {
             lr.SetPosition(i, lineParent.InverseTransformPoint(bodyRoot.TransformPoint(rootLocal[i])));
+        }
 
         lines.Add(lr);
     }
@@ -178,13 +218,21 @@ public class StillwalkerCracks : MonoBehaviour
     void ClearLines()
     {
         foreach (LineRenderer lr in lines)
-            if (lr != null) Destroy(lr.gameObject);
+        {
+            if (lr != null)
+            {
+                Destroy(lr.gameObject);
+            }
+        }
         lines.Clear();
     }
 
     void OnDestroy()
     {
-        if (mat != null) Destroy(mat);
+        if (mat != null)
+        {
+            Destroy(mat);
+        }
     }
 
     // ---------------------------------------------------------------- capsule maths (root local)

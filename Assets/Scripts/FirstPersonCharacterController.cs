@@ -216,20 +216,43 @@ public class FirstPersonCharacterController : MonoBehaviour
 
     void Awake()
     {
-        if (input == null) input = PlayerInputRouter.Resolve(this);
+        if (input == null)
+        {
+            input = PlayerInputRouter.Resolve(this);
+        }
 
+        SetupRigidbody();
+        CheckCameraAnchor();
+        CacheStartingShape();
+        LockCursorIfWanted();
+    }
+
+    // one rigidbody pushed around in FixedUpdate, rotation is handled by the look code
+    void SetupRigidbody()
+    {
         rb = GetComponent<Rigidbody>();
         rb.freezeRotation = true;
         rb.useGravity = true;
         rb.interpolation = RigidbodyInterpolation.Interpolate;
         rb.collisionDetectionMode = CollisionDetectionMode.Continuous;
         yaw = transform.eulerAngles.y;
+    }
 
+    void CheckCameraAnchor()
+    {
         if (cameraTransform == null)
+        {
             Debug.LogError("cameraTransform not assigned. Assign the CameraAnchor empty.", this);
+        }
         else if (cameraTransform.GetComponent<Camera>() != null)
+        {
             Debug.LogWarning("cameraTransform is a real Camera. Assign the CameraAnchor empty instead.", this);
+        }
+    }
 
+    // standing capsule, camera and visual sizes, so crouching and sliding can go back to them
+    void CacheStartingShape()
+    {
         capsule = GetComponent<CapsuleCollider>();
         if (capsule != null)
         {
@@ -239,19 +262,25 @@ public class FirstPersonCharacterController : MonoBehaviour
         }
 
         if (cameraTransform != null)
+        {
             camStandLocalPos = cameraTransform.localPosition;
+        }
 
         if (characterVisual != null)
         {
             visualStartScale = characterVisual.localScale;
             visualStartLocalPos = characterVisual.localPosition;
         }
+    }
 
-        if (lockCursor)
+    void LockCursorIfWanted()
+    {
+        if (!lockCursor)
         {
-            Cursor.lockState = CursorLockMode.Locked;
-            Cursor.visible = false;
+            return;
         }
+        Cursor.lockState = CursorLockMode.Locked;
+        Cursor.visible = false;
     }
 
     void Update()
@@ -290,21 +319,32 @@ public class FirstPersonCharacterController : MonoBehaviour
         pitch = Mathf.Clamp(pitch - delta.y * mouseSensitivity, -maxLookAngle, maxLookAngle);
 
         if (cameraTransform != null)
+        {
             cameraTransform.rotation = Quaternion.Euler(pitch, yaw, 0f);
+        }
 
         if (characterVisual != null)
+        {
             characterVisual.rotation = Quaternion.Euler(0f, yaw, 0f);
+        }
     }
 
     void BufferJumpInput()
     {
-        if (input == null) return;
+        if (input == null)
+        {
+            return;
+        }
 
         if (input.jump.Pressed)
+        {
             jumpBufferCounter = jumpBufferTime;
+        }
 
         if (input.dart.Pressed)
+        {
             dartBufferCounter = dartInputBuffer;
+        }
 
         jumpHeld = input.jump.Held;
     }
@@ -345,8 +385,14 @@ public class FirstPersonCharacterController : MonoBehaviour
 
     void ApplyGroundStick()
     {
-        if (!isGrounded || isZipping || isVaulting || isWallRunning) return;
-        if (rb.linearVelocity.y > 2f) return;
+        if (!isGrounded || isZipping || isVaulting || isWallRunning)
+        {
+            return;
+        }
+        if (rb.linearVelocity.y > 2f)
+        {
+            return;
+        }
 
         rb.AddForce(-groundNormal * groundStickForce, ForceMode.Acceleration);
     }
@@ -360,7 +406,9 @@ public class FirstPersonCharacterController : MonoBehaviour
 
         Vector3 moveDir = wishDir;
         if (isGrounded && hasInput)
+        {
             moveDir = Vector3.ProjectOnPlane(wishDir, groundNormal).normalized;
+        }
 
         UpdateMomentum(hasInput, wishDir);
 
@@ -388,7 +436,9 @@ public class FirstPersonCharacterController : MonoBehaviour
         {
             float control = isGrounded ? 1f : airControl;
             if (isAirSliding)
+            {
                 control *= airSlideControlScale;
+            }
 
             float speedAlong = Vector3.Dot(horizVel, new Vector3(moveDir.x, 0f, moveDir.z).normalized);
 
@@ -402,14 +452,18 @@ public class FirstPersonCharacterController : MonoBehaviour
             Vector3 lateral = horizVel - Vector3.Project(horizVel, flatMove);
             float counter = isGrounded ? counterMovement : airCounterMovement;
             if (isAirSliding)
+            {
                 counter *= airSlideCounterScale;
+            }
             rb.AddForce(-lateral * counter, ForceMode.Acceleration);
 
             if (isGrounded)
             {
                 float overspeed = horizVel.magnitude - targetSpeed;
                 if (overspeed > 0f)
+                {
                     rb.AddForce(-horizVel.normalized * overspeed * overspeedDrag, ForceMode.Acceleration);
+                }
             }
         }
         else if (isGrounded)
@@ -430,7 +484,9 @@ public class FirstPersonCharacterController : MonoBehaviour
         {
             float alignment = Vector3.Dot(wishDir, lastMoveDir);
             if (alignment < 0f)
+            {
                 momentum += alignment * momentumDecayRate * Time.fixedDeltaTime;
+            }
 
             momentum += momentumBuildRate * Time.fixedDeltaTime;
             lastMoveDir = wishDir;
@@ -467,21 +523,34 @@ public class FirstPersonCharacterController : MonoBehaviour
         }
 
         if (!slideKey && isGrounded && !wasSliding)
+        {
             slideBoostGiven = false;
+        }
 
         if (!isSliding && (wasSliding || crouchedByObstruction))
+        {
             crouchedByObstruction = HasCeilingAbove();
+        }
     }
 
     void AlignSlideVelocityToGround()
     {
-        if (!isSliding || !isGrounded) return;
+        if (!isSliding || !isGrounded)
+        {
+            return;
+        }
 
         Vector3 vel = rb.linearVelocity;
-        if (vel.y > 0.5f) return;
+        if (vel.y > 0.5f)
+        {
+            return;
+        }
 
         Vector3 alongGround = Vector3.ProjectOnPlane(vel, groundNormal);
-        if (alongGround.sqrMagnitude < 0.01f) return;
+        if (alongGround.sqrMagnitude < 0.01f)
+        {
+            return;
+        }
 
         rb.linearVelocity = alongGround.normalized * vel.magnitude;
     }
@@ -497,7 +566,10 @@ public class FirstPersonCharacterController : MonoBehaviour
             rb.AddForce(downhill * slideSlopeAccel * (slopeAngle / maxSlopeAngle), ForceMode.Acceleration);
         }
 
-        if (!hasInput) return;
+        if (!hasInput)
+        {
+            return;
+        }
 
         Vector3 flatMove = new Vector3(moveDir.x, 0f, moveDir.z).normalized;
         float along = Vector3.Dot(horizVel, flatMove);
@@ -518,12 +590,17 @@ public class FirstPersonCharacterController : MonoBehaviour
 
     void UpdateCrouchHeight()
     {
-        if (capsule == null) return;
+        if (capsule == null)
+        {
+            return;
+        }
 
         float targetHeight = WantsCrouchHeight ? slideHeight : standHeight;
 
         if (targetHeight > currentHeight && HasCeilingAbove())
+        {
             targetHeight = currentHeight;
+        }
 
         currentHeight = Mathf.MoveTowards(currentHeight, targetHeight,
             crouchTransitionSpeed * Time.fixedDeltaTime);
@@ -542,14 +619,19 @@ public class FirstPersonCharacterController : MonoBehaviour
 
             Vector3 p = visualStartLocalPos;
             if (!visualPivotAtFeet)
+            {
                 p.y -= (standHeight - currentHeight) * 0.5f;
+            }
             characterVisual.localPosition = p;
         }
     }
 
     void UpdateCameraHeight()
     {
-        if (cameraTransform == null || capsule == null) return;
+        if (cameraTransform == null || capsule == null)
+        {
+            return;
+        }
 
         float crouchDelta = standHeight - currentHeight;
         Vector3 target = camStandLocalPos + Vector3.down * crouchDelta;
@@ -559,7 +641,10 @@ public class FirstPersonCharacterController : MonoBehaviour
 
     bool HasCeilingAbove()
     {
-        if (capsule == null) return false;
+        if (capsule == null)
+        {
+            return false;
+        }
 
         float needed = (standHeight - currentHeight) + 0.05f;
         Vector3 origin = transform.position +
@@ -574,7 +659,10 @@ public class FirstPersonCharacterController : MonoBehaviour
         coyoteCounter = isGrounded ? coyoteTime : coyoteCounter - Time.fixedDeltaTime;
         jumpBufferCounter -= Time.fixedDeltaTime;
 
-        if (jumpBufferCounter <= 0f || isVaulting) return;
+        if (jumpBufferCounter <= 0f || isVaulting)
+        {
+            return;
+        }
 
         if (coyoteCounter > 0f)
         {
@@ -605,14 +693,21 @@ public class FirstPersonCharacterController : MonoBehaviour
 
     void ApplyBetterGravity()
     {
-        if (isZipping || isVaulting || isWallRunning || isSwinging) return;
+        if (isZipping || isVaulting || isWallRunning || isSwinging)
+        {
+            return;
+        }
 
         Vector3 extra = Vector3.zero;
 
         if (rb.linearVelocity.y < 0f)
+        {
             extra = Physics.gravity * (fallMultiplier - 1f);
+        }
         else if (rb.linearVelocity.y > 0f && (!jumpHeld || ignoreJumpHold))
+        {
             extra = Physics.gravity * (lowJumpMultiplier - 1f);
+        }
 
         rb.AddForce(extra, ForceMode.Acceleration);
     }
@@ -641,17 +736,32 @@ public class FirstPersonCharacterController : MonoBehaviour
             return;
         }
 
-        if (!enableWallRun || isGrounded || isVaulting || isZipping || isSwinging) return;
-        if (wallRunCooldownTimer > 0f) return;
-        if (ReadMoveInput().y <= 0.1f) return;
+        if (!enableWallRun || isGrounded || isVaulting || isZipping || isSwinging)
+        {
+            return;
+        }
+        if (wallRunCooldownTimer > 0f)
+        {
+            return;
+        }
+        if (ReadMoveInput().y <= 0.1f)
+        {
+            return;
+        }
 
         for (int side = -1; side <= 1; side += 2)
         {
-            if (!CheckWallSide(side, out RaycastHit hit)) continue;
+            if (!CheckWallSide(side, out RaycastHit hit))
+            {
+                continue;
+            }
 
             float alongSpeed = Vector3.ProjectOnPlane(
                 new Vector3(rb.linearVelocity.x, 0f, rb.linearVelocity.z), hit.normal).magnitude;
-            if (alongSpeed < minWallRunSpeed) continue;
+            if (alongSpeed < minWallRunSpeed)
+            {
+                continue;
+            }
 
             StartWallRun(side, hit.normal);
             return;
@@ -667,7 +777,9 @@ public class FirstPersonCharacterController : MonoBehaviour
                 wallRunMask, QueryTriggerInteraction.Ignore)
             && Vector3.Angle(hit.normal, Vector3.up) > 60f
             && (string.IsNullOrEmpty(wallRunTag) || hit.collider.CompareTag(wallRunTag)))
+        {
             return true;
+        }
 
         hit = default;
         return false;
@@ -681,15 +793,24 @@ public class FirstPersonCharacterController : MonoBehaviour
         wallRunTimer = 0f;
 
         Vector3 v = rb.linearVelocity;
-        if (v.y < 0f) v.y *= 0.35f;
+        if (v.y < 0f)
+        {
+            v.y *= 0.35f;
+        }
         float into = Vector3.Dot(v, -normal);
-        if (into > 0f) v += normal * into;
+        if (into > 0f)
+        {
+            v += normal * into;
+        }
         rb.linearVelocity = v;
     }
 
     void StopWallRun()
     {
-        if (!isWallRunning) return;
+        if (!isWallRunning)
+        {
+            return;
+        }
         isWallRunning = false;
         wallRunCooldownTimer = wallRunCooldown;
     }
@@ -699,7 +820,10 @@ public class FirstPersonCharacterController : MonoBehaviour
         Vector3 v = rb.linearVelocity;
 
         float outward = Vector3.Dot(v, wallNormal);
-        if (outward > 0f) v -= wallNormal * outward;
+        if (outward > 0f)
+        {
+            v -= wallNormal * outward;
+        }
 
         Vector3 horiz = new Vector3(v.x, 0f, v.z);
         Vector3 along = Vector3.ProjectOnPlane(horiz, wallNormal);
@@ -755,7 +879,10 @@ public class FirstPersonCharacterController : MonoBehaviour
                 bestDist = hit.distance;
             }
         }
-        if (bestDist == float.MaxValue) return false;
+        if (bestDist == float.MaxValue)
+        {
+            return false;
+        }
 
         Vector3 v = rb.linearVelocity;
         Vector3 tangential = (v - best.normal * Vector3.Dot(v, best.normal)) * 0.5f;
@@ -773,7 +900,10 @@ public class FirstPersonCharacterController : MonoBehaviour
 
     public bool TryZipWallRun()
     {
-        if (!enableZipWallRun || !enableWallRun || isGrounded) return false;
+        if (!enableZipWallRun || !enableWallRun || isGrounded)
+        {
+            return false;
+        }
 
         RaycastHit best = default;
         float bestDist = float.MaxValue;
@@ -792,16 +922,23 @@ public class FirstPersonCharacterController : MonoBehaviour
                 bestDist = hit.distance;
             }
         }
-        if (bestDist == float.MaxValue) return false;
+        if (bestDist == float.MaxValue)
+        {
+            return false;
+        }
 
         Vector3 n = best.normal;
 
         Vector3 refDir = new Vector3(rb.linearVelocity.x, 0f, rb.linearVelocity.z);
         if (refDir.sqrMagnitude < 1f)
+        {
             refDir = FlatForward;
+        }
         Vector3 alongDir = Vector3.ProjectOnPlane(refDir, n).normalized;
         if (alongDir.sqrMagnitude < 0.01f)
+        {
             alongDir = Vector3.ProjectOnPlane(FlatForward, n).normalized;
+        }
 
         int side = Vector3.Dot(-n, FlatRight) > 0f ? 1 : -1;
         StartWallRun(side, n);
@@ -814,7 +951,10 @@ public class FirstPersonCharacterController : MonoBehaviour
 
     void OpenDartWindow()
     {
-        if (!enableDarting) return;
+        if (!enableDarting)
+        {
+            return;
+        }
 
         dartTimer = dartWindow;
         dartBufferCounter = 0f;
@@ -828,10 +968,18 @@ public class FirstPersonCharacterController : MonoBehaviour
         dartChainTimer -= Time.fixedDeltaTime;
 
         if (dartChainTimer <= 0f)
+        {
             dartChain = 0;
+        }
 
-        if (!enableDarting || isVaulting || isZipping || isWallRunning) return;
-        if (isGrounded || dartTimer <= 0f || dartBufferCounter <= 0f) return;
+        if (!enableDarting || isVaulting || isZipping || isWallRunning)
+        {
+            return;
+        }
+        if (isGrounded || dartTimer <= 0f || dartBufferCounter <= 0f)
+        {
+            return;
+        }
 
         PerformDart();
     }
@@ -846,7 +994,9 @@ public class FirstPersonCharacterController : MonoBehaviour
         Vector2 input = ReadMoveInput();
         Vector3 wishDir = FlatRight * input.x + FlatForward * input.y;
         if (wishDir.sqrMagnitude > 0.01f)
+        {
             dir = Vector3.Slerp(dir, wishDir.normalized, dartSteer).normalized;
+        }
 
         dartChain = Mathf.Min(dartChain + 1, dartMaxChain);
 
@@ -861,7 +1011,9 @@ public class FirstPersonCharacterController : MonoBehaviour
         slideBoostGiven = false;
 
         if (dartRefundsWallKick)
+        {
             airWallKicks = Mathf.Max(0, airWallKicks - 1);
+        }
 
         wallKickCooldownTimer = 0f;
         dartTimer = 0f;
@@ -874,14 +1026,20 @@ public class FirstPersonCharacterController : MonoBehaviour
     void TryAutoVault()
     {
         vaultCooldownTimer -= Time.fixedDeltaTime;
-        if (vaultCooldownTimer > 0f || isVaulting) return;
+        if (vaultCooldownTimer > 0f || isVaulting)
+        {
+            return;
+        }
 
         TryStartVault();
     }
 
     bool TryStartVault()
     {
-        if (!enableVault || isVaulting || isZipping || isSwinging || capsule == null) return false;
+        if (!enableVault || isVaulting || isZipping || isSwinging || capsule == null)
+        {
+            return false;
+        }
 
         Vector3 fwd = FlatForward;
 
@@ -889,7 +1047,10 @@ public class FirstPersonCharacterController : MonoBehaviour
         float speedToward = Vector3.Dot(rb.linearVelocity, fwd);
         if (isSliding)
         {
-            if (speedToward < slideLaunchMinSpeed) return false;
+            if (speedToward < slideLaunchMinSpeed)
+            {
+                return false;
+            }
         }
         else if (!pushingForward || speedToward < 1.5f)
         {
@@ -914,17 +1075,28 @@ public class FirstPersonCharacterController : MonoBehaviour
                 break;
             }
         }
-        if (!foundWall) return false;
+        if (!foundWall)
+        {
+            return false;
+        }
 
         Vector3 probe = wallHit.point - wallHit.normal * 0.2f;
         Vector3 topStart = new Vector3(probe.x, feetY + jumpVaultMaxHeight + 0.3f, probe.z);
         if (!Physics.Raycast(topStart, Vector3.down, out RaycastHit topHit,
                 jumpVaultMaxHeight + 0.3f, groundMask, QueryTriggerInteraction.Ignore))
+        {
             return false;
-        if (Vector3.Angle(topHit.normal, Vector3.up) > maxSlopeAngle) return false;
+        }
+        if (Vector3.Angle(topHit.normal, Vector3.up) > maxSlopeAngle)
+        {
+            return false;
+        }
 
         float height = topHit.point.y - feetY;
-        if (height < minVaultHeight || height > jumpVaultMaxHeight) return false;
+        if (height < minVaultHeight || height > jumpVaultMaxHeight)
+        {
+            return false;
+        }
 
         Vector3 dir = Vector3.ProjectOnPlane(-wallHit.normal, Vector3.up).normalized;
 
@@ -939,7 +1111,9 @@ public class FirstPersonCharacterController : MonoBehaviour
         Vector3 capBottom = overPoint + Vector3.up * r;
         Vector3 capTop = overPoint + Vector3.up * Mathf.Max(slideHeight - r, r + 0.05f);
         if (Physics.CheckCapsule(capBottom, capTop, r, groundMask, QueryTriggerInteraction.Ignore))
+        {
             return false;
+        }
 
         if (height <= lowVaultMaxHeight)
         {
@@ -978,7 +1152,10 @@ public class FirstPersonCharacterController : MonoBehaviour
 
     void HandleVault()
     {
-        if (!isVaulting) return;
+        if (!isVaulting)
+        {
+            return;
+        }
 
         vaultTimer += Time.fixedDeltaTime;
         float t = Mathf.Clamp01(vaultTimer / vaultDuration);
@@ -989,12 +1166,17 @@ public class FirstPersonCharacterController : MonoBehaviour
         rb.MovePosition(Vector3.Lerp(a, b, e));
 
         if (t >= 1f)
+        {
             FinishVault();
+        }
     }
 
     void FinishVault()
     {
-        if (!isVaulting) return;
+        if (!isVaulting)
+        {
+            return;
+        }
 
         isVaulting = false;
         vaultCooldownTimer = autoVaultCooldown;
@@ -1004,7 +1186,9 @@ public class FirstPersonCharacterController : MonoBehaviour
 
         float exitSpeed = vaultEntrySpeed * vaultKeep;
         if (vaultTier != 3)
+        {
             exitSpeed = Mathf.Max(exitSpeed, baseSpeed * 0.5f);
+        }
 
         rb.linearVelocity = vaultDir * exitSpeed + Vector3.up * vaultExitUpPop;
     }

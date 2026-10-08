@@ -113,7 +113,10 @@ public class PlayerMotionTracker : MonoBehaviour
     public static PlayerMotionTracker Find()
     {
         PlayerMotionTracker t = FindFirstObjectByType<PlayerMotionTracker>();
-        if (t != null) return t;
+        if (t != null)
+        {
+            return t;
+        }
 
         FirstPersonCharacterController c = FindFirstObjectByType<FirstPersonCharacterController>();
         return c != null ? c.gameObject.AddComponent<PlayerMotionTracker>() : null;
@@ -123,17 +126,7 @@ public class PlayerMotionTracker : MonoBehaviour
     {
         if (mode == Mode.Live)
         {
-            if (controller == null) controller = GetComponent<FirstPersonCharacterController>();
-            if (body == null) body = GetComponent<Rigidbody>();
-            health = GetComponent<PlayerHealth>();
-            mainCollider = GetComponent<CapsuleCollider>();
-            if (mainCollider == null) mainCollider = GetComponent<Collider>();
-
-            if (controller != null)
-            {
-                fallMultiplier = controller.fallMultiplier;
-                groundMask = controller.groundMask;
-            }
+            FindLivePlayerParts();
         }
         else
         {
@@ -144,27 +137,79 @@ public class PlayerMotionTracker : MonoBehaviour
         SampleNow();
     }
 
+    // the real player's body, collider and movement settings (for jump landing prediction)
+    void FindLivePlayerParts()
+    {
+        if (controller == null)
+        {
+            controller = GetComponent<FirstPersonCharacterController>();
+        }
+        if (body == null)
+        {
+            body = GetComponent<Rigidbody>();
+        }
+        health = GetComponent<PlayerHealth>();
+        mainCollider = GetComponent<CapsuleCollider>();
+        if (mainCollider == null)
+        {
+            mainCollider = GetComponent<Collider>();
+        }
+
+        if (controller != null)
+        {
+            fallMultiplier = controller.fallMultiplier;
+            groundMask = controller.groundMask;
+        }
+    }
+
     void FixedUpdate()
     {
         float dt = Time.fixedDeltaTime;
 
-        if (mode == Mode.Playback) StepPlayback(dt);
+        if (mode == Mode.Playback)
+        {
+            StepPlayback(dt);
+        }
         SampleNow();
+        UpdateTimers(dt);
+        UpdatePredictability(dt);
+        CheckLanding();
 
-        if (IsGrounded) { GroundedTime += dt; AirTime = 0f; }
-        else { AirTime += dt; GroundedTime = 0f; }
+        if (mode == Mode.Live)
+        {
+            EmitNoises();
+        }
+        if (recording)
+        {
+            WriteSample();
+        }
+    }
+
+    // how long it's been on the ground, in the air and standing still
+    void UpdateTimers(float dt)
+    {
+        if (IsGrounded)
+        {
+            GroundedTime += dt;
+            AirTime = 0f;
+        }
+        else
+        {
+            AirTime += dt;
+            GroundedTime = 0f;
+        }
 
         StationaryTime = Speed < 1.5f ? StationaryTime + dt : 0f;
+    }
 
-        UpdatePredictability(dt);
-
+    void CheckLanding()
+    {
         bool onGround = OnGround;
-        if (onGround && !wasOnGround) Landed?.Invoke();
+        if (onGround && !wasOnGround)
+        {
+            Landed?.Invoke();
+        }
         wasOnGround = onGround;
-
-        if (mode == Mode.Live) EmitNoises();
-
-        if (recording) WriteSample();
     }
 
     // ---------------------------------------------------------------- noise
@@ -178,11 +223,26 @@ public class PlayerMotionTracker : MonoBehaviour
         Flags now = State;
         if (d != null)
         {
-            if (Rising(now, Flags.Grounded)) d.MakeNoise(Feet, 8f + Mathf.Min(fallSpeed, 20f) * 1.2f, "land");
-            if (Rising(now, Flags.WallRun)) d.MakeNoise(Center, 10f, "wallrun");
-            if (Rising(now, Flags.Swing) || Rising(now, Flags.Zip)) d.MakeNoise(Center, 14f, "grapple");
-            if (Rising(now, Flags.Dart)) d.MakeNoise(Center, 10f, "dart");
-            if (Rising(now, Flags.Slide)) d.MakeNoise(Feet, 6f, "slide");
+            if (Rising(now, Flags.Grounded))
+            {
+                d.MakeNoise(Feet, 8f + Mathf.Min(fallSpeed, 20f) * 1.2f, "land");
+            }
+            if (Rising(now, Flags.WallRun))
+            {
+                d.MakeNoise(Center, 10f, "wallrun");
+            }
+            if (Rising(now, Flags.Swing) || Rising(now, Flags.Zip))
+            {
+                d.MakeNoise(Center, 14f, "grapple");
+            }
+            if (Rising(now, Flags.Dart))
+            {
+                d.MakeNoise(Center, 10f, "dart");
+            }
+            if (Rising(now, Flags.Slide))
+            {
+                d.MakeNoise(Feet, 6f, "slide");
+            }
         }
 
         fallSpeed = IsGrounded ? 0f : Mathf.Max(fallSpeed, -Velocity.y);
@@ -193,13 +253,22 @@ public class PlayerMotionTracker : MonoBehaviour
 
     void Update()
     {
-        if (mode != Mode.Live) return;
+        if (mode != Mode.Live)
+        {
+            return;
+        }
 
         Keyboard kb = Keyboard.current;
         if (kb != null && recordKey != Key.None && kb[recordKey].wasPressedThisFrame)
         {
-            if (recording) StopRecording();
-            else StartRecording();
+            if (recording)
+            {
+                StopRecording();
+            }
+            else
+            {
+                StartRecording();
+            }
         }
     }
 
@@ -211,21 +280,48 @@ public class PlayerMotionTracker : MonoBehaviour
 
         if (mode == Mode.Live)
         {
-            if (controller == null || body == null) return;
+            if (controller == null || body == null)
+            {
+                return;
+            }
 
             Bounds b = mainCollider != null ? mainCollider.bounds : new Bounds(body.position, Vector3.one);
             s.center = b.center;
             FeetOffset = b.extents.y;
             s.velocity = body.linearVelocity;
             s.flags = Flags.None;
-            if (controller.IsGrounded) s.flags |= Flags.Grounded;
-            if (controller.IsWallRunning) s.flags |= Flags.WallRun;
-            if (controller.IsSliding) s.flags |= Flags.Slide;
-            if (controller.IsAirSliding) s.flags |= Flags.AirSlide;
-            if (controller.IsSwinging) s.flags |= Flags.Swing;
-            if (controller.IsZipping) s.flags |= Flags.Zip;
-            if (controller.IsVaulting) s.flags |= Flags.Vault;
-            if (controller.IsDarting) s.flags |= Flags.Dart;
+            if (controller.IsGrounded)
+            {
+                s.flags |= Flags.Grounded;
+            }
+            if (controller.IsWallRunning)
+            {
+                s.flags |= Flags.WallRun;
+            }
+            if (controller.IsSliding)
+            {
+                s.flags |= Flags.Slide;
+            }
+            if (controller.IsAirSliding)
+            {
+                s.flags |= Flags.AirSlide;
+            }
+            if (controller.IsSwinging)
+            {
+                s.flags |= Flags.Swing;
+            }
+            if (controller.IsZipping)
+            {
+                s.flags |= Flags.Zip;
+            }
+            if (controller.IsVaulting)
+            {
+                s.flags |= Flags.Vault;
+            }
+            if (controller.IsDarting)
+            {
+                s.flags |= Flags.Dart;
+            }
 
             Transform cam = controller.cameraTransform;
             s.camForward = cam != null ? cam.forward : transform.forward;
@@ -247,7 +343,9 @@ public class PlayerMotionTracker : MonoBehaviour
         history.Add(s);
         float cutoff = Time.time - historySeconds;
         while (history.Count > 2 && history[0].time < cutoff)
+        {
             history.RemoveAt(0);
+        }
     }
 
     void UpdatePredictability(float dt)
@@ -295,10 +393,18 @@ public class PlayerMotionTracker : MonoBehaviour
 
     public Sample SampleAgo(float seconds)
     {
-        if (history.Count == 0) return default;
+        if (history.Count == 0)
+        {
+            return default;
+        }
         float t = Time.time - seconds;
         for (int i = history.Count - 1; i >= 0; i--)
-            if (history[i].time <= t) return history[i];
+        {
+            if (history[i].time <= t)
+            {
+                return history[i];
+            }
+        }
         return history[0];
     }
 
@@ -307,10 +413,15 @@ public class PlayerMotionTracker : MonoBehaviour
     // only really good for about a second
     public Vector3 Predict(float seconds)
     {
-        if (seconds <= 0f) return Center;
+        if (seconds <= 0f)
+        {
+            return Center;
+        }
 
         if (IsSwinging || IsZipping)
+        {
             return Center + Velocity * seconds * 0.8f;
+        }
 
         if (IsWallRunning)
         {
@@ -361,7 +472,10 @@ public class PlayerMotionTracker : MonoBehaviour
             if (v.y < 0f && GroundCast(feetA, feetB, out RaycastHit hit))
             {
                 center = hit.point + Vector3.up * FeetOffset;
-                if (stopOnLand) return true;
+                if (stopOnLand)
+                {
+                    return true;
+                }
 
                 Vector3 flat = new Vector3(v.x, 0f, v.z);
                 center += flat * (maxTime - time) * 0.8f;
@@ -379,15 +493,24 @@ public class PlayerMotionTracker : MonoBehaviour
         best = default;
         Vector3 d = to - from;
         float len = d.magnitude;
-        if (len < 0.0001f) return false;
+        if (len < 0.0001f)
+        {
+            return false;
+        }
 
         RaycastHit[] hits = Physics.RaycastAll(from, d / len, len, groundMask, QueryTriggerInteraction.Ignore);
         float bestDist = float.MaxValue;
         bool found = false;
         foreach (RaycastHit h in hits)
         {
-            if (body != null && h.rigidbody == body) continue;
-            if (h.collider.GetComponentInParent<EnemyAgent>() != null) continue;
+            if (body != null && h.rigidbody == body)
+            {
+                continue;
+            }
+            if (h.collider.GetComponentInParent<EnemyAgent>() != null)
+            {
+                continue;
+            }
             if (h.distance < bestDist)
             {
                 bestDist = h.distance;
@@ -411,7 +534,10 @@ public class PlayerMotionTracker : MonoBehaviour
     void StopRecording()
     {
         recording = false;
-        if (recordBuffer == null) return;
+        if (recordBuffer == null)
+        {
+            return;
+        }
 
         string dir = Path.Combine(Application.persistentDataPath, "MotionRecordings");
         Directory.CreateDirectory(dir);
@@ -436,7 +562,10 @@ public class PlayerMotionTracker : MonoBehaviour
 
     void OnGUI()
     {
-        if (!recording || !showRecordingLabel) return;
+        if (!recording || !showRecordingLabel)
+        {
+            return;
+        }
         GUI.color = Color.red;
         GUI.Label(new Rect(12, Screen.height - 32, 300, 24), "REC motion (F8 to stop)");
         GUI.color = Color.white;
@@ -444,7 +573,10 @@ public class PlayerMotionTracker : MonoBehaviour
 
     void OnDisable()
     {
-        if (recording) StopRecording();
+        if (recording)
+        {
+            StopRecording();
+        }
     }
 
     // ---------------------------------------------------------------- playback
@@ -463,7 +595,10 @@ public class PlayerMotionTracker : MonoBehaviour
         for (int i = 1; i < lines.Length; i++)
         {
             string[] p = lines[i].Trim().Split(',');
-            if (p.Length < 11) continue;
+            if (p.Length < 11)
+            {
+                continue;
+            }
 
             Sample s;
             s.time = float.Parse(p[0], ci);
@@ -501,7 +636,10 @@ public class PlayerMotionTracker : MonoBehaviour
     public void SetScripted(bool on)
     {
         Mode want = on ? Mode.Scripted : Mode.Playback;
-        if (mode == want) return;
+        if (mode == want)
+        {
+            return;
+        }
         scripted = new Sample { center = Center, velocity = Velocity, flags = State, camForward = CameraForward };
         mode = want;
         history.Clear();
@@ -510,7 +648,10 @@ public class PlayerMotionTracker : MonoBehaviour
 
     public void RestartPlayback(float normalized)
     {
-        if (playback.Count == 0) return;
+        if (playback.Count == 0)
+        {
+            return;
+        }
         float length = playback[playback.Count - 1].time;
         playbackTime = Mathf.Clamp01(normalized) * length;
         history.Clear();
@@ -519,12 +660,17 @@ public class PlayerMotionTracker : MonoBehaviour
 
     void StepPlayback(float dt)
     {
-        if (playback.Count == 0) return;
+        if (playback.Count == 0)
+        {
+            return;
+        }
         playbackTime += dt;
 
         float length = playback[playback.Count - 1].time;
         if (playbackTime > length)
+        {
             playbackTime = loopPlayback ? playbackTime % Mathf.Max(0.01f, length) : length;
+        }
 
         transform.position = CurrentPlaybackSample().center;
     }
@@ -532,10 +678,15 @@ public class PlayerMotionTracker : MonoBehaviour
     Sample CurrentPlaybackSample()
     {
         if (playback.Count == 0)
+        {
             return new Sample { center = transform.position, camForward = transform.forward };
+        }
 
         int hi = 1;
-        while (hi < playback.Count - 1 && playback[hi].time < playbackTime) hi++;
+        while (hi < playback.Count - 1 && playback[hi].time < playbackTime)
+        {
+            hi++;
+        }
         Sample a = playback[Mathf.Max(0, hi - 1)];
         Sample b = playback[hi];
         float t = Mathf.InverseLerp(a.time, b.time, playbackTime);

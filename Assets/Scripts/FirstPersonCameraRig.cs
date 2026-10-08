@@ -58,7 +58,10 @@ public class FirstPersonCameraRig : MonoBehaviour
     public static float LandingSoftness(FirstPersonCharacterController c, float fastKeep)
     {
         float speedT = Mathf.InverseLerp(c.baseSpeed, c.maxSpeed, c.CurrentSpeed);
-        if (c.IsSliding || c.IsAirSliding || c.CrouchAmount > 0.3f) speedT = 1f;
+        if (c.IsSliding || c.IsAirSliding || c.CrouchAmount > 0.3f)
+        {
+            speedT = 1f;
+        }
         return Mathf.Lerp(1f, fastKeep, speedT);
     }
 
@@ -66,27 +69,56 @@ public class FirstPersonCameraRig : MonoBehaviour
     {
         baseLocalPos = transform.localPosition;
 
-        if (shaker == null) shaker = GetComponent<CameraShaker>();
-        if (shaker == null) shaker = CameraShaker.Instance;
-        if (shaker != null) shaker.MarkDriven();
-
-        if (controller != null && controller.cameraTransform == transform)
-            Debug.LogError("Rig is on the CameraAnchor. Put it on a child (CameraFX).", this);
-
-        if (cineCam != null && cineCam.transform == transform)
-            Debug.LogError("Rig is on the CinemachineCamera. Put it on CameraFX.", this);
-
+        HookUpShaker();
+        WarnAboutSetupMistakes();
         if (autoConfigureCineCam)
+        {
             ConfigureCineCam();
+        }
 
         currentFov = baseFov;
         if (cineCam != null)
+        {
             cineCam.Lens.FieldOfView = baseFov;
+        }
+    }
+
+    // the rig adds the shaker's offsets in itself, so the shaker shouldn't move the camera too
+    void HookUpShaker()
+    {
+        if (shaker == null)
+        {
+            shaker = GetComponent<CameraShaker>();
+        }
+        if (shaker == null)
+        {
+            shaker = CameraShaker.Instance;
+        }
+        if (shaker != null)
+        {
+            shaker.MarkDriven();
+        }
+    }
+
+    void WarnAboutSetupMistakes()
+    {
+        if (controller != null && controller.cameraTransform == transform)
+        {
+            Debug.LogError("Rig is on the CameraAnchor. Put it on a child (CameraFX).", this);
+        }
+
+        if (cineCam != null && cineCam.transform == transform)
+        {
+            Debug.LogError("Rig is on the CinemachineCamera. Put it on CameraFX.", this);
+        }
     }
 
     void ConfigureCineCam()
     {
-        if (cineCam == null) return;
+        if (cineCam == null)
+        {
+            return;
+        }
 
         cineCam.Target.TrackingTarget = transform;
 
@@ -99,20 +131,29 @@ public class FirstPersonCameraRig : MonoBehaviour
         RemoveIfPresent<CinemachineHardLookAt>();
 
         if (!cineCam.TryGetComponent(out CinemachineHardLockToTarget _))
+        {
             cineCam.gameObject.AddComponent<CinemachineHardLockToTarget>();
+        }
         if (!cineCam.TryGetComponent(out CinemachineRotateWithFollowTarget _))
+        {
             cineCam.gameObject.AddComponent<CinemachineRotateWithFollowTarget>();
+        }
     }
 
     void RemoveIfPresent<T>() where T : Component
     {
         if (cineCam != null && cineCam.TryGetComponent(out T comp))
+        {
             Destroy(comp);
+        }
     }
 
     void Update()
     {
-        if (controller == null) return;
+        if (controller == null)
+        {
+            return;
+        }
 
         TrackFall();
         UpdateLens();
@@ -124,7 +165,9 @@ public class FirstPersonCameraRig : MonoBehaviour
     {
         float vy = controller.Velocity.y;
         if (vy < 0f)
+        {
             lastFallSpeed = -vy;
+        }
 
         if (controller.IsGrounded && !wasGrounded)
         {
@@ -142,7 +185,10 @@ public class FirstPersonCameraRig : MonoBehaviour
 
     void UpdateLens()
     {
-        if (cineCam == null) return;
+        if (cineCam == null)
+        {
+            return;
+        }
 
         float speedT = Mathf.Clamp01((controller.CurrentSpeed - controller.baseSpeed) /
             Mathf.Max(1f, controller.maxSpeed * 1.6f - controller.baseSpeed));

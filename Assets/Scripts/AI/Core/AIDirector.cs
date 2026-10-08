@@ -108,10 +108,16 @@ public class AIDirector : MonoBehaviour
 
     public static AIDirector Get()
     {
-        if (Instance != null) return Instance;
+        if (Instance != null)
+        {
+            return Instance;
+        }
 
         Instance = FindFirstObjectByType<AIDirector>();
-        if (Instance != null) return Instance;
+        if (Instance != null)
+        {
+            return Instance;
+        }
 
         GameObject go = new GameObject("AIDirector");
         Instance = go.AddComponent<AIDirector>();
@@ -130,22 +136,39 @@ public class AIDirector : MonoBehaviour
 
         // F6 menu, editor/dev builds only
         if ((Application.isEditor || Debug.isDebugBuild) && GetComponent<AIDebugMenu>() == null)
+        {
             gameObject.AddComponent<AIDebugMenu>();
+        }
     }
 
     void OnDestroy()
     {
-        if (PlayerHealth != null) PlayerHealth.Respawned -= ResetAll;
-        if (Axe != null) Axe.AxeHit -= OnAxeHit;
-        if (Instance == this) Instance = null;
+        if (PlayerHealth != null)
+        {
+            PlayerHealth.Respawned -= ResetAll;
+        }
+        if (Axe != null)
+        {
+            Axe.AxeHit -= OnAxeHit;
+        }
+        if (Instance == this)
+        {
+            Instance = null;
+        }
     }
 
     void FindPlayer()
     {
-        if (Controller != null) return;
+        if (Controller != null)
+        {
+            return;
+        }
 
         Controller = FindFirstObjectByType<FirstPersonCharacterController>();
-        if (Controller == null) return;
+        if (Controller == null)
+        {
+            return;
+        }
 
         PlayerBody = Controller.GetComponent<Rigidbody>();
         PlayerHealth = Controller.GetComponent<PlayerHealth>();
@@ -153,10 +176,19 @@ public class AIDirector : MonoBehaviour
         Axe = FindFirstObjectByType<BattleAxe>();
 
         Player = Controller.GetComponent<PlayerMotionTracker>();
-        if (Player == null) Player = Controller.gameObject.AddComponent<PlayerMotionTracker>();
+        if (Player == null)
+        {
+            Player = Controller.gameObject.AddComponent<PlayerMotionTracker>();
+        }
 
-        if (PlayerHealth != null) PlayerHealth.Respawned += ResetAll;
-        if (Axe != null) Axe.AxeHit += OnAxeHit;
+        if (PlayerHealth != null)
+        {
+            PlayerHealth.Respawned += ResetAll;
+        }
+        if (Axe != null)
+        {
+            Axe.AxeHit += OnAxeHit;
+        }
     }
 
     void OnAxeHit(Vector3 point, Vector3 normal, bool bounced)
@@ -181,7 +213,10 @@ public class AIDirector : MonoBehaviour
             trackedAxe = t;
             axeWasStuck = axeWasLoose = axeWasRecalling = false;
         }
-        if (t == null) return;
+        if (t == null)
+        {
+            return;
+        }
 
         bool stuck = t.IsStuck;
         bool loose = t.IsLoose;
@@ -189,8 +224,14 @@ public class AIDirector : MonoBehaviour
 
         if ((stuck && !axeWasStuck) || (loose && !axeWasLoose))
         {
-            if (EnemyAgent.HitFleshRecently) MakeNoise(t.HeadPosition, 6f, "thud");
-            else MakeNoise(t.HeadPosition, stuck ? axeLandNoise : axeClatterNoise, "axe");
+            if (EnemyAgent.HitFleshRecently)
+            {
+                MakeNoise(t.HeadPosition, 6f, "thud");
+            }
+            else
+            {
+                MakeNoise(t.HeadPosition, stuck ? axeLandNoise : axeClatterNoise, "axe");
+            }
         }
 
         if (recalling)
@@ -210,14 +251,23 @@ public class AIDirector : MonoBehaviour
 
     void FollowRecalledAxe(Vector3 axePos, bool rippedOut)
     {
-        if (Player == null || debugDeaf && debugBlind) return;
+        if (Player == null || debugDeaf && debugBlind)
+        {
+            return;
+        }
 
         foreach (EnemyAgent e in enemies)
         {
-            if (!(e is GruntBase g) || g.IsDead) continue;
+            if (!(e is GruntBase g) || g.IsDead)
+            {
+                continue;
+            }
             bool heard = !debugDeaf && rippedOut && Vector3.Distance(g.transform.position, axePos) < recallHearRange * g.hearing;
             bool seen = !debugBlind && g.CanSeePoint(axePos, g.sightRange);
-            if (heard || seen) g.SawAxeRecalled(Player.Feet);
+            if (heard || seen)
+            {
+                g.SawAxeRecalled(Player.Feet);
+            }
         }
     }
 
@@ -227,12 +277,20 @@ public class AIDirector : MonoBehaviour
 
     public void MakeNoise(Vector3 position, float radius, string kind)
     {
-        if (debugDeaf) return;
+        if (debugDeaf)
+        {
+            return;
+        }
         NoiseEvent n = new NoiseEvent { position = position, radius = radius, kind = kind, time = Time.time };
         recentNoises.Add(n);
 
         foreach (EnemyAgent e in enemies)
-            if (e != null && !e.IsDead) e.OnHeardNoise(n);
+        {
+            if (e != null && !e.IsDead)
+            {
+                e.OnHeardNoise(n);
+            }
+        }
     }
 
     // Training scenes use a playback ghost instead of the player
@@ -245,7 +303,10 @@ public class AIDirector : MonoBehaviour
 
     public void Register(EnemyAgent e)
     {
-        if (!enemies.Contains(e)) enemies.Add(e);
+        if (!enemies.Contains(e))
+        {
+            enemies.Add(e);
+        }
     }
 
     public void Unregister(EnemyAgent e)
@@ -266,7 +327,12 @@ public class AIDirector : MonoBehaviour
         trackedAxe = null;
 
         foreach (EnemyAgent e in enemies.ToArray())
-            if (e != null) e.ResetAgent();
+        {
+            if (e != null)
+            {
+                e.ResetAgent();
+            }
+        }
 
         squadsDirty = true;
     }
@@ -298,12 +364,18 @@ public class AIDirector : MonoBehaviour
         var followers = new List<GruntFollower>();
         foreach (EnemyAgent e in enemies)
         {
-            if (!(e is GruntFollower f) || f.IsDead) continue;
+            if (!(e is GruntFollower f) || f.IsDead)
+            {
+                continue;
+            }
             followers.Add(f);
             foreach (GruntSquad s in squads)
             {
                 float d = Vector3.Distance(f.transform.position, s.Leader.transform.position);
-                if (d <= s.Leader.squadRadius) pairs.Add((d, s, f));
+                if (d <= s.Leader.squadRadius)
+                {
+                    pairs.Add((d, s, f));
+                }
             }
         }
         pairs.Sort((a, b) => a.dist.CompareTo(b.dist));
@@ -311,16 +383,27 @@ public class AIDirector : MonoBehaviour
         var placed = new HashSet<GruntFollower>();
         foreach (var p in pairs)
         {
-            if (placed.Contains(p.follower) || p.squad.Followers.Count >= p.squad.Leader.maxFollowers) continue;
+            if (placed.Contains(p.follower) || p.squad.Followers.Count >= p.squad.Leader.maxFollowers)
+            {
+                continue;
+            }
             p.squad.Add(p.follower);
             placed.Add(p.follower);
         }
 
         // leftovers are loners
         foreach (GruntFollower f in followers)
-            if (!placed.Contains(f)) f.AssignSquad(null);
+        {
+            if (!placed.Contains(f))
+            {
+                f.AssignSquad(null);
+            }
+        }
 
-        foreach (GruntSquad s in squads) s.SplitFireteams();
+        foreach (GruntSquad s in squads)
+        {
+            s.SplitFireteams();
+        }
     }
 
     public void NotifyDeath(EnemyAgent e)
@@ -330,33 +413,54 @@ public class AIDirector : MonoBehaviour
 
         foreach (EnemyAgent other in enemies)
         {
-            if (other == e || other.IsDead) continue;
+            if (other == e || other.IsDead)
+            {
+                continue;
+            }
             if ((other.transform.position - e.transform.position).sqrMagnitude < 25f * 25f)
+            {
                 other.OnAllyDied(e);
+            }
         }
 
-        if (!(e is GruntBase g)) return;
+        if (!(e is GruntBase g))
+        {
+            return;
+        }
 
         // witnesses know straight away, otherwise it waits to be found
         Body body = new Body { who = g, diedAt = Time.time };
         bodies.Add(body);
         foreach (EnemyAgent other in enemies.ToArray())
+        {
             if (other is GruntBase witness && witness != g && !witness.IsDead && witness.WitnessedDeath(g))
+            {
                 Discover(body, witness, true);
+            }
+        }
     }
 
     void CheckBodies()
     {
         bodyTimer -= Time.deltaTime;
-        if (bodyTimer > 0f) return;
+        if (bodyTimer > 0f)
+        {
+            return;
+        }
         bodyTimer = bodyCheckInterval;
 
         foreach (Body b in bodies)
         {
-            if (b.found || b.who == null) continue;
+            if (b.found || b.who == null)
+            {
+                continue;
+            }
             foreach (EnemyAgent e in enemies)
             {
-                if (!(e is GruntBase g) || g.IsDead || g == b.who || !g.CanSpotBody(b.Position)) continue;
+                if (!(e is GruntBase g) || g.IsDead || g == b.who || !g.CanSpotBody(b.Position))
+                {
+                    continue;
+                }
                 Discover(b, g, false);
                 break;
             }
@@ -374,7 +478,13 @@ public class AIDirector : MonoBehaviour
         get
         {
             int n = 0;
-            foreach (Body b in bodies) if (!b.found && b.who != null) n++;
+            foreach (Body b in bodies)
+            {
+                if (!b.found && b.who != null)
+                {
+                    n++;
+                }
+            }
             return n;
         }
     }
@@ -391,8 +501,14 @@ public class AIDirector : MonoBehaviour
 
         holders.RemoveAll(h => h == null || h.IsDead);
 
-        if (holders.Contains(who)) return true;
-        if (holders.Count >= max) return false;
+        if (holders.Contains(who))
+        {
+            return true;
+        }
+        if (holders.Count >= max)
+        {
+            return false;
+        }
 
         holders.Add(who);
         return true;
@@ -401,7 +517,9 @@ public class AIDirector : MonoBehaviour
     public void ReleaseToken(string kind, EnemyAgent who)
     {
         if (tokens.TryGetValue(kind, out List<EnemyAgent> holders))
+        {
             holders.Remove(who);
+        }
     }
 
     public int TokensInUse(string kind) =>
@@ -412,13 +530,21 @@ public class AIDirector : MonoBehaviour
     {
         int n = 0;
         foreach (var kv in tokens)
-            if (kv.Key.StartsWith(prefix)) n += kv.Value.Count;
+        {
+            if (kv.Key.StartsWith(prefix))
+            {
+                n += kv.Value.Count;
+            }
+        }
         return n;
     }
 
     void ReleaseAllTokens(EnemyAgent who)
     {
-        foreach (var kv in tokens) kv.Value.Remove(who);
+        foreach (var kv in tokens)
+        {
+            kv.Value.Remove(who);
+        }
     }
 
     // ---------------------------------------------------------------- claims
@@ -432,14 +558,20 @@ public class AIDirector : MonoBehaviour
         float worst = 0f;
         foreach (var kv in claims)
         {
-            if (kv.Key == asker || kv.Key == null) continue;
+            if (kv.Key == asker || kv.Key == null)
+            {
+                continue;
+            }
             float d = Vector3.Distance(point, kv.Value);
             worst = Mathf.Max(worst, 1f - Mathf.Clamp01(d / radius));
         }
 
         foreach (EnemyAgent e in enemies)
         {
-            if (e == asker || e == null || e.IsDead) continue;
+            if (e == asker || e == null || e.IsDead)
+            {
+                continue;
+            }
             float d = Vector3.Distance(point, e.transform.position);
             worst = Mathf.Max(worst, (1f - Mathf.Clamp01(d / radius)) * 0.7f);
         }
@@ -451,23 +583,34 @@ public class AIDirector : MonoBehaviour
     // key is for the cooldown so the whole squad doesn't shout the same thing
     public void Say(EnemyAgent who, string line, string key = null)
     {
-        if (!showBarks || who == null) return;
+        if (!showBarks || who == null)
+        {
+            return;
+        }
 
         key = key ?? line;
-        if (barkReadyAt.TryGetValue(key, out float ready) && Time.time < ready) return;
+        if (barkReadyAt.TryGetValue(key, out float ready) && Time.time < ready)
+        {
+            return;
+        }
         barkReadyAt[key] = Time.time + barkCooldown;
 
         barks.RemoveAll(b => b.who == who);
         barks.Add(new Bark { who = who, text = line, until = Time.time + barkDuration });
 
         if (who is GruntBase && !who.IsDead)
+        {
             EnemySounds.PlayAt(EnemySounds.RadioBlip, who.HeadPosition, 1f, Random.Range(0.95f, 1.05f), 30f);
+        }
     }
 
     // for replies
     public void SayLater(EnemyAgent who, string line, string key, float delay)
     {
-        if (!showBarks || who == null) return;
+        if (!showBarks || who == null)
+        {
+            return;
+        }
         pendingBarks.Add(new PendingBark { who = who, text = line, key = key, at = Time.time + delay });
     }
 
@@ -475,32 +618,73 @@ public class AIDirector : MonoBehaviour
 
     void Update()
     {
-        if (Controller == null) FindPlayer();
-        if (squadsDirty) FormSquads();
-
-        if (Axe != null) Global.Set(BB.PlayerDisarmed, Axe.IsThrown);
-        Global.Set(BB.ActiveShooters, TokensWithPrefix("shoot"));
-
-        Keyboard kb = Keyboard.current;
-        if (kb != null && debugKey != Key.None && kb[debugKey].wasPressedThisFrame)
-            showDebug = !showDebug;
-        if (kb != null && blackboardKey != Key.None && kb[blackboardKey].wasPressedThisFrame)
+        if (Controller == null)
         {
-            showBlackboards = !showBlackboards;
-            if (showBlackboards) showDebug = true;
+            FindPlayer();
+        }
+        if (squadsDirty)
+        {
+            FormSquads();
         }
 
-        for (int i = pendingBarks.Count - 1; i >= 0; i--)
-        {
-            PendingBark p = pendingBarks[i];
-            if (Time.time < p.at) continue;
-            pendingBarks.RemoveAt(i);
-            if (p.who != null && !p.who.IsDead) Say(p.who, p.text, p.key);
-        }
-        barks.RemoveAll(b => b.who == null || Time.time > b.until);
+        UpdateGlobalFacts();
+        HandleDebugKeys();
+        UpdateBarks();
         CheckBodies();
         TrackThrownAxe();
         recentNoises.RemoveAll(n => Time.time - n.time > 1.5f);
+    }
+
+    // facts every enemy can read off the global blackboard
+    void UpdateGlobalFacts()
+    {
+        if (Axe != null)
+        {
+            Global.Set(BB.PlayerDisarmed, Axe.IsThrown);
+        }
+        Global.Set(BB.ActiveShooters, TokensWithPrefix("shoot"));
+    }
+
+    // F3 overlay, F4 blackboards (which needs the overlay on)
+    void HandleDebugKeys()
+    {
+        Keyboard kb = Keyboard.current;
+        if (kb == null)
+        {
+            return;
+        }
+
+        if (debugKey != Key.None && kb[debugKey].wasPressedThisFrame)
+        {
+            showDebug = !showDebug;
+        }
+        if (blackboardKey != Key.None && kb[blackboardKey].wasPressedThisFrame)
+        {
+            showBlackboards = !showBlackboards;
+            if (showBlackboards)
+            {
+                showDebug = true;
+            }
+        }
+    }
+
+    // delayed callouts fire when they're due, old speech bubbles drop off
+    void UpdateBarks()
+    {
+        for (int i = pendingBarks.Count - 1; i >= 0; i--)
+        {
+            PendingBark p = pendingBarks[i];
+            if (Time.time < p.at)
+            {
+                continue;
+            }
+            pendingBarks.RemoveAt(i);
+            if (p.who != null && !p.who.IsDead)
+            {
+                Say(p.who, p.text, p.key);
+            }
+        }
+        barks.RemoveAll(b => b.who == null || Time.time > b.until);
     }
 
     // ---------------------------------------------------------------- drawing
@@ -514,14 +698,23 @@ public class AIDirector : MonoBehaviour
     void OnGUI()
     {
         Camera cam = Camera.main;
-        if (cam == null) return;
+        if (cam == null)
+        {
+            return;
+        }
 
         EnsureStyles();
 
         debugFocus = showDebug ? FindDebugFocus(cam) : null;
-        if (showDebug) DrawDebugWorld(cam);
+        if (showDebug)
+        {
+            DrawDebugWorld(cam);
+        }
         DrawOverheads(cam);
-        if (showDebug) DrawDebugHeader();
+        if (showDebug)
+        {
+            DrawDebugHeader();
+        }
     }
 
     void DrawOverheads(Camera cam)
@@ -529,11 +722,19 @@ public class AIDirector : MonoBehaviour
         Vector3 camPos = cam.transform.position;
         drawOrder.Clear();
         foreach (EnemyAgent e in enemies)
-            if (e != null) drawOrder.Add(e);
+        {
+            if (e != null)
+            {
+                drawOrder.Add(e);
+            }
+        }
         drawOrder.Sort((a, b) => (a.transform.position - camPos).sqrMagnitude.CompareTo((b.transform.position - camPos).sqrMagnitude));
 
         placedStacks.Clear();
-        foreach (EnemyAgent e in drawOrder) DrawStack(cam, e);
+        foreach (EnemyAgent e in drawOrder)
+        {
+            DrawStack(cam, e);
+        }
     }
 
     void DrawStack(Camera cam, EnemyAgent e)
@@ -541,15 +742,24 @@ public class AIDirector : MonoBehaviour
         float dist = Vector3.Distance(cam.transform.position, e.transform.position);
 
         string bark = BarkFor(e, out float barkAge, out float barkLeft);
-        if (!showBarks) bark = null;
+        if (!showBarks)
+        {
+            bark = null;
+        }
         string mark = null;
         Color markColor = Color.white;
         float markSize = 0f;
         bool hasMark = showAwareness && MarkerFor(e, dist, out mark, out markColor, out markSize);
         string debug = showDebug ? DebugTextFor(e, dist) : null;
-        if (bark == null && !hasMark && debug == null) return;
+        if (bark == null && !hasMark && debug == null)
+        {
+            return;
+        }
 
-        if (!ToScreen(cam, e.HeadPosition + Vector3.up * 0.3f, out Vector2 anchor)) return;
+        if (!ToScreen(cam, e.HeadPosition + Vector3.up * 0.3f, out Vector2 anchor))
+        {
+            return;
+        }
 
         float scale = Mathf.Lerp(1f, 0.6f, Mathf.InverseLerp(8f, 60f, dist));
         const float gap = 2f;
@@ -593,13 +803,22 @@ public class AIDirector : MonoBehaviour
             bool moved = false;
             foreach (Rect r in placedStacks)
             {
-                if (!r.Overlaps(stack)) continue;
+                if (!r.Overlaps(stack))
+                {
+                    continue;
+                }
                 stack.y = r.yMin - stack.height - gap;
                 moved = true;
             }
-            if (!moved) break;
+            if (!moved)
+            {
+                break;
+            }
         }
-        if (stack.yMax < 0f) return;
+        if (stack.yMax < 0f)
+        {
+            return;
+        }
         placedStacks.Add(stack);
 
         // line back down if it got pushed up
@@ -645,7 +864,10 @@ public class AIDirector : MonoBehaviour
     {
         foreach (Bark b in barks)
         {
-            if (b.who != e) continue;
+            if (b.who != e)
+            {
+                continue;
+            }
             left = b.until - Time.time;
             age = barkDuration - left;
             return b.text;
@@ -660,7 +882,10 @@ public class AIDirector : MonoBehaviour
         text = null;
         color = Color.white;
         size = 0f;
-        if (!(e is GruntBase g) || g.IsDead || (g.Squad != null && g.Squad.Broken) || dist > 70f) return false;
+        if (!(e is GruntBase g) || g.IsDead || (g.Squad != null && g.Squad.Broken) || dist > 70f)
+        {
+            return false;
+        }
 
         float spotted = Time.time - g.SpottedAt;
         if (spotted < 1.2f)
@@ -671,7 +896,10 @@ public class AIDirector : MonoBehaviour
             return true;
         }
 
-        if (g.InCombatState || (g.Awareness <= 0.05f && g.Alertness < SquadAlert.Suspicious)) return false;
+        if (g.InCombatState || (g.Awareness <= 0.05f && g.Alertness < SquadAlert.Suspicious))
+        {
+            return false;
+        }
 
         float fill = g.Alertness >= SquadAlert.Suspicious ? Mathf.Max(0.6f, g.Awareness) : g.Awareness;
         text = "?";
@@ -691,12 +919,17 @@ public class AIDirector : MonoBehaviour
                 text += "\n-- blackboard --\n" + e.Board.Describe();
                 Blackboard parent = e.Board.Parent;
                 if (parent != null && parent != Global)
+                {
                     text += "\n-- squad --\n" + parent.Describe();
+                }
             }
             return text;
         }
 
-        if (e.IsDead || dist > debugRange) return null;
+        if (e.IsDead || dist > debugRange)
+        {
+            return null;
+        }
         string state = e.Brain != null && e.Brain.Leaf != null ? e.Brain.Leaf.Name : "";
         return e.name + "  " + state;
     }
@@ -711,12 +944,21 @@ public class AIDirector : MonoBehaviour
 
         foreach (EnemyAgent e in enemies)
         {
-            if (e == null || e.IsDead) continue;
+            if (e == null || e.IsDead)
+            {
+                continue;
+            }
             float d = Vector3.Distance(cam.transform.position, e.transform.position);
-            if (d > debugRange) continue;
+            if (d > debugRange)
+            {
+                continue;
+            }
             if (d < nearestDist) { nearestDist = d; nearest = e; }
 
-            if (!ToScreen(cam, e.ChestPosition, out Vector2 sp)) continue;
+            if (!ToScreen(cam, e.ChestPosition, out Vector2 sp))
+            {
+                continue;
+            }
             float px = Vector2.Distance(sp, middle);
             if (px < maxPixels && px < bestPixels) { bestPixels = px; best = e; }
         }
@@ -742,13 +984,19 @@ public class AIDirector : MonoBehaviour
         debugStyle.fontSize = 11;
         foreach (NoiseEvent n in recentNoises)
         {
-            if (!ToScreen(cam, n.position + Vector3.up * 0.5f, out Vector2 np)) continue;
+            if (!ToScreen(cam, n.position + Vector3.up * 0.5f, out Vector2 np))
+            {
+                continue;
+            }
             GUI.color = new Color(1f, 0.85f, 0.2f, 1f - (Time.time - n.time) / 1.5f);
             GUI.Label(new Rect(np.x - 40f, np.y - 10f, 80f, 20f), "(( " + n.kind + " ))", debugStyle);
         }
         GUI.color = Color.white;
 
-        if (debugFocus == null) return;
+        if (debugFocus == null)
+        {
+            return;
+        }
 
         // green = covered from the player
         TacticalMap map = TacticalMap.Instance;
@@ -758,7 +1006,10 @@ public class AIDirector : MonoBehaviour
             map.Near(debugFocus.transform.position, 12f, near);
             foreach (TacticalMap.Point p in near)
             {
-                if (!ToScreen(cam, p.position + Vector3.up * 0.1f, out Vector2 tp)) continue;
+                if (!ToScreen(cam, p.position + Vector3.up * 0.1f, out Vector2 tp))
+                {
+                    continue;
+                }
                 GUI.color = Color.Lerp(new Color(1f, 0.3f, 0.3f, 0.6f), new Color(0.3f, 1f, 0.4f, 0.8f),
                     map.CoverFrom(p, Player.Center));
                 GUI.DrawTexture(new Rect(tp.x - 2f, tp.y - 2f, 4f, 4f), whiteTex);
@@ -767,10 +1018,16 @@ public class AIDirector : MonoBehaviour
 
         foreach (EQSQuery q in debugFocus.DebugQueries)
         {
-            if (q == null || Time.time - q.LastRunTime > 3f) continue;
+            if (q == null || Time.time - q.LastRunTime > 3f)
+            {
+                continue;
+            }
             foreach (EQSItem item in q.LastItems)
             {
-                if (!ToScreen(cam, item.Point, out Vector2 p)) continue;
+                if (!ToScreen(cam, item.Point, out Vector2 p))
+                {
+                    continue;
+                }
                 Color c = item.Valid ? Color.Lerp(Color.red, Color.green, item.Score) : new Color(0.4f, 0.4f, 0.4f, 0.5f);
                 float s = item == q.LastBest ? 10f : (item.Valid ? 6f : 4f);
                 GUI.color = c;

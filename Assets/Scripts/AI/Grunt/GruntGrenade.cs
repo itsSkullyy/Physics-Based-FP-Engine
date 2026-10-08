@@ -102,32 +102,54 @@ public class GruntGrenade : MonoBehaviour
         {
             Collider mine = GetComponent<Collider>();
             foreach (Collider c in owner.GetComponentsInChildren<Collider>())
-                if (c != null) Physics.IgnoreCollision(mine, c);
+            {
+                if (c != null)
+                {
+                    Physics.IgnoreCollision(mine, c);
+                }
+            }
         }
     }
 
     void Update()
     {
-        if (exploded) return;
+        if (exploded)
+        {
+            return;
+        }
 
-        Age += Time.deltaTime;
-        fuseLeft -= Time.deltaTime;
+        float dt = Time.deltaTime;
+        Age += dt;
+        fuseLeft -= dt;
         if (fuseLeft <= 0f)
         {
             Explode();
             return;
         }
 
+        UpdateBeeps(dt);
+        UpdateBlink(dt);
+    }
+
+    // beeps faster as the fuse runs down
+    void UpdateBeeps(float dt)
+    {
         float t = Mathf.Clamp01(fuseLeft / Mathf.Max(0.01f, settings.fuse));
-        beepTimer -= Time.deltaTime;
-        if (beepTimer <= 0f)
+        beepTimer -= dt;
+        if (beepTimer > 0f)
         {
-            beepTimer = Mathf.Lerp(0.06f, 0.45f, t);
-            blinkLeft = Mathf.Min(0.05f, beepTimer * 0.5f);
-            EnemySounds.PlayAt(EnemySounds.Beep, transform.position, 1f, Mathf.Lerp(1.35f, 1f, t), 25f);
+            return;
         }
 
-        blinkLeft -= Time.deltaTime;
+        beepTimer = Mathf.Lerp(0.06f, 0.45f, t);
+        blinkLeft = Mathf.Min(0.05f, beepTimer * 0.5f);
+        EnemySounds.PlayAt(EnemySounds.Beep, transform.position, 1f, Mathf.Lerp(1.35f, 1f, t), 25f);
+    }
+
+    // flashes and swells a little with each beep
+    void UpdateBlink(float dt)
+    {
+        blinkLeft -= dt;
         bool lit = blinkLeft > 0f;
         EnemyVisuals.SetColor(mat, lit ? BlinkColor : BodyColor);
         transform.localScale = baseScale * (lit ? 1.25f : 1f);
@@ -140,7 +162,10 @@ public class GruntGrenade : MonoBehaviour
     // Sent by BattleAxe via SendMessageUpwards when a swing connects.
     void OnAxeHit(Vector3 point)
     {
-        if (exploded) return;
+        if (exploded)
+        {
+            return;
+        }
 
         AIDirector d = AIDirector.Instance;
         PlayerMotionTracker p = d != null ? d.Player : null;
@@ -155,7 +180,10 @@ public class GruntGrenade : MonoBehaviour
             float flight = Mathf.Clamp(dist / 22f, 0.3f, 1.1f);
             rb.linearVelocity = (aim - transform.position) / flight - 0.5f * Physics.gravity * flight;
             fuseLeft = flight + 0.05f;
-            if (d != null) d.Say(target, "INCOMING!", "incoming" + target.GetInstanceID());
+            if (d != null)
+            {
+                d.Say(target, "INCOMING!", "incoming" + target.GetInstanceID());
+            }
         }
         else
         {
@@ -173,7 +201,10 @@ public class GruntGrenade : MonoBehaviour
             fx.ImpactBurst(point, -camFwd, 0.7f);
             fx.Hitstop(0.06f);
         }
-        if (CameraShaker.Instance != null) CameraShaker.Instance.AddTrauma(0.25f);
+        if (CameraShaker.Instance != null)
+        {
+            CameraShaker.Instance.AddTrauma(0.25f);
+        }
         EnemySounds.PlayAt(EnemySounds.Ricochet, transform.position, 1f, 0.8f);
     }
 
@@ -186,16 +217,31 @@ public class GruntGrenade : MonoBehaviour
         float bestDist = float.MaxValue;
         foreach (GruntGrenade g in Live)
         {
-            if (g == null || g.exploded) continue;
+            if (g == null || g.exploded)
+            {
+                continue;
+            }
             Vector3 to = g.transform.position - origin;
             float dist = to.magnitude;
-            if (dist > range || dist >= bestDist) continue;
-            if (Vector3.Angle(dir, to) > maxAngle) continue;
-            if (!Clear(origin, g.transform.position)) continue;
+            if (dist > range || dist >= bestDist)
+            {
+                continue;
+            }
+            if (Vector3.Angle(dir, to) > maxAngle)
+            {
+                continue;
+            }
+            if (!Clear(origin, g.transform.position))
+            {
+                continue;
+            }
             best = g;
             bestDist = dist;
         }
-        if (best == null) return false;
+        if (best == null)
+        {
+            return false;
+        }
 
         point = best.transform.position;
         best.OnAxeHit(point);
@@ -206,16 +252,25 @@ public class GruntGrenade : MonoBehaviour
     static GruntBase NearestGrunt(Vector3 camPos, Vector3 camFwd)
     {
         AIDirector d = AIDirector.Instance;
-        if (d == null) return null;
+        if (d == null)
+        {
+            return null;
+        }
 
         GruntBase best = null;
         float bestScore = float.MaxValue;
         foreach (EnemyAgent e in d.Enemies)
         {
-            if (!(e is GruntBase g) || g.IsDead) continue;
+            if (!(e is GruntBase g) || g.IsDead)
+            {
+                continue;
+            }
             Vector3 to = g.ChestPosition - camPos;
             float dist = to.magnitude;
-            if (dist > 45f) continue;
+            if (dist > 45f)
+            {
+                continue;
+            }
 
             float facing = Vector3.Dot(camFwd, to / Mathf.Max(0.01f, dist));
             float score = dist * (1f + (1f - facing) * 1.5f);
@@ -232,16 +287,24 @@ public class GruntGrenade : MonoBehaviour
     {
         float hit = c.relativeVelocity.magnitude;
         if (hit > 1.5f)
+        {
             EnemySounds.PlayAt(EnemySounds.GrenadeBounce, transform.position, Mathf.Clamp01(hit / 10f), Random.Range(0.9f, 1.1f), 25f);
+        }
 
-        if (batted && c.collider.GetComponentInParent<GruntBase>() != null) Explode();
+        if (batted && c.collider.GetComponentInParent<GruntBase>() != null)
+        {
+            Explode();
+        }
     }
 
     // ---------------------------------------------------------------- boom
 
     void Explode()
     {
-        if (exploded) return;
+        if (exploded)
+        {
+            return;
+        }
         exploded = true;
         Live.Remove(this);
 
@@ -251,14 +314,20 @@ public class GruntGrenade : MonoBehaviour
 
         ExplosionFX.Get().Explode(pos, r);
 
-        if (CameraShaker.Instance != null) CameraShaker.Instance.AddTraumaAtPoint(pos, 0.9f, r, r * 6f);
+        if (CameraShaker.Instance != null)
+        {
+            CameraShaker.Instance.AddTraumaAtPoint(pos, 0.9f, r, r * 6f);
+        }
 
         // Player
         if (d != null && d.Player != null && d.PlayerHealth != null)
         {
             Vector3 to = d.Player.Center - pos;
             float dist = to.magnitude;
-            if (dist <= r * 2f) ImpactFrames.Hit(pos, Mathf.Lerp(1f, 0.4f, dist / (r * 2f)));
+            if (dist <= r * 2f)
+            {
+                ImpactFrames.Hit(pos, Mathf.Lerp(1f, 0.4f, dist / (r * 2f)));
+            }
             if (dist <= r && Clear(pos + Vector3.up * 0.3f, d.Player.Center))
             {
                 float k = 1f - dist / r;
@@ -267,10 +336,16 @@ public class GruntGrenade : MonoBehaviour
                 {
                     Vector3 dir = to.sqrMagnitude > 0.01f ? to.normalized : Vector3.up;
                     d.PlayerBody.linearVelocity += dir * settings.knockback * k + Vector3.up * 6f * k;
-                    if (d.Controller != null) d.Controller.SuppressJumpHold();
+                    if (d.Controller != null)
+                    {
+                        d.Controller.SuppressJumpHold();
+                    }
                 }
                 JuiceFX fx = JuiceFX.Get();
-                if (fx != null) fx.Hitstop(0.08f);
+                if (fx != null)
+                {
+                    fx.Hitstop(0.08f);
+                }
             }
         }
 
@@ -279,14 +354,23 @@ public class GruntGrenade : MonoBehaviour
         {
             foreach (EnemyAgent e in d.Enemies.ToArrayCopy())
             {
-                if (e == null || e.IsDead) continue;
+                if (e == null || e.IsDead)
+                {
+                    continue;
+                }
                 float dist = Vector3.Distance(pos, e.ChestPosition);
-                if (dist > r * 0.8f || !Clear(pos + Vector3.up * 0.3f, e.ChestPosition)) continue;
+                if (dist > r * 0.8f || !Clear(pos + Vector3.up * 0.3f, e.ChestPosition))
+                {
+                    continue;
+                }
 
                 Vector3 dir = (e.ChestPosition - pos).normalized;
                 EnemyHit hit = new EnemyHit { kind = HitKind.Other, point = e.ChestPosition, direction = dir, force = 10f };
                 e.TakeHit(hit);
-                if (dist < r * 0.4f) e.TakeHit(hit);
+                if (dist < r * 0.4f)
+                {
+                    e.TakeHit(hit);
+                }
             }
         }
 
@@ -295,11 +379,16 @@ public class GruntGrenade : MonoBehaviour
         foreach (Collider c in Physics.OverlapSphere(pos, r, ~0, QueryTriggerInteraction.Ignore))
         {
             BreakableWall w = c.GetComponentInParent<BreakableWall>();
-            if (w != null && walls.Add(w)) w.SendMessage("OnAxeHit", pos, SendMessageOptions.DontRequireReceiver);
+            if (w != null && walls.Add(w))
+            {
+                w.SendMessage("OnAxeHit", pos, SendMessageOptions.DontRequireReceiver);
+            }
 
             Rigidbody body = c.attachedRigidbody;
             if (body != null && !body.isKinematic && (d == null || body != d.PlayerBody))
+            {
                 body.AddExplosionForce(settings.knockback * 2f, pos, r, 1f, ForceMode.VelocityChange);
+            }
         }
 
         Destroy(gameObject);
@@ -309,9 +398,17 @@ public class GruntGrenade : MonoBehaviour
     {
         Vector3 dir = to - from;
         float len = dir.magnitude;
-        if (len < 0.01f) return true;
+        if (len < 0.01f)
+        {
+            return true;
+        }
         foreach (RaycastHit h in Physics.RaycastAll(from, dir / len, len, ~0, QueryTriggerInteraction.Ignore))
-            if (h.rigidbody == null) return false;
+        {
+            if (h.rigidbody == null)
+            {
+                return false;
+            }
+        }
         return true;
     }
 }

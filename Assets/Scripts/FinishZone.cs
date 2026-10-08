@@ -21,22 +21,33 @@ public class FinishZone : MonoBehaviour
 
     void OnTriggerEnter(Collider other)
     {
-        if (!other.CompareTag(playerTag)) return;
+        if (!other.CompareTag(playerTag))
+        {
+            return;
+        }
 
         bool wasRunning = CourseTimer.Get().Running;
         CourseTimer.Get().FinishRun();
-        if (!wasRunning) return;
+        if (!wasRunning)
+        {
+            return;
+        }
 
         Vector3 point = other.ClosestPoint(transform.position);
 
         if (useJuiceFX)
         {
             JuiceFX fx = JuiceFX.Instance != null ? JuiceFX.Instance : JuiceFX.Get();
-            if (fx != null) fx.ImpactBurst(point, Vector3.up, 1f);
+            if (fx != null)
+            {
+                fx.ImpactBurst(point, Vector3.up, 1f);
+            }
         }
 
         if (CameraShaker.Instance != null)
+        {
             CameraShaker.Instance.AddTrauma(finishShake);
+        }
 
         if (useImpactFrame)
         {

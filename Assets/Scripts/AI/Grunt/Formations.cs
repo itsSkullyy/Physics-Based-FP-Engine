@@ -31,7 +31,10 @@ public static class Formations
     public static Vector3 World(FormationShape shape, int index, int count, Vector3 anchor, Vector3 forward, float spacing)
     {
         forward.y = 0f;
-        if (forward.sqrMagnitude < 0.001f) forward = Vector3.forward;
+        if (forward.sqrMagnitude < 0.001f)
+        {
+            forward = Vector3.forward;
+        }
         return anchor + Quaternion.LookRotation(forward.normalized, Vector3.up) * Offset(shape, index, count, spacing);
     }
 }

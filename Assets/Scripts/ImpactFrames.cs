@@ -96,7 +96,10 @@ public class ImpactFrames : MonoBehaviour
 
     public static ImpactFrames Get()
     {
-        if (Instance != null) return Instance;
+        if (Instance != null)
+        {
+            return Instance;
+        }
         ImpactFrames found = FindFirstObjectByType<ImpactFrames>();
         if (found != null) { Instance = found; return Instance; }
         GameObject go = new GameObject("ImpactFrames");
@@ -115,19 +118,28 @@ public class ImpactFrames : MonoBehaviour
 
     void OnDestroy()
     {
-        if (Instance == this) Instance = null;
+        if (Instance == this)
+        {
+            Instance = null;
+        }
         if (frozen)
         {
             Time.timeScale = 1f;
             Time.fixedDeltaTime = defaultFixedDelta;
         }
         ReleaseGrab();
-        if (recolourMat != null) Destroy(recolourMat);
+        if (recolourMat != null)
+        {
+            Destroy(recolourMat);
+        }
     }
 
     void BuildRecolourMaterial()
     {
-        if (!recolourWorld) return;
+        if (!recolourWorld)
+        {
+            return;
+        }
 
         Shader s = Shader.Find("Hidden/ImpactRedWorld");
         if (s == null)
@@ -143,7 +155,10 @@ public class ImpactFrames : MonoBehaviour
 
     static void EnsureTex()
     {
-        if (whiteTex != null) return;
+        if (whiteTex != null)
+        {
+            return;
+        }
         whiteTex = new Texture2D(1, 1, TextureFormat.RGBA32, false);
         whiteTex.SetPixel(0, 0, Color.white);
         whiteTex.Apply();
@@ -188,12 +203,16 @@ public class ImpactFrames : MonoBehaviour
             lineSeed = Random.value * 1000f;
 
             if (recolourWorld && recolourMat != null)
+            {
                 grabQueued = true;
+            }
         }
 
         freezeSeconds = Mathf.Min(freezeSeconds, maxFreeze);
         if (freezeSeconds > 0f && !frozen && isActiveAndEnabled)
+        {
             StartCoroutine(FreezeRoutine(freezeSeconds));
+        }
     }
 
     IEnumerator FreezeRoutine(float seconds)
@@ -201,18 +220,27 @@ public class ImpactFrames : MonoBehaviour
         frozen = true;
 
         if (grabQueued)
+        {
             yield return StartCoroutine(GrabFrame());
+        }
 
         float prevScale = Time.timeScale;
         Time.timeScale = 0f;
-        if (scaleFixedDelta) Time.fixedDeltaTime = defaultFixedDelta * 0.0001f;
+        if (scaleFixedDelta)
+        {
+            Time.fixedDeltaTime = defaultFixedDelta * 0.0001f;
+        }
 
         float end = Time.realtimeSinceStartup + seconds;
         while (Time.realtimeSinceStartup < end)
+        {
             yield return null;
+        }
 
         if (Mathf.Approximately(Time.timeScale, 0f))
+        {
             Time.timeScale = prevScale <= 0f ? 1f : prevScale;
+        }
         Time.fixedDeltaTime = defaultFixedDelta;
 
         frozen = false;
@@ -248,7 +276,10 @@ public class ImpactFrames : MonoBehaviour
 
     void Update()
     {
-        if (overlayT <= 0f) return;
+        if (overlayT <= 0f)
+        {
+            return;
+        }
 
         overlayT -= Time.unscaledDeltaTime / Mathf.Max(0.01f, overlayDuration);
         if (overlayT <= 0f)
@@ -262,7 +293,10 @@ public class ImpactFrames : MonoBehaviour
 
     void OnGUI()
     {
-        if (overlayT <= 0f || overlayIntensity <= 0f) return;
+        if (overlayT <= 0f || overlayIntensity <= 0f)
+        {
+            return;
+        }
         EnsureTex();
 
         float w = Screen.width;
@@ -275,39 +309,50 @@ public class ImpactFrames : MonoBehaviour
 
         if (recolourWorld && recolourMat != null && grabbedFrame != null && Event.current.type == EventType.Repaint)
         {
-            recolourMat.SetColor("_Shadow", shadowColor);
-            recolourMat.SetColor("_Mid", midColor);
-            recolourMat.SetColor("_High", highlightColor);
-            recolourMat.SetFloat("_Strength", recolourStrength);
-            recolourMat.SetFloat("_Threshold", threshold);
-            recolourMat.SetFloat("_Edge", edgeSoftness);
-            recolourMat.SetFloat("_Alpha", a);
-            recolourMat.SetFloat("_FocusX", impactScreen.x);
-            recolourMat.SetFloat("_FocusY", impactScreen.y);
-            recolourMat.SetFloat("_Vignette", vignetteStrength);
-            recolourMat.SetFloat("_Grain", grain);
-            recolourMat.SetFloat("_GrainScale", Mathf.Max(0.5f, grainScale));
-            recolourMat.SetFloat("_Spike", grainSpike);
-            recolourMat.SetFloat("_Edges", edgeLines);
-            recolourMat.SetFloat("_EdgePower", edgePower);
-            recolourMat.SetFloat("_Time01", Time.realtimeSinceStartup);
-
-            recolourMat.SetVector("_MainTex_TexelSize", new Vector4(
-                1f / grabbedFrame.width, 1f / grabbedFrame.height,
-                grabbedFrame.width, grabbedFrame.height));
-
-            Graphics.DrawTexture(new Rect(0, h, w, -h), grabbedFrame, recolourMat);
+            DrawRecolouredFrame(w, h, a);
+        }
+        DrawFlash(w, h, a);
+        if (drawLines)
+        {
+            DrawSpeedLines(w, h, focus, a);
         }
 
+        GUI.color = prev;
+    }
+
+    // the grabbed frame redrawn through the two-tone recolour shader
+    void DrawRecolouredFrame(float w, float h, float alpha)
+    {
+        recolourMat.SetColor("_Shadow", shadowColor);
+        recolourMat.SetColor("_Mid", midColor);
+        recolourMat.SetColor("_High", highlightColor);
+        recolourMat.SetFloat("_Strength", recolourStrength);
+        recolourMat.SetFloat("_Threshold", threshold);
+        recolourMat.SetFloat("_Edge", edgeSoftness);
+        recolourMat.SetFloat("_Alpha", alpha);
+        recolourMat.SetFloat("_FocusX", impactScreen.x);
+        recolourMat.SetFloat("_FocusY", impactScreen.y);
+        recolourMat.SetFloat("_Vignette", vignetteStrength);
+        recolourMat.SetFloat("_Grain", grain);
+        recolourMat.SetFloat("_GrainScale", Mathf.Max(0.5f, grainScale));
+        recolourMat.SetFloat("_Spike", grainSpike);
+        recolourMat.SetFloat("_Edges", edgeLines);
+        recolourMat.SetFloat("_EdgePower", edgePower);
+        recolourMat.SetFloat("_Time01", Time.realtimeSinceStartup);
+
+        recolourMat.SetVector("_MainTex_TexelSize", new Vector4(
+            1f / grabbedFrame.width, 1f / grabbedFrame.height,
+            grabbedFrame.width, grabbedFrame.height));
+
+        Graphics.DrawTexture(new Rect(0, h, w, -h), grabbedFrame, recolourMat);
+    }
+
+    void DrawFlash(float w, float h, float alpha)
+    {
         Color flash = flashColor;
-        flash.a = Mathf.Min(maxFlashAlpha, flashColor.a) * a;
+        flash.a = Mathf.Min(maxFlashAlpha, flashColor.a) * alpha;
         GUI.color = flash;
         GUI.DrawTexture(new Rect(0, 0, w, h), whiteTex);
-
-        if (drawLines)
-            DrawSpeedLines(w, h, focus, a);
-
-        GUI.color = prev;
     }
 
     void DrawSpeedLines(float w, float h, Vector2 focus, float a)
@@ -337,7 +382,10 @@ public class ImpactFrames : MonoBehaviour
     {
         Vector2 delta = to - from;
         float len = delta.magnitude;
-        if (len < 0.01f) return;
+        if (len < 0.01f)
+        {
+            return;
+        }
         float angle = Mathf.Atan2(delta.y, delta.x) * Mathf.Rad2Deg;
 
         GUIUtility.RotateAroundPivot(angle, from);

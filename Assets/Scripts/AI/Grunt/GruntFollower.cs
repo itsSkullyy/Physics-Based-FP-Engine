@@ -46,8 +46,14 @@ public class GruntFollower : GruntBase
     {
         get
         {
-            if (Led) return Squad.Alert;
-            if (InCombatState) return SquadAlert.Combat;
+            if (Led)
+            {
+                return Squad.Alert;
+            }
+            if (InCombatState)
+            {
+                return SquadAlert.Combat;
+            }
             return Brain != null && Brain.IsInState(alert) ? SquadAlert.Searching : SquadAlert.Calm;
         }
     }
@@ -73,7 +79,13 @@ public class GruntFollower : GruntBase
     bool OrderIs(params SquadOrder[] orders)
     {
         SquadOrder o = Order;
-        foreach (SquadOrder x in orders) if (o == x) return true;
+        foreach (SquadOrder x in orders)
+        {
+            if (o == x)
+            {
+                return true;
+            }
+        }
         return false;
     }
 
@@ -116,7 +128,10 @@ public class GruntFollower : GruntBase
         {
             AnimBool("Alert", true);
             alertTree.Abort();
-            if (!Led) KeepLoneAlert(loneSearchTime * 0.5f);
+            if (!Led)
+            {
+                KeepLoneAlert(loneSearchTime * 0.5f);
+            }
         };
         alert.OnTick = dt =>
         {
@@ -131,17 +146,26 @@ public class GruntFollower : GruntBase
         {
             AnimBool("Alert", true);
             laggedAim = player.Center;
-            if (!freshContact) return;
+            if (!freshContact)
+            {
+                return;
+            }
             freshContact = false;
             MarkSpotted();
-            if (Aware && Led && Squad.Alert != SquadAlert.Combat) Say("OVER HERE!", "overhere");
+            if (Aware && Led && Squad.Alert != SquadAlert.Combat)
+            {
+                Say("OVER HERE!", "overhere");
+            }
         };
         combat.OnExit = () =>
         {
             ReleaseShootToken();
             SetLaser(false);
             director.Unclaim(this);
-            if (!Led) KeepLoneAlert(loneSearchTime);
+            if (!Led)
+            {
+                KeepLoneAlert(loneSearchTime);
+            }
         };
         combat.To(alert, () => !PlayerVisible && TimeSinceSeen > 1.5f
                               && (Led ? Squad.Alert != SquadAlert.Combat : TimeSinceSeen > loseInterestTime && TimeSinceHeard > loseInterestTime));
@@ -177,7 +201,10 @@ public class GruntFollower : GruntBase
 
     bool WantsAlert()
     {
-        if (Led) return Squad.Alert == SquadAlert.Suspicious || Squad.Alert == SquadAlert.Searching;
+        if (Led)
+        {
+            return Squad.Alert == SquadAlert.Suspicious || Squad.Alert == SquadAlert.Searching;
+        }
         return CaptainMissing || Awareness >= suspiciousAt || Time.time < loneAlertUntil;
     }
 
@@ -187,7 +214,10 @@ public class GruntFollower : GruntBase
     {
         get
         {
-            if (!CaptainMissing) return false;
+            if (!CaptainMissing)
+            {
+                return false;
+            }
             Vector3 body = Squad.Leader.BodyPosition;
             GruntFollower best = null;
             float bestD = float.MaxValue;
@@ -222,8 +252,14 @@ public class GruntFollower : GruntBase
                 {
                     Vector3 spot = Board.Get(BB.AssignedSpot, transform.position);
                     float d = Vector3.Distance(transform.position, spot);
-                    if (d > 0.8f) MoveTo(spot, d > 6f ? runSpeed : walkSpeed);
-                    else StopMoving();
+                    if (d > 0.8f)
+                    {
+                        MoveTo(spot, d > 6f ? runSpeed : walkSpeed);
+                    }
+                    else
+                    {
+                        StopMoving();
+                    }
                     return BTStatus.Running;
                 })),
             BT.Sequence("StandBy",
@@ -239,9 +275,12 @@ public class GruntFollower : GruntBase
                     BT.Do("Call", () => Say("CAPTAIN? YOU THERE?", "captain")),
                     BT.Always(BT.TimeLimit(20f, BT.Action("WalkOver", () =>
                     {
-                        if (Squad == null || Squad.Leader == null) return BTStatus.Failure;
+                        if (Squad == null || Squad.Leader == null)
+                        {
+                            return BTStatus.Failure;
+                        }
                         MoveTo(Squad.Leader.BodyPosition, CautiousSpeed);
-                        return Arrived(2f) ? BTStatus.Success : BTStatus.Running;
+                        return MoveStatus(2f);
                     }))),
                     Scan("LookAround", () => 3f)),
                 BT.Sequence("Investigate",
@@ -250,7 +289,10 @@ public class GruntFollower : GruntBase
                     Scan("LookAround", () => Random.Range(3f, 4.5f)),
                     BT.Do("Report", () =>
                     {
-                        if (!Led || Squad.InvestigationDone) return;
+                        if (!Led || Squad.InvestigationDone)
+                        {
+                            return;
+                        }
                         Squad.InvestigationDone = true;
                         Say("NOTHING HERE, CAPTAIN.", "nothing");
                         director.SayLater(Squad.Leader, "COPY. STAY SHARP.", "copy", 1.1f);
@@ -274,7 +316,7 @@ public class GruntFollower : GruntBase
                         () =>
                         {
                             MoveTo(loneSpot, CautiousSpeed);
-                            return Arrived(1.5f) ? BTStatus.Success : BTStatus.Running;
+                            return MoveStatus(1.5f);
                         },
                         () => loneSpot = LoneSearchSpot()))),
                     Scan("LookAround", () => Random.Range(2.5f, 4f))),
@@ -301,7 +343,7 @@ public class GruntFollower : GruntBase
                             ? Board.Get(BB.HeardPos, transform.position)
                             : Board.Get(BB.LastSeenPos, transform.position);
                         MoveTo(target, runSpeed * 0.8f);
-                        return Arrived(1.5f) ? BTStatus.Success : BTStatus.Running;
+                        return MoveStatus(1.5f);
                     })),
                     Scan("LookAround", () => 2f)),
                 BT.Sequence("Suppress",
@@ -329,7 +371,7 @@ public class GruntFollower : GruntBase
             Vector3 spot = Board.Get(key, transform.position);
             float d = Vector3.Distance(transform.position, spot);
             MoveTo(spot, d > 6f ? walkSpeed * 1.4f : CautiousSpeed);
-            return Arrived(1f) ? BTStatus.Success : BTStatus.Running;
+            return MoveStatus(1f);
         }));
     }
 
@@ -364,13 +406,16 @@ public class GruntFollower : GruntBase
             () =>
             {
                 MoveTo(sidestepTo, walkSpeed * 1.4f);
-                return Arrived(0.6f) ? BTStatus.Success : BTStatus.Running;
+                return MoveStatus(0.6f);
             },
             () =>
             {
                 sidestepTo = transform.position;
                 TacticalMap map = TacticalMap.Instance;
-                if (map == null || !map.Ready || player == null) return;
+                if (map == null || !map.Ready || player == null)
+                {
+                    return;
+                }
 
                 var near = new System.Collections.Generic.List<TacticalMap.Point>();
                 map.Near(transform.position, sidestepRadius, near);
@@ -378,8 +423,14 @@ public class GruntFollower : GruntBase
                 foreach (TacticalMap.Point p in near)
                 {
                     float d = Vector3.Distance(p.position, transform.position);
-                    if (d < 1.5f || director.Crowding(p.position, this, 2f) > 0.5f) continue;
-                    if (!EQSTest.Clear(p.position + Vector3.up * eyeHeight, player.Center, IgnoreForSight)) continue;
+                    if (d < 1.5f || director.Crowding(p.position, this, 2f) > 0.5f)
+                    {
+                        continue;
+                    }
+                    if (!EQSTest.Clear(p.position + Vector3.up * eyeHeight, player.Center, IgnoreForSight))
+                    {
+                        continue;
+                    }
                     float score = map.CoverFrom(p, player.Center) + Random.value * 0.3f;
                     if (score > best)
                     {
@@ -407,8 +458,14 @@ public class GruntFollower : GruntBase
         aiming = PlayerVisible && (laserOn || !moving);
         AnimBool("Aiming", aiming);
 
-        if (aiming) FaceTowards(player.Center, turnSpeed);
-        else FaceMovement(turnSpeed);
+        if (aiming)
+        {
+            FaceTowards(player.Center, turnSpeed);
+        }
+        else
+        {
+            FaceMovement(turnSpeed);
+        }
     }
 
     // ---------------------------------------------------------------- senses
@@ -416,25 +473,40 @@ public class GruntFollower : GruntBase
     protected override void AfterSenses(float dt)
     {
         base.AfterSenses(dt);
-        if (!Led && !InCombatState && Awareness >= suspiciousAt) KeepLoneAlert(15f);
+        if (!Led && !InCombatState && Awareness >= suspiciousAt)
+        {
+            KeepLoneAlert(15f);
+        }
     }
 
     protected override void OnHeard(NoiseEvent noise)
     {
         base.OnHeard(noise);
-        if (!Led) KeepLoneAlert(20f);
+        if (!Led)
+        {
+            KeepLoneAlert(20f);
+        }
     }
 
     protected override void OnFirstToNotice(bool heard, bool lure)
     {
-        if (lure) Say("WHAT WAS THAT? OVER THERE!", "notice");
-        else Say(heard ? "CAPTAIN! I HEARD SOMETHING!" : "CAPTAIN! SAW SOMETHING MOVE!", "notice");
+        if (lure)
+        {
+            Say("WHAT WAS THAT? OVER THERE!", "notice");
+        }
+        else
+        {
+            Say(heard ? "CAPTAIN! I HEARD SOMETHING!" : "CAPTAIN! SAW SOMETHING MOVE!", "notice");
+        }
     }
 
     protected override void OnFoundBody(GruntBase victim, Vector3 at, bool witnessed)
     {
         base.OnFoundBody(victim, at, witnessed);
-        if (!Led) KeepLoneAlert(45f);
+        if (!Led)
+        {
+            KeepLoneAlert(45f);
+        }
     }
 
     // ---------------------------------------------------------------- aim
@@ -452,7 +524,10 @@ public class GruntFollower : GruntBase
     protected override void Update()
     {
         base.Update();
-        if (IsDead || player == null) return;
+        if (IsDead || player == null)
+        {
+            return;
+        }
 
         float k = 1f - Mathf.Exp(-Time.deltaTime / Mathf.Max(0.01f, aimLag));
         laggedAim = Vector3.Lerp(laggedAim, player.Center, k);
@@ -478,7 +553,10 @@ public class GruntFollower : GruntBase
 
     void SprayShot()
     {
-        if (IsDead) return;
+        if (IsDead)
+        {
+            return;
+        }
 
         int shots = Random.Range(1, 4);
         for (int i = 0; i < shots; i++)
@@ -501,7 +579,10 @@ public class GruntFollower : GruntBase
 
     protected override Quaternion VisualWobble()
     {
-        if (Brain == null || !Brain.IsInState(panicked)) return Quaternion.identity;
+        if (Brain == null || !Brain.IsInState(panicked))
+        {
+            return Quaternion.identity;
+        }
         float t = Time.time;
         return Quaternion.Euler(Mathf.Sin(t * 23f) * 12f, Mathf.Sin(t * 17f) * 20f, Mathf.Cos(t * 29f) * 14f);
     }
@@ -519,11 +600,26 @@ public class GruntFollower : GruntBase
     {
         StringBuilder sb = new StringBuilder(base.DebugText());
         sb.Append('\n').Append(SquadLine());
-        if (Squad != null) sb.Append($"\n{Fireteam}  my order: {Order}");
-        if (CaptainMissing) sb.Append("\ncaptain's gone quiet");
-        if (Brain != null && Brain.IsInState(alert)) AppendTree(sb, alertTree);
-        if (Brain != null && Brain.IsInState(engage)) AppendTree(sb, engageTree);
-        if (Brain != null && Brain.IsInState(panicked)) AppendTree(sb, panicTree);
+        if (Squad != null)
+        {
+            sb.Append($"\n{Fireteam}  my order: {Order}");
+        }
+        if (CaptainMissing)
+        {
+            sb.Append("\ncaptain's gone quiet");
+        }
+        if (Brain != null && Brain.IsInState(alert))
+        {
+            AppendTree(sb, alertTree);
+        }
+        if (Brain != null && Brain.IsInState(engage))
+        {
+            AppendTree(sb, engageTree);
+        }
+        if (Brain != null && Brain.IsInState(panicked))
+        {
+            AppendTree(sb, panicTree);
+        }
         sb.Append($"\nspread x{GroupMultiplier():0.00}");
         return sb.ToString();
     }

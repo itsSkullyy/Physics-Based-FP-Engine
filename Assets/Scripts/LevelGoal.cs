@@ -53,25 +53,47 @@ public class LevelGoal : MonoBehaviour
 
     void Update()
     {
-        if (collected) return;
+        if (collected)
+        {
+            return;
+        }
 
+        BobAndSpin(Time.deltaTime);
+        if (ambientParticles)
+        {
+            EmitAmbientPuffs(Time.deltaTime);
+        }
+    }
+
+    void BobAndSpin(float dt)
+    {
         float y = Mathf.Sin(Time.time * bobSpeed) * bobHeight;
         transform.position = startPos + Vector3.up * y;
-        transform.Rotate(Vector3.up, spinSpeed * Time.deltaTime, Space.World);
+        transform.Rotate(Vector3.up, spinSpeed * dt, Space.World);
+    }
 
-        if (!ambientParticles) return;
-
-        ambientTimer -= Time.deltaTime;
-        if (ambientTimer > 0f) return;
+    void EmitAmbientPuffs(float dt)
+    {
+        ambientTimer -= dt;
+        if (ambientTimer > 0f)
+        {
+            return;
+        }
         ambientTimer = ambientInterval;
 
         JuiceFX fx = JuiceFX.Instance != null ? JuiceFX.Instance : JuiceFX.Get();
-        if (fx != null) fx.AirPuff(transform.position, Vector3.up, ambientStrength);
+        if (fx != null)
+        {
+            fx.AirPuff(transform.position, Vector3.up, ambientStrength);
+        }
     }
 
     void OnTriggerEnter(Collider other)
     {
-        if (collected || !other.CompareTag(playerTag)) return;
+        if (collected || !other.CompareTag(playerTag))
+        {
+            return;
+        }
         collected = true;
 
         CourseTimer timer = CourseTimer.Get();
@@ -83,11 +105,16 @@ public class LevelGoal : MonoBehaviour
         if (useJuiceFX)
         {
             JuiceFX fx = JuiceFX.Instance != null ? JuiceFX.Instance : JuiceFX.Get();
-            if (fx != null) fx.ImpactBurst(point, Vector3.up, 1f);
+            if (fx != null)
+            {
+                fx.ImpactBurst(point, Vector3.up, 1f);
+            }
         }
 
         if (CameraShaker.Instance != null)
+        {
             CameraShaker.Instance.AddTrauma(pickupShake);
+        }
 
         if (useImpactFrame)
         {
@@ -98,18 +125,35 @@ public class LevelGoal : MonoBehaviour
 
         GetComponent<Collider>().enabled = false;
         foreach (Renderer r in GetComponentsInChildren<Renderer>())
+        {
             r.enabled = false;
+        }
 
         LevelCompleteMenu.Get().Show(elapsed, RankFor(elapsed), newBest);
     }
 
     char RankFor(float time)
     {
-        if (time <= sTime) return 'S';
-        if (time <= aTime) return 'A';
-        if (time <= bTime) return 'B';
-        if (time <= cTime) return 'C';
-        if (time <= dTime) return 'D';
+        if (time <= sTime)
+        {
+            return 'S';
+        }
+        if (time <= aTime)
+        {
+            return 'A';
+        }
+        if (time <= bTime)
+        {
+            return 'B';
+        }
+        if (time <= cTime)
+        {
+            return 'C';
+        }
+        if (time <= dTime)
+        {
+            return 'D';
+        }
         return 'F';
     }
 }

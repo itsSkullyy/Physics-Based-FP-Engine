@@ -19,8 +19,14 @@ public struct WorldState
         ulong bit = 1UL << fact;
         WorldState s = this;
         s.Mask |= bit;
-        if (value) s.Values |= bit;
-        else s.Values &= ~bit;
+        if (value)
+        {
+            s.Values |= bit;
+        }
+        else
+        {
+            s.Values &= ~bit;
+        }
         return s;
     }
 
@@ -50,9 +56,18 @@ public struct WorldState
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < 64; i++)
         {
-            if (!Knows(i)) continue;
-            if (sb.Length > 0) sb.Append(' ');
-            if (!Get(i)) sb.Append('!');
+            if (!Knows(i))
+            {
+                continue;
+            }
+            if (sb.Length > 0)
+            {
+                sb.Append(' ');
+            }
+            if (!Get(i))
+            {
+                sb.Append('!');
+            }
             sb.Append(names != null && i < names.Length ? names[i] : i.ToString());
         }
         return sb.ToString();
@@ -124,47 +139,93 @@ public static class GoapPlanner
     public static List<GoapAction> Plan(WorldState start, GoapGoal goal, IReadOnlyList<GoapAction> actions,
                                         int maxDepth = 6, int maxExpansions = 400)
     {
-        if (start.Satisfies(goal.Desired)) return new List<GoapAction>();
+        if (start.Satisfies(goal.Desired))
+        {
+            return new List<GoapAction>();
+        }
 
+        // Costs are read once per plan so every expansion sees the same numbers. The heuristic
+        // is "facts still wrong / most facts one action can change, times the cheapest action",
+        // so it never overestimates and the search stays a proper A* that finds the cheapest plan.
         List<GoapAction> usable = new List<GoapAction>();
+        List<float> costs = new List<float>();
+        float cheapest = float.MaxValue;
+        int mostEffects = 0;
         foreach (GoapAction a in actions)
-            if (a.IsPossible()) usable.Add(a);
+        {
+            if (!a.IsPossible())
+            {
+                continue;
+            }
+            float c = Math.Max(0.01f, a.Cost());
+            usable.Add(a);
+            costs.Add(c);
+            cheapest = Math.Min(cheapest, c);
+            mostEffects = Math.Max(mostEffects, PopCount(a.Effects.Mask));
+        }
+        if (usable.Count == 0)
+        {
+            return null;
+        }
+        mostEffects = Math.Max(1, mostEffects);
+        float Heuristic(WorldState s) => (s.Mismatches(goal.Desired) + mostEffects - 1) / mostEffects * cheapest;
 
         List<Node> open = new List<Node>();
-        HashSet<ulong> closed = new HashSet<ulong>();
+        // keyed on the exact state, a hashed key could collide and wrongly skip a state
+        HashSet<(ulong values, ulong mask)> closed = new HashSet<(ulong values, ulong mask)>();
 
-        open.Add(new Node { state = start, g = 0f, f = start.Mismatches(goal.Desired) });
+        open.Add(new Node { state = start, g = 0f, f = Heuristic(start) });
 
         int expansions = 0;
         while (open.Count > 0 && expansions++ < maxExpansions)
         {
             int bestIndex = 0;
             for (int i = 1; i < open.Count; i++)
-                if (open[i].f < open[bestIndex].f) bestIndex = i;
+            {
+                if (open[i].f < open[bestIndex].f)
+                {
+                    bestIndex = i;
+                }
+            }
 
             Node current = open[bestIndex];
             open.RemoveAt(bestIndex);
 
             if (current.state.Satisfies(goal.Desired))
-                return Unwind(current);
-
-            ulong key = current.state.Values ^ (current.state.Mask * 0x9E3779B97F4A7C15UL);
-            if (!closed.Add(key)) continue;
-            if (current.depth >= maxDepth) continue;
-
-            foreach (GoapAction a in usable)
             {
-                if (!current.state.Satisfies(a.Preconditions)) continue;
+                return Unwind(current);
+            }
 
-                WorldState next = current.state.Apply(a.Effects);
-                if (next.Values == current.state.Values && next.Mask == current.state.Mask) continue;
+            WorldState s = current.state;
+            if (!closed.Add((s.Values & s.Mask, s.Mask)))
+            {
+                continue;
+            }
+            if (current.depth >= maxDepth)
+            {
+                continue;
+            }
 
-                float g = current.g + Math.Max(0.01f, a.Cost());
+            for (int i = 0; i < usable.Count; i++)
+            {
+                GoapAction a = usable[i];
+                if (!s.Satisfies(a.Preconditions))
+                {
+                    continue;
+                }
+
+                WorldState next = s.Apply(a.Effects);
+                if (next.Values == s.Values && next.Mask == s.Mask)
+                {
+                    continue;
+                }
+
+                float g = current.g + costs[i];
                 open.Add(new Node
                 {
                     state = next,
                     g = g,
-                    f = g + next.Mismatches(goal.Desired),
+                    f = g + Heuristic(next),
                     parent = current,
                     action = a,
                     depth = current.depth + 1
@@ -175,11 +236,24 @@ public static class GoapPlanner
         return null;
     }
 
+    static int PopCount(ulong bits)
+    {
+        int count = 0;
+        while (bits != 0)
+        {
+            bits &= bits - 1;
+            count++;
+        }
+        return count;
+    }
+
     static List<GoapAction> Unwind(Node n)
     {
         List<GoapAction> plan = new List<GoapAction>();
         for (; n != null && n.action != null; n = n.parent)
+        {
             plan.Add(n.action);
+        }
         plan.Reverse();
         return plan;
     }
@@ -240,7 +314,10 @@ public class GoapAgent
     {
         if (forced)
         {
-            if (CurrentBehaviour != null && CurrentBehaviour.Tick() == BTStatus.Running) return;
+            if (CurrentBehaviour != null && CurrentBehaviour.Tick() == BTStatus.Running)
+            {
+                return;
+            }
             forced = false;
             CurrentBehaviour = null;
             CurrentAction = null;
@@ -253,14 +330,26 @@ public class GoapAgent
         {
             goalTimer = GoalCheckInterval;
             GoapGoal best = PickGoal();
-            if (best != CurrentGoal) invalid = true;
+            if (best != CurrentGoal)
+            {
+                invalid = true;
+            }
         }
 
-        if (invalid) Replan();
-        if (CurrentAction == null && !Advance()) return;
+        if (invalid)
+        {
+            Replan();
+        }
+        if (CurrentAction == null && !Advance())
+        {
+            return;
+        }
 
         BTStatus s = CurrentBehaviour != null ? CurrentBehaviour.Tick() : BTStatus.Success;
-        if (s == BTStatus.Running) return;
+        if (s == BTStatus.Running)
+        {
+            return;
+        }
 
         if (s == BTStatus.Failure)
         {
@@ -272,7 +361,10 @@ public class GoapAgent
 
         CurrentBehaviour = null;
         CurrentAction = null;
-        if (plan.Count == 0) invalid = true;
+        if (plan.Count == 0)
+        {
+            invalid = true;
+        }
     }
 
     GoapGoal PickGoal()
@@ -283,7 +375,10 @@ public class GoapAgent
 
         foreach (GoapGoal g in Goals)
         {
-            if (now.Satisfies(g.Desired)) continue;
+            if (now.Satisfies(g.Desired))
+            {
+                continue;
+            }
             float p = g.Priority();
             if (p > bestPriority)
             {
@@ -312,13 +407,22 @@ public class GoapAgent
         CurrentGoal = null;
         foreach (GoapGoal g in ordered)
         {
-            if (g.Priority() <= 0f || now.Satisfies(g.Desired)) continue;
+            if (g.Priority() <= 0f || now.Satisfies(g.Desired))
+            {
+                continue;
+            }
 
             List<GoapAction> p = GoapPlanner.Plan(now, g, Actions);
-            if (p == null || p.Count == 0) continue;
+            if (p == null || p.Count == 0)
+            {
+                continue;
+            }
 
             CurrentGoal = g;
-            foreach (GoapAction a in p) plan.Enqueue(a);
+            foreach (GoapAction a in p)
+            {
+                plan.Enqueue(a);
+            }
             lastPlan.AddRange(p);
             break;
         }
@@ -328,7 +432,10 @@ public class GoapAgent
 
     bool Advance()
     {
-        if (plan.Count == 0) return false;
+        if (plan.Count == 0)
+        {
+            return false;
+        }
 
         CurrentAction = plan.Dequeue();
         CurrentBehaviour = CurrentAction.CreateBehaviour != null ? CurrentAction.CreateBehaviour() : null;
@@ -342,11 +449,20 @@ public class GoapAgent
         sb.Append(": ");
         for (int i = 0; i < lastPlan.Count; i++)
         {
-            if (i > 0) sb.Append(" > ");
+            if (i > 0)
+            {
+                sb.Append(" > ");
+            }
             bool active = lastPlan[i] == CurrentAction;
-            if (active) sb.Append('[');
+            if (active)
+            {
+                sb.Append('[');
+            }
             sb.Append(lastPlan[i].Name);
-            if (active) sb.Append(']');
+            if (active)
+            {
+                sb.Append(']');
+            }
         }
         return sb.ToString();
     }

@@ -40,7 +40,10 @@ public class HState
     {
         child.Parent = this;
         children.Add(child);
-        if (initial || initialChild == null) initialChild = child;
+        if (initial || initialChild == null)
+        {
+            initialChild = child;
+        }
         return child;
     }
 
@@ -57,8 +60,14 @@ public class HState
         for (int i = 0; i < transitions.Count; i++)
         {
             Transition t = transitions[i];
-            if (Machine != null && Machine.IsInState(t.target)) continue;
-            if (t.when()) return t.target;
+            if (Machine != null && Machine.IsInState(t.target))
+            {
+                continue;
+            }
+            if (t.when())
+            {
+                return t.target;
+            }
         }
         return null;
     }
@@ -71,7 +80,12 @@ public class HState
     public bool IsAncestorOf(HState other)
     {
         for (HState s = other?.Parent; s != null; s = s.Parent)
-            if (s == this) return true;
+        {
+            if (s == this)
+            {
+                return true;
+            }
+        }
         return false;
     }
 }
@@ -97,12 +111,18 @@ public class HStateMachine
     void Assign(HState s)
     {
         s.Machine = this;
-        foreach (HState c in s.Children) Assign(c);
+        foreach (HState c in s.Children)
+        {
+            Assign(c);
+        }
     }
 
     public void Start()
     {
-        if (started) return;
+        if (started)
+        {
+            return;
+        }
         started = true;
 
         Root.TimeInState = 0f;
@@ -119,13 +139,19 @@ public class HStateMachine
     // outside a tick only
     public void ForceChange(HState target)
     {
-        if (!started) Start();
+        if (!started)
+        {
+            Start();
+        }
         ChangeTo(target);
     }
 
     public void Tick(float dt)
     {
-        if (!started) Start();
+        if (!started)
+        {
+            Start();
+        }
 
         if (pending != null)
         {
@@ -150,34 +176,52 @@ public class HStateMachine
         {
             s.TimeInState += dt;
             s.Tick(dt);
-            if (pending != null) break;
+            if (pending != null)
+            {
+                break;
+            }
         }
     }
 
     public void FixedTick(float dt)
     {
-        if (!started) return;
+        if (!started)
+        {
+            return;
+        }
         for (HState s = Root; s != null; s = s.ActiveChild)
+        {
             s.FixedTick(dt);
+        }
     }
 
     public bool IsInState(HState state)
     {
         for (HState s = Root; s != null; s = s.ActiveChild)
-            if (s == state) return true;
+        {
+            if (s == state)
+            {
+                return true;
+            }
+        }
         return false;
     }
 
     void ChangeTo(HState target)
     {
-        if (target == null) return;
+        if (target == null)
+        {
+            return;
+        }
 
         HState from = Leaf;
 
         // common ancestor
         HState lca = target.Parent;
         while (lca != null && !(lca == Leaf || lca.IsAncestorOf(Leaf)))
+        {
             lca = lca.Parent;
+        }
 
         for (HState s = Leaf; s != null && s != lca; s = s.Parent)
         {
@@ -187,9 +231,14 @@ public class HStateMachine
 
         scratchPath.Clear();
         for (HState s = target; s != null && s != lca; s = s.Parent)
+        {
             scratchPath.Add(s);
+        }
 
-        if (lca != null) lca.ActiveChild = scratchPath.Count > 0 ? scratchPath[scratchPath.Count - 1] : null;
+        if (lca != null)
+        {
+            lca.ActiveChild = scratchPath.Count > 0 ? scratchPath[scratchPath.Count - 1] : null;
+        }
 
         for (int i = scratchPath.Count - 1; i >= 0; i--)
         {
@@ -223,7 +272,10 @@ public class HStateMachine
             StringBuilder sb = new StringBuilder();
             for (HState s = Root.ActiveChild; s != null; s = s.ActiveChild)
             {
-                if (sb.Length > 0) sb.Append('/');
+                if (sb.Length > 0)
+                {
+                    sb.Append('/');
+                }
                 sb.Append(s.Name);
             }
             return sb.ToString();

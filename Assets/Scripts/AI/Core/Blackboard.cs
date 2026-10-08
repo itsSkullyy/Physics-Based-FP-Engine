@@ -17,7 +17,10 @@ public sealed class Blackboard
 
     public void Set<T>(string key, T value)
     {
-        if (values.TryGetValue(key, out object old) && Equals(old, value)) return;
+        if (values.TryGetValue(key, out object old) && Equals(old, value))
+        {
+            return;
+        }
 
         values[key] = value;
         versions[key] = versions.TryGetValue(key, out int v) ? v + 1 : 1;
@@ -36,7 +39,10 @@ public sealed class Blackboard
             return true;
         }
 
-        if (Parent != null) return Parent.TryGet(key, out value);
+        if (Parent != null)
+        {
+            return Parent.TryGet(key, out value);
+        }
 
         value = default;
         return false;
@@ -46,13 +52,19 @@ public sealed class Blackboard
 
     public int Version(string key)
     {
-        if (versions.TryGetValue(key, out int v)) return v;
+        if (versions.TryGetValue(key, out int v))
+        {
+            return v;
+        }
         return Parent != null ? Parent.Version(key) * 31 + 7 : 0;
     }
 
     public void Remove(string key)
     {
-        if (!values.Remove(key)) return;
+        if (!values.Remove(key))
+        {
+            return;
+        }
         versions[key] = versions.TryGetValue(key, out int v) ? v + 1 : 1;
     }
 
@@ -69,7 +81,10 @@ public sealed class Blackboard
         StringBuilder sb = new StringBuilder();
         foreach (var kv in values)
         {
-            if (sb.Length > 0) sb.Append('\n');
+            if (sb.Length > 0)
+            {
+                sb.Append('\n');
+            }
             sb.Append(indent).Append(kv.Key).Append(" = ").Append(Format(kv.Value));
         }
         return sb.ToString();

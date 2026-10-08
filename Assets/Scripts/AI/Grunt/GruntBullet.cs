@@ -49,8 +49,14 @@ public class GruntBullet : MonoBehaviour
             sharedMesh = tmp.GetComponent<MeshFilter>().sharedMesh;
             Destroy(tmp);
         }
-        if (normalMat == null) normalMat = EnemyVisuals.Unlit(NormalColor);
-        if (deflectedMat == null) deflectedMat = EnemyVisuals.Unlit(DeflectedColor);
+        if (normalMat == null)
+        {
+            normalMat = EnemyVisuals.Unlit(NormalColor);
+        }
+        if (deflectedMat == null)
+        {
+            deflectedMat = EnemyVisuals.Unlit(DeflectedColor);
+        }
 
         GameObject vis = new GameObject("Visual");
         vis.transform.SetParent(transform, false);
@@ -72,7 +78,10 @@ public class GruntBullet : MonoBehaviour
     void Update()
     {
         float dt = Time.deltaTime;
-        if (dt <= 0f) return;
+        if (dt <= 0f)
+        {
+            return;
+        }
 
         life -= dt;
         if (life <= 0f)
@@ -81,8 +90,16 @@ public class GruntBullet : MonoBehaviour
             return;
         }
 
-        if (!deflected) TryDeflect();
+        if (!deflected)
+        {
+            TryDeflect();
+        }
+        Fly(dt);
+    }
 
+    // sweeps a sphere along this frame's movement instead of using a collider, so it can't tunnel
+    void Fly(float dt)
+    {
         Vector3 pos = transform.position;
         Vector3 step = velocity * dt;
         float len = step.magnitude;
@@ -93,7 +110,10 @@ public class GruntBullet : MonoBehaviour
             return;
         }
 
-        if (!deflected && !whizzed) Whiz(pos, step);
+        if (!deflected && !whizzed)
+        {
+            Whiz(pos, step);
+        }
 
         transform.position = pos + step;
         transform.rotation = Quaternion.LookRotation(velocity);
@@ -104,13 +124,19 @@ public class GruntBullet : MonoBehaviour
     void Whiz(Vector3 from, Vector3 step)
     {
         AIDirector d = AIDirector.Instance;
-        if (d == null || d.Player == null) return;
+        if (d == null || d.Player == null)
+        {
+            return;
+        }
 
         Vector3 head = d.Player.CameraPosition;
         float len2 = step.sqrMagnitude;
         float t = len2 > 0f ? Mathf.Clamp01(Vector3.Dot(head - from, step) / len2) : 0f;
         Vector3 closest = from + step * t;
-        if ((closest - head).sqrMagnitude > 2.5f * 2.5f || t >= 1f && Vector3.Dot(head - from, step) > len2) return;
+        if ((closest - head).sqrMagnitude > 2.5f * 2.5f || t >= 1f && Vector3.Dot(head - from, step) > len2)
+        {
+            return;
+        }
 
         whizzed = true;
         EnemySounds.PlayAt(EnemySounds.BulletWhiz, closest, 1f, Random.Range(0.9f, 1.15f), 12f);
@@ -125,13 +151,19 @@ public class GruntBullet : MonoBehaviour
 
         foreach (RaycastHit h in hits)
         {
-            if (h.collider == null) continue;
+            if (h.collider == null)
+            {
+                continue;
+            }
 
             EnemyAgent enemy = h.collider.GetComponentInParent<EnemyAgent>();
             if (enemy != null)
             {
                 // no friendly fire unless deflected
-                if (!deflected || enemy.IsDead) continue;
+                if (!deflected || enemy.IsDead)
+                {
+                    continue;
+                }
             }
 
             if (h.distance < bestDist)
@@ -156,7 +188,9 @@ public class GruntBullet : MonoBehaviour
             {
                 d.PlayerHealth.Damage(damage);
                 if (CameraShaker.Instance != null)
+                {
                     CameraShaker.Instance.AddKick(Vector3.zero, new Vector3(-2.5f, Random.Range(-2f, 2f), 0f));
+                }
             }
             Destroy(gameObject);
             return;
@@ -177,8 +211,14 @@ public class GruntBullet : MonoBehaviour
         }
 
         JuiceFX fx = JuiceFX.Instance;
-        if (fx != null) fx.Scuff(point, normal, Vector3.Reflect(velocity.normalized, normal), 0.35f);
-        if (Random.value < 0.35f) EnemySounds.PlayAt(EnemySounds.Ricochet, point, 0.6f, Random.Range(0.85f, 1.2f));
+        if (fx != null)
+        {
+            fx.Scuff(point, normal, Vector3.Reflect(velocity.normalized, normal), 0.35f);
+        }
+        if (Random.value < 0.35f)
+        {
+            EnemySounds.PlayAt(EnemySounds.Ricochet, point, 0.6f, Random.Range(0.85f, 1.2f));
+        }
 
         Destroy(gameObject);
     }
@@ -186,13 +226,25 @@ public class GruntBullet : MonoBehaviour
     void TryDeflect()
     {
         AIDirector d = AIDirector.Instance;
-        if (d == null || d.Axe == null || d.Player == null) return;
-        if (!d.Axe.IsSwinging || d.Player.IsDead) return;
+        if (d == null || d.Axe == null || d.Player == null)
+        {
+            return;
+        }
+        if (!d.Axe.IsSwinging || d.Player.IsDead)
+        {
+            return;
+        }
 
         Vector3 cam = d.Player.CameraPosition;
         Vector3 to = transform.position - cam;
-        if (to.magnitude > deflectRange) return;
-        if (Vector3.Angle(d.Player.CameraForward, to) > deflectAngle) return;
+        if (to.magnitude > deflectRange)
+        {
+            return;
+        }
+        if (Vector3.Angle(d.Player.CameraForward, to) > deflectAngle)
+        {
+            return;
+        }
 
         deflected = true;
 
@@ -202,8 +254,14 @@ public class GruntBullet : MonoBehaviour
         velocity = (target - transform.position).normalized * velocity.magnitude * 1.6f;
         life = 3f;
 
-        if (body != null) body.sharedMaterial = deflectedMat;
-        if (trail != null) trail.material = deflectedMat;
+        if (body != null)
+        {
+            body.sharedMaterial = deflectedMat;
+        }
+        if (trail != null)
+        {
+            trail.material = deflectedMat;
+        }
 
         JuiceFX fx = JuiceFX.Get();
         if (fx != null)
@@ -211,9 +269,15 @@ public class GruntBullet : MonoBehaviour
             fx.ImpactBurst(transform.position, -to.normalized, 0.55f);
             fx.Hitstop(0.05f);
         }
-        if (CameraShaker.Instance != null) CameraShaker.Instance.AddTrauma(0.2f);
+        if (CameraShaker.Instance != null)
+        {
+            CameraShaker.Instance.AddTrauma(0.2f);
+        }
         EnemySounds.PlayAt(EnemySounds.Ricochet, transform.position, 1f, 1.2f);
 
-        if (owner != null && !owner.IsDead && d != null) d.Say(owner, "WHAT?!", "deflect");
+        if (owner != null && !owner.IsDead && d != null)
+        {
+            d.Say(owner, "WHAT?!", "deflect");
+        }
     }
 }

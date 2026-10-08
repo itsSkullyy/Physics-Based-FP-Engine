@@ -12,9 +12,18 @@ public static class EnemyVisuals
 
     public static void SetColor(Material m, Color c)
     {
-        if (m == null) return;
-        if (m.HasProperty("_Color")) m.SetColor("_Color", c);
-        if (m.HasProperty("_BaseColor")) m.SetColor("_BaseColor", c);
+        if (m == null)
+        {
+            return;
+        }
+        if (m.HasProperty("_Color"))
+        {
+            m.SetColor("_Color", c);
+        }
+        if (m.HasProperty("_BaseColor"))
+        {
+            m.SetColor("_BaseColor", c);
+        }
     }
 
     public static LineRenderer MakeLine(Transform parent, string name, Color color, float width)

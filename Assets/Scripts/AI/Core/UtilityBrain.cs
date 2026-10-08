@@ -75,7 +75,10 @@ public class UtilityAction
             float v = considerations[i].Evaluate();
             v += (1f - v) * makeUp * v;
             result *= v;
-            if (result <= 0f) break;
+            if (result <= 0f)
+            {
+                break;
+            }
         }
 
         Score = result;
@@ -123,7 +126,10 @@ public class UtilityBrain
         {
             if (Time.time < forcedUntil)
             {
-                if (Current == forcedAction) return false;
+                if (Current == forcedAction)
+                {
+                    return false;
+                }
                 UtilityAction was = Current;
                 Current = forcedAction;
                 Changed?.Invoke(was, forcedAction);
@@ -133,7 +139,10 @@ public class UtilityBrain
         }
 
         timer -= dt;
-        if (!force && timer > 0f) return false;
+        if (!force && timer > 0f)
+        {
+            return false;
+        }
         timer = Interval;
 
         UtilityAction best = null;
@@ -142,7 +151,10 @@ public class UtilityBrain
         foreach (UtilityAction a in actions)
         {
             float s = a.Evaluate();
-            if (a == Current) s *= Stickiness;
+            if (a == Current)
+            {
+                s *= Stickiness;
+            }
             if (s > bestScore)
             {
                 bestScore = s;
@@ -150,7 +162,10 @@ public class UtilityBrain
             }
         }
 
-        if (best == Current) return false;
+        if (best == Current)
+        {
+            return false;
+        }
 
         UtilityAction old = Current;
         Current = best;
@@ -195,7 +210,9 @@ public static class Curves
 
         AnimationCurve c = new AnimationCurve(keys);
         for (int i = 0; i < keys.Length; i++)
+        {
             c.SmoothTangents(i, 0f);
+        }
         return c;
     }
 }

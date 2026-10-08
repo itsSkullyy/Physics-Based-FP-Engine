@@ -113,9 +113,7 @@ public class PlayerJuice : MonoBehaviour
 
     void Awake()
     {
-        if (controller == null) controller = GetComponent<FirstPersonCharacterController>();
-        if (controller == null) controller = GetComponentInChildren<FirstPersonCharacterController>();
-
+        controller = FindController();
         if (controller == null)
         {
             Debug.LogError("PlayerJuice needs a FirstPersonCharacterController.", this);
@@ -123,22 +121,57 @@ public class PlayerJuice : MonoBehaviour
             return;
         }
 
-        if (grappling == null) grappling = controller.GetComponent<Grappling>();
-        if (axe == null) axe = controller.GetComponentInChildren<BattleAxe>();
-        if (input == null) input = PlayerInputRouter.Resolve(this);
-        if (cameraRig == null && controller.cameraTransform != null)
-            cameraRig = controller.cameraTransform.GetComponentInChildren<FirstPersonCameraRig>();
-        if (shaker == null) shaker = CameraShaker.Instance;
-        if (shaker == null && cameraRig != null) shaker = cameraRig.GetComponent<CameraShaker>();
-
+        FindReferences();
         lastPos = controller.transform.position;
         lastWallKicksLeft = controller.AirWallKicksLeft;
+    }
+
+    FirstPersonCharacterController FindController()
+    {
+        if (controller != null)
+        {
+            return controller;
+        }
+        FirstPersonCharacterController found = GetComponent<FirstPersonCharacterController>();
+        return found != null ? found : GetComponentInChildren<FirstPersonCharacterController>();
+    }
+
+    // grapple, axe, input, camera rig and shaker, from the player if not set in the inspector
+    void FindReferences()
+    {
+        if (grappling == null)
+        {
+            grappling = controller.GetComponent<Grappling>();
+        }
+        if (axe == null)
+        {
+            axe = controller.GetComponentInChildren<BattleAxe>();
+        }
+        if (input == null)
+        {
+            input = PlayerInputRouter.Resolve(this);
+        }
+        if (cameraRig == null && controller.cameraTransform != null)
+        {
+            cameraRig = controller.cameraTransform.GetComponentInChildren<FirstPersonCameraRig>();
+        }
+        if (shaker == null)
+        {
+            shaker = CameraShaker.Instance;
+        }
+        if (shaker == null && cameraRig != null)
+        {
+            shaker = cameraRig.GetComponent<CameraShaker>();
+        }
     }
 
     void Start()
     {
         fx = JuiceFX.Get();
-        if (shaker == null) shaker = CameraShaker.Instance;
+        if (shaker == null)
+        {
+            shaker = CameraShaker.Instance;
+        }
 
         if (axe != null)
         {
@@ -187,7 +220,10 @@ public class PlayerJuice : MonoBehaviour
     void TrackLanding()
     {
         float vy = controller.Velocity.y;
-        if (vy < 0f) lastFallSpeed = -vy;
+        if (vy < 0f)
+        {
+            lastFallSpeed = -vy;
+        }
 
         bool grounded = controller.IsGrounded;
 
@@ -196,7 +232,9 @@ public class PlayerJuice : MonoBehaviour
             float strength = Mathf.InverseLerp(landMinSpeed, landBigSpeed, lastFallSpeed);
 
             if (landDust && fx != null && TryGetGround(out Vector3 point, out Vector3 normal))
+            {
                 fx.LandDust(point, normal, strength);
+            }
 
             float hard = Mathf.InverseLerp(landShakeMinSpeed, landShakeFullSpeed, lastFallSpeed);
             hard *= FirstPersonCameraRig.LandingSoftness(controller, fastLandingShakeKeep);
@@ -208,13 +246,19 @@ public class PlayerJuice : MonoBehaviour
             }
         }
 
-        if (grounded) lastFallSpeed = 0f;
+        if (grounded)
+        {
+            lastFallSpeed = 0f;
+        }
         wasGrounded = grounded;
     }
 
     void TrackFootsteps(float dt)
     {
-        if (!footstepDust || fx == null) return;
+        if (!footstepDust || fx == null)
+        {
+            return;
+        }
 
         if (!controller.IsGrounded || controller.IsSliding ||
             controller.CurrentSpeed < footstepMinSpeed)
@@ -224,7 +268,10 @@ public class PlayerJuice : MonoBehaviour
         }
 
         stepAccum += Vector3.Distance(controller.transform.position, lastPos);
-        if (stepAccum < stepDistance) return;
+        if (stepAccum < stepDistance)
+        {
+            return;
+        }
 
         stepAccum = 0f;
 
@@ -237,12 +284,17 @@ public class PlayerJuice : MonoBehaviour
 
     void TrackSlide(float dt)
     {
-        if (!slideDust || fx == null) return;
+        if (!slideDust || fx == null)
+        {
+            return;
+        }
 
         bool sliding = controller.IsSliding && controller.IsGrounded;
 
         if (sliding && !wasSliding && shaker != null)
+        {
             shaker.AddKick(new Vector3(0f, -0.03f, 0f), new Vector3(1.5f, 0f, 0f));
+        }
 
         wasSliding = sliding;
 
@@ -253,7 +305,10 @@ public class PlayerJuice : MonoBehaviour
         }
 
         slideTimer -= dt;
-        if (slideTimer > 0f) return;
+        if (slideTimer > 0f)
+        {
+            return;
+        }
         slideTimer = slideDustInterval;
 
         if (TryGetGround(out Vector3 point, out Vector3 normal))
@@ -277,10 +332,16 @@ public class PlayerJuice : MonoBehaviour
 
         wasWallRunning = running;
 
-        if (!running || !wallRunDust || fx == null) return;
+        if (!running || !wallRunDust || fx == null)
+        {
+            return;
+        }
 
         wallRunTimer -= dt;
-        if (wallRunTimer > 0f) return;
+        if (wallRunTimer > 0f)
+        {
+            return;
+        }
         wallRunTimer = wallRunDustInterval;
 
         Vector3 origin = controller.transform.position + Vector3.up * 0.2f;
@@ -302,7 +363,9 @@ public class PlayerJuice : MonoBehaviour
         if (left < lastWallKicksLeft)
         {
             if (fx != null)
+            {
                 fx.AirPuff(controller.transform.position, controller.Velocity, 0.55f);
+            }
 
             if (shaker != null)
             {
@@ -324,7 +387,9 @@ public class PlayerJuice : MonoBehaviour
             float chain = Mathf.Max(0, controller.DartChain - 1);
 
             if (fx != null)
+            {
                 fx.AirPuff(controller.transform.position, -controller.Velocity, 0.7f);
+            }
 
             if (shaker != null)
             {
@@ -344,10 +409,14 @@ public class PlayerJuice : MonoBehaviour
         if (tier > 0 && lastVaultTier == 0)
         {
             if (shaker != null)
+            {
                 shaker.AddTrauma(vaultShake * tier * 0.6f);
+            }
 
             if (fx != null && TryGetGround(out Vector3 point, out Vector3 normal))
+            {
                 fx.Scuff(point, normal, controller.Velocity, 0.4f);
+            }
         }
 
         lastVaultTier = tier;
@@ -355,7 +424,10 @@ public class PlayerJuice : MonoBehaviour
 
     void TrackGrapple()
     {
-        if (grappling == null) return;
+        if (grappling == null)
+        {
+            return;
+        }
 
         bool swinging = grappling.IsSwinging;
         if (swinging && !wasSwingingRope && shaker != null)
@@ -379,31 +451,45 @@ public class PlayerJuice : MonoBehaviour
 
     void TrackThrownAxe()
     {
-        if (axe == null) return;
+        if (axe == null)
+        {
+            return;
+        }
 
         ThrownAxe thrown = axe.ActiveAxe;
         bool stuck = thrown != null && thrown.IsStuck;
 
         if (stuck && !wasAxeStuck && shaker != null)
+        {
             shaker.AddTraumaAtPoint(thrown.HeadPosition, axeStickShake,
                 axeStickFullRange, axeStickMaxRange);
+        }
 
         wasAxeStuck = stuck;
     }
 
     void TrackAxeCharge(float dt)
     {
-        if (axe == null || shaker == null || chargeHumTrauma <= 0f) return;
+        if (axe == null || shaker == null || chargeHumTrauma <= 0f)
+        {
+            return;
+        }
 
         float charge = axe.ChargeAmount;
-        if (charge <= 0f) return;
+        if (charge <= 0f)
+        {
+            return;
+        }
 
         shaker.AddTrauma(chargeHumTrauma * charge * dt);
     }
 
     void OnAxeChargeStarted()
     {
-        if (shaker == null) return;
+        if (shaker == null)
+        {
+            return;
+        }
 
         shaker.AddKick(chargeStartKick, new Vector3(-2f, 0f, 1f));
         shaker.AddFovPunch(chargeStartFov);
@@ -418,12 +504,17 @@ public class PlayerJuice : MonoBehaviour
         }
 
         if (chargeRumble && input != null)
+        {
             input.Rumble(chargeFullRumbleLow, chargeFullRumbleHigh, chargeFullRumbleTime);
+        }
     }
 
     void OnAxeChargeReleased(float charge)
     {
-        if (shaker == null || charge <= 0f) return;
+        if (shaker == null || charge <= 0f)
+        {
+            return;
+        }
 
         shaker.AddTrauma(chargedThrowShakeBonus * charge);
         shaker.AddFovPunch(chargedThrowFovBonus * charge);
@@ -432,10 +523,15 @@ public class PlayerJuice : MonoBehaviour
     void OnAxeThrown()
     {
         if (fx != null && controller.cameraTransform != null)
+        {
             fx.AirPuff(controller.cameraTransform.position + controller.cameraTransform.forward * 0.8f,
                 controller.cameraTransform.forward, 0.3f);
+        }
 
-        if (shaker == null) return;
+        if (shaker == null)
+        {
+            return;
+        }
         shaker.AddTrauma(axeThrowShake);
         shaker.AddKick(axeThrowKick, new Vector3(-3f, 1.5f, 2f));
         shaker.AddFovPunch(axeThrowFov);
@@ -443,7 +539,10 @@ public class PlayerJuice : MonoBehaviour
 
     void OnAxeSwingStarted()
     {
-        if (shaker == null) return;
+        if (shaker == null)
+        {
+            return;
+        }
         shaker.AddKick(axeSwingKick, new Vector3(1.5f, 0f, -1f));
     }
 
@@ -455,13 +554,18 @@ public class PlayerJuice : MonoBehaviour
             fx.Hitstop(axeHitstop, axeHitstopScale);
         }
 
-        if (shaker == null) return;
+        if (shaker == null)
+        {
+            return;
+        }
 
         shaker.AddTrauma(bounced ? axeBounceShake : axeHitShake);
         shaker.AddKick(new Vector3(0f, 0.06f, -0.16f), new Vector3(-5f, 0f, 3f));
 
         if (bounced)
+        {
             shaker.AddFovPunch(axeBounceFov);
+        }
     }
 
     // ---------------------------------------------------------------- helpers

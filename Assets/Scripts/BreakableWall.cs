@@ -15,10 +15,20 @@ public class BreakableWall : MonoBehaviour
     {
         WallShard[] shards = FindObjectsByType<WallShard>(FindObjectsSortMode.None);
         foreach (WallShard s in shards)
-            if (s != null) Destroy(s.gameObject);
+        {
+            if (s != null)
+            {
+                Destroy(s.gameObject);
+            }
+        }
 
         foreach (BreakableWall w in All)
-            if (w != null) w.Respawn();
+        {
+            if (w != null)
+            {
+                w.Respawn();
+            }
+        }
     }
 
     static Key debugRespawnKey = Key.B;
@@ -28,7 +38,10 @@ public class BreakableWall : MonoBehaviour
 
     static void EnsureDebugWatcher()
     {
-        if (debugWatcher != null) return;
+        if (debugWatcher != null)
+        {
+            return;
+        }
         GameObject go = new GameObject("BreakableWallDebug");
         DontDestroyOnLoad(go);
         debugWatcher = go.AddComponent<BreakableWallDebug>();
@@ -95,7 +108,10 @@ public class BreakableWall : MonoBehaviour
 
     void OnEnable()
     {
-        if (!All.Contains(this)) All.Add(this);
+        if (!All.Contains(this))
+        {
+            All.Add(this);
+        }
     }
 
     void OnDisable()
@@ -111,7 +127,6 @@ public class BreakableWall : MonoBehaviour
     {
         wallRenderer = GetComponent<Renderer>();
         wallCollider = GetComponent<Collider>();
-
         if (wallRenderer == null || wallCollider == null)
         {
             Debug.LogError("BreakableWall needs a Renderer and a Collider.", this);
@@ -121,10 +136,19 @@ public class BreakableWall : MonoBehaviour
 
         spawnPos = transform.position;
         spawnRot = transform.rotation;
-
         debugRespawnKey = respawnKey;
         EnsureDebugWatcher();
 
+        PrepareShards();
+        if (breakOnHighSpeed)
+        {
+            SetupRunThroughProbe();
+        }
+    }
+
+    // pre-cuts the mesh into shards now, so breaking it later costs nothing to work out
+    void PrepareShards()
+    {
         shardMaterial = wallRenderer.sharedMaterial;
 
         MeshFilter mf = GetComponent<MeshFilter>();
@@ -133,9 +157,6 @@ public class BreakableWall : MonoBehaviour
             : InverseTransformBounds(wallRenderer.bounds);
 
         BuildShardGrid();
-
-        if (breakOnHighSpeed)
-            SetupRunThroughProbe();
     }
 
     public void Respawn()
@@ -144,12 +165,23 @@ public class BreakableWall : MonoBehaviour
 
         shattered = false;
 
-        if (wallCollider != null) wallCollider.enabled = true;
-        if (wallRenderer != null) wallRenderer.enabled = true;
-        if (probe != null) probe.gameObject.SetActive(true);
+        if (wallCollider != null)
+        {
+            wallCollider.enabled = true;
+        }
+        if (wallRenderer != null)
+        {
+            wallRenderer.enabled = true;
+        }
+        if (probe != null)
+        {
+            probe.gameObject.SetActive(true);
+        }
 
         if (!gameObject.activeSelf)
+        {
             gameObject.SetActive(true);
+        }
     }
 
     // ---------------------------------------------------------------- hit entry points
@@ -175,7 +207,10 @@ public class BreakableWall : MonoBehaviour
 
     public void OnRunThrough(Rigidbody playerBody, Vector3 contactPoint)
     {
-        if (shattered) return;
+        if (shattered)
+        {
+            return;
+        }
 
         Vector3 vel = playerBody.linearVelocity;
         Vector3 dir = vel.sqrMagnitude > 0.01f ? vel.normalized : -transform.forward;
@@ -191,7 +226,10 @@ public class BreakableWall : MonoBehaviour
 
     void Shatter(Vector3 worldPoint, Vector3 worldDir, HitKind kind)
     {
-        if (shattered) return;
+        if (shattered)
+        {
+            return;
+        }
         shattered = true;
 
         wallCollider.enabled = false;
@@ -210,9 +248,14 @@ public class BreakableWall : MonoBehaviour
         DoImpactFeedback(worldPoint, kind);
 
         if (logDebug)
+        {
             Debug.Log($"[BreakableWall] Shattered by {kind} into {spawned} shards.", this);
+        }
 
-        if (probe != null) probe.gameObject.SetActive(false);
+        if (probe != null)
+        {
+            probe.gameObject.SetActive(false);
+        }
         gameObject.SetActive(false);
     }
 
@@ -251,7 +294,9 @@ public class BreakableWall : MonoBehaviour
         {
             JuiceFX fx = JuiceFX.Instance != null ? JuiceFX.Instance : JuiceFX.Get();
             if (fx != null)
+            {
                 fx.ImpactBurst(worldPoint, -transform.forward, kind == HitKind.RunThrough ? 0.8f : 1f);
+            }
         }
 
         if (CameraShaker.Instance != null)
@@ -266,9 +311,13 @@ public class BreakableWall : MonoBehaviour
             ImpactFrames frames = ImpactFrames.Get();
             frames.SetImpactPoint(worldPoint);
             if (kind == HitKind.RunThrough)
+            {
                 frames.Freeze(runThroughFreeze, runThroughOverlay, 0.8f);
+            }
             else
+            {
                 frames.Freeze(meleeFreeze, meleeOverlay, 1f);
+            }
         }
     }
 
@@ -402,7 +451,10 @@ public class BreakableWall : MonoBehaviour
     {
         Renderer r = GetComponent<Renderer>();
         MeshFilter mf = GetComponent<MeshFilter>();
-        if (r == null) return;
+        if (r == null)
+        {
+            return;
+        }
 
         Bounds lb = mf != null && mf.sharedMesh != null ? mf.sharedMesh.bounds : new Bounds();
 
@@ -417,7 +469,9 @@ public class BreakableWall : MonoBehaviour
         Vector3 min = lb.min;
 
         for (int x = 0; x < cx; x++)
+        {
             for (int y = 0; y < cy; y++)
+            {
                 for (int z = 0; z < cz; z++)
                 {
                     Vector3 c = new Vector3(
@@ -426,6 +480,8 @@ public class BreakableWall : MonoBehaviour
                         min.z + cell.z * (z + 0.5f));
                     Gizmos.DrawWireCube(c, cell * 0.92f);
                 }
+            }
+        }
     }
 }
 
@@ -436,6 +492,8 @@ public class BreakableWallDebug : MonoBehaviour
         Key k = BreakableWall.DebugRespawnKey;
         if (k != Key.None && Keyboard.current != null &&
             Keyboard.current[k].wasPressedThisFrame)
+        {
             BreakableWall.RespawnAll();
+        }
     }
 }

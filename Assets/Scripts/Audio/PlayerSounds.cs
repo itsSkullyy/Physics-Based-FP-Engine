@@ -68,34 +68,70 @@ public class PlayerSounds : MonoBehaviour
     static void AttachToPlayers()
     {
         foreach (FirstPersonCharacterController c in FindObjectsByType<FirstPersonCharacterController>(FindObjectsSortMode.None))
-            if (c.GetComponentInChildren<PlayerSounds>() == null) c.gameObject.AddComponent<PlayerSounds>();
+        {
+            if (c.GetComponentInChildren<PlayerSounds>() == null)
+            {
+                c.gameObject.AddComponent<PlayerSounds>();
+            }
+        }
     }
 
     // ---------------------------------------------------------------- setup
 
     void Awake()
     {
-        if (controller == null) controller = GetComponent<FirstPersonCharacterController>();
-        if (controller == null) controller = GetComponentInChildren<FirstPersonCharacterController>();
+        controller = FindController();
         if (controller == null)
         {
             enabled = false;
             return;
         }
 
-        if (grappling == null) grappling = controller.GetComponent<Grappling>();
-        if (axe == null) axe = controller.GetComponentInChildren<BattleAxe>();
-        if (axe == null) axe = FindFirstObjectByType<BattleAxe>();
-        if (health == null) health = controller.GetComponent<PlayerHealth>();
-
-        windLoop = Synth.MakeLoopSource(GameSounds.WindLoop, transform, false);
-        slideLoop = Synth.MakeLoopSource(GameSounds.SlideLoop, transform, false);
-        reelLoop = Synth.MakeLoopSource(GameSounds.ReelLoop, transform, false);
-        chargeLoop = Synth.MakeLoopSource(GameSounds.ChargeLoop, transform, false);
+        FindReferences();
+        MakeLoops();
 
         lastPos = controller.transform.position;
         lastWallKicksLeft = controller.AirWallKicksLeft;
         wasGrounded = controller.IsGrounded;
+    }
+
+    FirstPersonCharacterController FindController()
+    {
+        if (controller != null)
+        {
+            return controller;
+        }
+        FirstPersonCharacterController found = GetComponent<FirstPersonCharacterController>();
+        return found != null ? found : GetComponentInChildren<FirstPersonCharacterController>();
+    }
+
+    void FindReferences()
+    {
+        if (grappling == null)
+        {
+            grappling = controller.GetComponent<Grappling>();
+        }
+        if (axe == null)
+        {
+            axe = controller.GetComponentInChildren<BattleAxe>();
+        }
+        if (axe == null)
+        {
+            axe = FindFirstObjectByType<BattleAxe>();
+        }
+        if (health == null)
+        {
+            health = controller.GetComponent<PlayerHealth>();
+        }
+    }
+
+    // looping sources that fade in and out with the matching movement (wind, slide, reel, charge)
+    void MakeLoops()
+    {
+        windLoop = Synth.MakeLoopSource(GameSounds.WindLoop, transform, false);
+        slideLoop = Synth.MakeLoopSource(GameSounds.SlideLoop, transform, false);
+        reelLoop = Synth.MakeLoopSource(GameSounds.ReelLoop, transform, false);
+        chargeLoop = Synth.MakeLoopSource(GameSounds.ChargeLoop, transform, false);
     }
 
     void Start()
@@ -183,7 +219,10 @@ public class PlayerSounds : MonoBehaviour
     {
         bool grounded = controller.IsGrounded;
         float vy = controller.Velocity.y;
-        if (vy < 0f) lastFallSpeed = Mathf.Max(lastFallSpeed, -vy);
+        if (vy < 0f)
+        {
+            lastFallSpeed = Mathf.Max(lastFallSpeed, -vy);
+        }
 
         // small hop = step, big drop = heavier thud
         if (grounded && !wasGrounded)
@@ -193,14 +232,22 @@ public class PlayerSounds : MonoBehaviour
                 float s = Mathf.InverseLerp(landMinSpeed, landBigSpeed, lastFallSpeed);
                 One(GameSounds.Land, movement, Mathf.Lerp(0.3f, 1f, s), Mathf.Lerp(1.05f, 0.8f, s) * Jitter(0.04f));
             }
-            else One(GameSounds.Footstep, movement, 1f, Jitter());
+            else
+            {
+                One(GameSounds.Footstep, movement, 1f, Jitter());
+            }
             stepAccum = 0f;
         }
 
         if (!grounded && wasGrounded && vy > 2.5f && !controller.IsSwinging && !controller.IsZipping)
+        {
             One(GameSounds.Jump, movement, 1f, Jitter(0.05f));
+        }
 
-        if (grounded) lastFallSpeed = 0f;
+        if (grounded)
+        {
+            lastFallSpeed = 0f;
+        }
         wasGrounded = grounded;
 
         if (grounded && !controller.IsSliding && controller.CurrentSpeed >= footstepMinSpeed)
@@ -213,17 +260,26 @@ public class PlayerSounds : MonoBehaviour
                 One(GameSounds.Footstep, movement, Mathf.Lerp(0.6f, 1f, t), Jitter(0.08f));
             }
         }
-        else if (!grounded) stepAccum = 0f;
+        else if (!grounded)
+        {
+            stepAccum = 0f;
+        }
 
         bool sliding = controller.IsSliding && grounded;
-        if (sliding && !wasSliding) One(GameSounds.SlideStart, movement, 1f, Jitter(0.04f));
+        if (sliding && !wasSliding)
+        {
+            One(GameSounds.SlideStart, movement, 1f, Jitter(0.04f));
+        }
         wasSliding = sliding;
     }
 
     void TrackWallMoves(float dt)
     {
         bool running = controller.IsWallRunning;
-        if (running && !wasWallRunning) One(GameSounds.Footstep, movement, 1f, 1.1f);
+        if (running && !wasWallRunning)
+        {
+            One(GameSounds.Footstep, movement, 1f, 1.1f);
+        }
         wasWallRunning = running;
 
         if (running)
@@ -235,10 +291,16 @@ public class PlayerSounds : MonoBehaviour
                 One(GameSounds.Footstep, movement, 0.7f, 1.12f * Jitter(0.06f));
             }
         }
-        else wallStepTimer = 0f;
+        else
+        {
+            wallStepTimer = 0f;
+        }
 
         int left = controller.AirWallKicksLeft;
-        if (left < lastWallKicksLeft) One(GameSounds.WallKick, movement, 1f, Jitter(0.04f));
+        if (left < lastWallKicksLeft)
+        {
+            One(GameSounds.WallKick, movement, 1f, Jitter(0.04f));
+        }
         lastWallKicksLeft = left;
     }
 
@@ -253,13 +315,19 @@ public class PlayerSounds : MonoBehaviour
         wasDarting = darting;
 
         int tier = controller.VaultTier;
-        if (tier > 0 && lastVaultTier == 0) One(GameSounds.Vault, movement, 1f, Jitter());
+        if (tier > 0 && lastVaultTier == 0)
+        {
+            One(GameSounds.Vault, movement, 1f, Jitter());
+        }
         lastVaultTier = tier;
     }
 
     void TrackGrapple()
     {
-        if (grappling == null) return;
+        if (grappling == null)
+        {
+            return;
+        }
 
         bool swinging = grappling.IsSwinging;
         bool zipping = grappling.IsZipping;
@@ -268,9 +336,15 @@ public class PlayerSounds : MonoBehaviour
         if ((swinging && !wasSwinging) || (zipping && !wasZipping))
         {
             One(GameSounds.GrappleClick, grapple, 1f, Jitter(0.04f));
-            if (swinging) One(GameSounds.GrappleReel, grapple, 1f, Jitter(0.04f));
+            if (swinging)
+            {
+                One(GameSounds.GrappleReel, grapple, 1f, Jitter(0.04f));
+            }
         }
-        if (!swinging && !zipping && (wasSwinging || wasZipping)) One(GameSounds.GrappleRelease, grapple);
+        if (!swinging && !zipping && (wasSwinging || wasZipping))
+        {
+            One(GameSounds.GrappleRelease, grapple);
+        }
 
         wasSwinging = swinging;
         wasZipping = zipping;
@@ -282,22 +356,39 @@ public class PlayerSounds : MonoBehaviour
 
         if (t != spinOwner)
         {
-            if (spinLoop != null) Destroy(spinLoop.gameObject);
+            if (spinLoop != null)
+            {
+                Destroy(spinLoop.gameObject);
+            }
             spinLoop = t != null ? Synth.MakeLoopSource(GameSounds.AxeSpinLoop, t.transform, true, 35f) : null;
             spinOwner = t;
-            if (t != null) lastAxePos = t.transform.position;
+            if (t != null)
+            {
+                lastAxePos = t.transform.position;
+            }
             wasStuck = wasLoose = wasRecalling = false;
         }
-        if (t == null) return;
+        if (t == null)
+        {
+            return;
+        }
 
         bool stuck = t.IsStuck;
         bool loose = t.IsLoose;
         bool recalling = t.IsRecalling;
 
         if (stuck && !wasStuck)
+        {
             At(EnemyAgent.HitFleshRecently ? GameSounds.AxeHitFlesh : GameSounds.AxeStick, t.HeadPosition, axeSounds, 1f, Jitter(0.04f), 60f);
-        if (loose && !wasLoose) At(GameSounds.AxeClatter, t.transform.position, axeSounds, 1f, Jitter(), 40f);
-        if (recalling && !wasRecalling) At(GameSounds.AxeRecall, t.transform.position, axeSounds, 1f, 1f, 45f);
+        }
+        if (loose && !wasLoose)
+        {
+            At(GameSounds.AxeClatter, t.transform.position, axeSounds, 1f, Jitter(), 40f);
+        }
+        if (recalling && !wasRecalling)
+        {
+            At(GameSounds.AxeRecall, t.transform.position, axeSounds, 1f, 1f, 45f);
+        }
 
         wasStuck = stuck;
         wasLoose = loose;
@@ -317,7 +408,10 @@ public class PlayerSounds : MonoBehaviour
         for (int i = 0; i < walls.Count; i++)
         {
             BreakableWall w = walls[i];
-            if (w == null) continue;
+            if (w == null)
+            {
+                continue;
+            }
             bool up = w.gameObject.activeSelf;
             if (!up && wallsUp[i])
             {
@@ -337,7 +431,10 @@ public class PlayerSounds : MonoBehaviour
             Synth.Drive(slideLoop, 0f, 1f, 30f);
             Synth.Drive(reelLoop, 0f, 1f, 30f);
             Synth.Drive(chargeLoop, 0f, 1f, 30f);
-            if (spinLoop != null) Synth.Drive(spinLoop, 0f, 1f, 30f);
+            if (spinLoop != null)
+            {
+                Synth.Drive(spinLoop, 0f, 1f, 30f);
+            }
             return;
         }
 
@@ -365,7 +462,10 @@ public class PlayerSounds : MonoBehaviour
     {
         bool flesh = EnemyAgent.LastFleshHitFrame == Time.frameCount;
         One(flesh ? GameSounds.AxeHitFlesh : GameSounds.AxeHitWall, axeSounds, 1f, Jitter(0.05f));
-        if (bounced) One(GameSounds.AxeBounce, axeSounds, 1f, Jitter(0.04f));
+        if (bounced)
+        {
+            One(GameSounds.AxeBounce, axeSounds, 1f, Jitter(0.04f));
+        }
     }
 
     void OnThrown() => One(GameSounds.AxeThrow, axeSounds, 1f, Jitter(0.04f));
@@ -383,9 +483,15 @@ public class PlayerSounds : MonoBehaviour
     // timer might not exist yet
     void HookCourse()
     {
-        if (course != null) return;
+        if (course != null)
+        {
+            return;
+        }
         course = CourseTimer.Instance;
-        if (course == null) return;
+        if (course == null)
+        {
+            return;
+        }
         course.RunStarted += OnRunStarted;
         course.RunFinished += OnRunFinished;
     }

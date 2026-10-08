@@ -41,7 +41,10 @@ public class StillwalkerHunterBot
     {
         this.feetOffset = feetOffset;
         feet = startCenter - Vector3.up * feetOffset;
-        if (NavMesh.SamplePosition(feet, out NavMeshHit hit, 4f, NavMesh.AllAreas)) feet = hit.position;
+        if (NavMesh.SamplePosition(feet, out NavMeshHit hit, 4f, NavMesh.AllAreas))
+        {
+            feet = hit.position;
+        }
         home = feet;
         velocity = Vector3.zero;
         grounded = true;
@@ -74,8 +77,14 @@ public class StillwalkerHunterBot
         jumpCooldown -= dt;
         Vector3 me = target.transform.position;
 
-        if (grounded) GroundMove(dt, target, me);
-        else AirMove(dt);
+        if (grounded)
+        {
+            GroundMove(dt, target, me);
+        }
+        else
+        {
+            AirMove(dt);
+        }
 
         // fell out of the arena somehow
         if (feet.y < home.y - 30f)
@@ -117,14 +126,23 @@ public class StillwalkerHunterBot
         velocity = new Vector3(flat.x, 0f, flat.z);
 
         Vector3 next = feet + flat * dt;
-        if (NavMesh.Raycast(feet, next, out NavMeshHit edge, NavMesh.AllAreas)) next = edge.position;
-        if (NavMesh.SamplePosition(next, out NavMeshHit onMesh, 1.5f, NavMesh.AllAreas)) next = onMesh.position;
+        if (NavMesh.Raycast(feet, next, out NavMeshHit edge, NavMesh.AllAreas))
+        {
+            next = edge.position;
+        }
+        if (NavMesh.SamplePosition(next, out NavMeshHit onMesh, 1.5f, NavMesh.AllAreas))
+        {
+            next = onMesh.position;
+        }
         feet = next;
     }
 
     Vector3 Goal(Vector3 me, Vector3 toMe, float dist, bool diving)
     {
-        if (diving) return me;
+        if (diving)
+        {
+            return me;
+        }
 
         Vector3 fromMe = dist > 0.1f ? -toMe / dist : Vector3.forward;
         switch (CurrentStyle)
@@ -146,12 +164,20 @@ public class StillwalkerHunterBot
             corner = 1;
             if (!NavMesh.SamplePosition(goal, out NavMeshHit g, 3f, NavMesh.AllAreas)
                 || !NavMesh.CalculatePath(feet, g.position, NavMesh.AllAreas, path))
+            {
                 path.ClearCorners();
+            }
         }
 
         Vector3[] corners = path.corners;
-        if (corners == null || corners.Length < 2) return goal;
-        while (corner < corners.Length - 1 && (corners[corner] - feet).sqrMagnitude < 0.5f) corner++;
+        if (corners == null || corners.Length < 2)
+        {
+            return goal;
+        }
+        while (corner < corners.Length - 1 && (corners[corner] - feet).sqrMagnitude < 0.5f)
+        {
+            corner++;
+        }
         return corners[Mathf.Min(corner, corners.Length - 1)];
     }
 
@@ -193,7 +219,10 @@ public class StillwalkerHunterBot
             velocity.y = 0f;
             grounded = true;
             jumpCooldown = Mathf.Max(jumpCooldown, 0.3f);
-            if (NavMesh.SamplePosition(next, out NavMeshHit onMesh, 2f, NavMesh.AllAreas)) next = onMesh.position;
+            if (NavMesh.SamplePosition(next, out NavMeshHit onMesh, 2f, NavMesh.AllAreas))
+            {
+                next = onMesh.position;
+            }
         }
         feet = next;
     }
@@ -208,7 +237,10 @@ public class StillwalkerHunterBot
         foreach (RaycastHit h in hits)
         {
             // falls through the Stillwalker itself, the agent handles that as a pogo
-            if (h.collider.GetComponentInParent<EnemyAgent>() != null) continue;
+            if (h.collider.GetComponentInParent<EnemyAgent>() != null)
+            {
+                continue;
+            }
             if (h.distance < best)
             {
                 best = h.distance;
@@ -234,7 +266,10 @@ public class StillwalkerHunterBot
         if (Time.time < lookAwayUntil)
         {
             Vector3 flat = new Vector3(velocity.x, 0f, velocity.z);
-            if (flat.sqrMagnitude > 1f) return flat.normalized;
+            if (flat.sqrMagnitude > 1f)
+            {
+                return flat.normalized;
+            }
             return Quaternion.Euler(0f, 120f, 0f) * (target.ChestPosition - eye).normalized;
         }
         return (target.ChestPosition - eye).normalized;

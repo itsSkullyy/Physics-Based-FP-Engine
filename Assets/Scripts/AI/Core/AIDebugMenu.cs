@@ -25,16 +25,28 @@ public class AIDebugMenu : MonoBehaviour
         Keyboard kb = Keyboard.current;
         if (kb != null && toggleKey != Key.None && kb[toggleKey].wasPressedThisFrame)
         {
-            if (open) Close();
-            else Open();
+            if (open)
+            {
+                Close();
+            }
+            else
+            {
+                Open();
+            }
         }
 
-        if (selected != null && selected.IsDead) selected = null;
+        if (selected != null && selected.IsDead)
+        {
+            selected = null;
+        }
     }
 
     void Open()
     {
-        if (router == null) router = FindFirstObjectByType<PlayerInputRouter>();
+        if (router == null)
+        {
+            router = FindFirstObjectByType<PlayerInputRouter>();
+        }
 
         open = true;
         restoreLock = Cursor.lockState;
@@ -48,7 +60,10 @@ public class AIDebugMenu : MonoBehaviour
             router.inputEnabled = false;
         }
 
-        if (selected == null) selected = LeaderNearestCrosshair();
+        if (selected == null)
+        {
+            selected = LeaderNearestCrosshair();
+        }
     }
 
     void Close()
@@ -56,19 +71,28 @@ public class AIDebugMenu : MonoBehaviour
         open = false;
         Cursor.lockState = restoreLock;
         Cursor.visible = restoreVisible;
-        if (router != null) router.inputEnabled = restoreInput;
+        if (router != null)
+        {
+            router.inputEnabled = restoreInput;
+        }
     }
 
     void OnDisable()
     {
-        if (open) Close();
+        if (open)
+        {
+            Close();
+        }
     }
 
     // ---------------------------------------------------------------- drawing
 
     void OnGUI()
     {
-        if (!open) return;
+        if (!open)
+        {
+            return;
+        }
         window = GUILayout.Window(GetInstanceID(), window, DrawWindow, $"Enemy AI Testing ({toggleKey} to close)");
     }
 
@@ -91,7 +115,10 @@ public class AIDebugMenu : MonoBehaviour
 
         GUILayout.EndScrollView();
 
-        if (Time.unscaledTime < statusUntil) GUILayout.Label(status);
+        if (Time.unscaledTime < statusUntil)
+        {
+            GUILayout.Label(status);
+        }
         GUI.DragWindow();
     }
 
@@ -105,14 +132,26 @@ public class AIDebugMenu : MonoBehaviour
             GUILayout.Label("No living leaders.");
             return;
         }
-        if (selected == null || !leaders.Contains(selected)) selected = leaders[0];
+        if (selected == null || !leaders.Contains(selected))
+        {
+            selected = leaders[0];
+        }
 
         GUILayout.BeginHorizontal();
-        if (GUILayout.Button("<", GUILayout.Width(30f))) selected = leaders[(leaders.IndexOf(selected) + leaders.Count - 1) % leaders.Count];
+        if (GUILayout.Button("<", GUILayout.Width(30f)))
+        {
+            selected = leaders[(leaders.IndexOf(selected) + leaders.Count - 1) % leaders.Count];
+        }
         GUILayout.Label($"{selected.name}  ({Distance(selected):0}m)  hits {selected.HitsTaken}/{selected.maxHits}");
-        if (GUILayout.Button(">", GUILayout.Width(30f))) selected = leaders[(leaders.IndexOf(selected) + 1) % leaders.Count];
+        if (GUILayout.Button(">", GUILayout.Width(30f)))
+        {
+            selected = leaders[(leaders.IndexOf(selected) + 1) % leaders.Count];
+        }
         GUILayout.EndHorizontal();
-        if (GUILayout.Button("Select the one nearest my crosshair")) selected = LeaderNearestCrosshair() ?? selected;
+        if (GUILayout.Button("Select the one nearest my crosshair"))
+        {
+            selected = LeaderNearestCrosshair() ?? selected;
+        }
 
         if (selected.Squad != null)
         {
@@ -128,12 +167,19 @@ public class AIDebugMenu : MonoBehaviour
         GUILayout.Label("Grenades");
         GUILayout.BeginHorizontal();
         if (GUILayout.Button("Throw at me"))
+        {
             Report(selected.DebugThrowGrenade(d.Player.Feet) ? "Frag out." : "No clear arc to you from there.");
+        }
         if (GUILayout.Button("Throw where I'm looking"))
         {
             if (LookPoint(out Vector3 p))
+            {
                 Report(selected.DebugThrowGrenade(p) ? "Frag out." : "No clear arc to that spot.");
-            else Report("Not looking at anything.");
+            }
+            else
+            {
+                Report("Not looking at anything.");
+            }
         }
         GUILayout.EndHorizontal();
 
@@ -157,7 +203,9 @@ public class AIDebugMenu : MonoBehaviour
             GUILayout.Label("Formations (held 8s)");
             GUILayout.BeginHorizontal();
             foreach (FormationShape s in new[] { FormationShape.Wedge, FormationShape.Line, FormationShape.Column, FormationShape.Ring })
+            {
                 if (GUILayout.Button(s.ToString())) { selected.Tactics.PreviewFormation(s, 8f); Report(s + " formation."); }
+            }
             GUILayout.EndHorizontal();
         }
     }
@@ -166,13 +214,26 @@ public class AIDebugMenu : MonoBehaviour
     {
         List<Stillwalker> walkers = new List<Stillwalker>();
         foreach (EnemyAgent e in d.Enemies)
-            if (e is Stillwalker s && !s.IsDead) walkers.Add(s);
-        if (walkers.Count == 0) return;
+        {
+            if (e is Stillwalker s && !s.IsDead)
+            {
+                walkers.Add(s);
+            }
+        }
+        if (walkers.Count == 0)
+        {
+            return;
+        }
 
         Header("Stillwalker");
         Stillwalker nearest = walkers[0];
         foreach (Stillwalker s in walkers)
-            if (Distance(s) < Distance(nearest)) nearest = s;
+        {
+            if (Distance(s) < Distance(nearest))
+            {
+                nearest = s;
+            }
+        }
         GUILayout.Label($"Nearest: {nearest.name} ({Distance(nearest):0}m, {nearest.PathDist:0}m walking)");
         GUILayout.Label($"State: {nearest.DebugState}   intent: {nearest.DebugIntent}");
         GUILayout.Label("Steering: " + (nearest.DebugModelSteering ? "trained model" : "rules (" + nearest.DebugWhyRules + ")"));
@@ -206,7 +267,12 @@ public class AIDebugMenu : MonoBehaviour
 
         bool ignore = GUILayout.Toggle(nearest.DebugIgnorePolicy, " Ignore trained model (hand-written stalking)");
         if (ignore != nearest.DebugIgnorePolicy)
-            foreach (Stillwalker s in walkers) s.DebugIgnorePolicy = ignore;
+        {
+            foreach (Stillwalker s in walkers)
+            {
+                s.DebugIgnorePolicy = ignore;
+            }
+        }
     }
 
     void DrawSenses(AIDirector d)
@@ -246,7 +312,9 @@ public class AIDebugMenu : MonoBehaviour
         }
 
         if (d.PlayerHealth != null)
+        {
             d.PlayerHealth.invulnerable = GUILayout.Toggle(d.PlayerHealth.invulnerable, " God mode");
+        }
 
         GUILayout.BeginHorizontal();
         GUILayout.Label($"Synth sounds {Synth.Volume:0.0}", GUILayout.Width(120f));
@@ -278,7 +346,10 @@ public class AIDebugMenu : MonoBehaviour
                 GUILayout.EndHorizontal();
                 GUILayout.BeginHorizontal();
             }
-            if (GUILayout.Button(n)) onClick(n);
+            if (GUILayout.Button(n))
+            {
+                onClick(n);
+            }
             i++;
         }
         GUILayout.EndHorizontal();
@@ -294,7 +365,12 @@ public class AIDebugMenu : MonoBehaviour
     {
         List<GruntLeader> list = new List<GruntLeader>();
         foreach (EnemyAgent e in d.Enemies)
-            if (e is GruntLeader l && !l.IsDead) list.Add(l);
+        {
+            if (e is GruntLeader l && !l.IsDead)
+            {
+                list.Add(l);
+            }
+        }
         return list;
     }
 
@@ -307,7 +383,10 @@ public class AIDebugMenu : MonoBehaviour
     static GruntLeader LeaderNearestCrosshair()
     {
         AIDirector d = AIDirector.Instance;
-        if (d == null || d.Player == null) return null;
+        if (d == null || d.Player == null)
+        {
+            return null;
+        }
 
         GruntLeader best = null;
         float bestAngle = float.MaxValue;
@@ -325,11 +404,17 @@ public class AIDebugMenu : MonoBehaviour
     {
         point = default;
         AIDirector d = AIDirector.Instance;
-        if (d == null || d.Player == null) return false;
+        if (d == null || d.Player == null)
+        {
+            return false;
+        }
 
         foreach (RaycastHit h in SortedHits(d.Player.CameraPosition, d.Player.CameraForward))
         {
-            if (h.rigidbody != null && h.rigidbody == d.PlayerBody) continue;
+            if (h.rigidbody != null && h.rigidbody == d.PlayerBody)
+            {
+                continue;
+            }
             point = h.point;
             return true;
         }

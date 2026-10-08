@@ -52,7 +52,10 @@ public class SquadTactics
         BuildActions();
         goap.Replanned += (goal, plan) =>
         {
-            if (goal != null && Squad != null) Squad.Board.Set(BB.Tactic, goap.Describe());
+            if (goal != null && Squad != null)
+            {
+                Squad.Board.Set(BB.Tactic, goap.Describe());
+            }
         };
     }
 
@@ -60,23 +63,35 @@ public class SquadTactics
 
     public void Tick(float dt)
     {
-        if (Squad == null || Player == null) return;
+        if (Squad == null || Player == null)
+        {
+            return;
+        }
 
         // how much the player's been flying about lately
         float now = Player.IsSwinging || Player.IsWallRunning || Player.IsZipping || Player.Speed > 11f ? 1f : 0f;
         mobility = Mathf.MoveTowards(mobility, now, dt * (now > mobility ? 1.5f : 0.4f));
 
-        if (Previewing) return;
+        if (Previewing)
+        {
+            return;
+        }
         goap.Tick(dt);
     }
 
     // column while walking, wedge when stopped
     public void TickIdle(float dt)
     {
-        if (Squad == null || Previewing) return;
+        if (Squad == null || Previewing)
+        {
+            return;
+        }
 
         formationTimer -= dt;
-        if (formationTimer > 0f) return;
+        if (formationTimer > 0f)
+        {
+            return;
+        }
         formationTimer = 0.5f;
 
         Vector3 vel = leader.Velocity;
@@ -100,7 +115,10 @@ public class SquadTactics
     // send = who checks it (null = leader). groupUp = everyone follows the leader
     public void BeginInvestigation(Vector3 spot, GruntFollower send, GruntBase reporter, bool groupUp)
     {
-        if (Squad == null) return;
+        if (Squad == null)
+        {
+            return;
+        }
         goap.Stop();
         previewUntil = 0f;
         Investigator = send;
@@ -115,7 +133,10 @@ public class SquadTactics
         }
 
         List<GruntFollower> watchers = AliveAll();
-        if (send != null) watchers.Remove(send);
+        if (send != null)
+        {
+            watchers.Remove(send);
+        }
 
         // one watches the spot, the rest face outwards
         Overwatch = reporter is GruntFollower r && watchers.Contains(r) ? r : (watchers.Count > 0 ? Nearest(watchers, spot) : null);
@@ -126,7 +147,10 @@ public class SquadTactics
         foreach (GruntFollower f in watchers)
         {
             Vector3 dir;
-            if (f == Overwatch) dir = Flat(spot - f.transform.position);
+            if (f == Overwatch)
+            {
+                dir = Flat(spot - f.transform.position);
+            }
             else
             {
                 k++;
@@ -136,25 +160,40 @@ public class SquadTactics
             Assign(f, SquadOrder.Watch, OnNavMesh(f.transform.position), 0f);
         }
 
-        if (send != null) Assign(send, SquadOrder.Investigate, OnNavMesh(spot), 0f);
+        if (send != null)
+        {
+            Assign(send, SquadOrder.Investigate, OnNavMesh(spot), 0f);
+        }
         Squad.SetOrder(SquadOrder.Watch);
     }
 
     public void TickSuspicious(float dt)
     {
-        if (Squad == null) return;
+        if (Squad == null)
+        {
+            return;
+        }
 
         if (grouped)
         {
             groupTimer -= dt;
-            if (groupTimer > 0f) return;
+            if (groupTimer > 0f)
+            {
+                return;
+            }
             groupTimer = 0.5f;
             FollowInWedge(Squad.SuspectPos);
             return;
         }
 
-        if (Investigator == null || Investigator.IsDead || Squad.InvestigationDone) return;
-        if (Squad.TimeSinceSuspect < 1f) Assign(Investigator, SquadOrder.Investigate, OnNavMesh(Squad.SuspectPos), 3f);
+        if (Investigator == null || Investigator.IsDead || Squad.InvestigationDone)
+        {
+            return;
+        }
+        if (Squad.TimeSinceSuspect < 1f)
+        {
+            Assign(Investigator, SquadOrder.Investigate, OnNavMesh(Squad.SuspectPos), 3f);
+        }
     }
 
     bool grouped;
@@ -176,12 +215,21 @@ public class SquadTactics
     // push in behind a grenade thrown at a hiding player
     public void OnGrenadeThrown(Vector3 target)
     {
-        if (Squad == null || Previewing || !PlayerHiding() || Squad.AliveFollowers < 2) return;
+        if (Squad == null || Previewing || !PlayerHiding() || Squad.AliveFollowers < 2)
+        {
+            return;
+        }
         string current = CurrentPlay;
-        if (current == "FlushGrenade" || current == "PushCover") return;
+        if (current == "FlushGrenade" || current == "PushCover")
+        {
+            return;
+        }
 
         GoapAction push = goap.Actions.Find(a => a.Name == "PushCover");
-        if (push != null) goap.Force(push);
+        if (push != null)
+        {
+            goap.Force(push);
+        }
     }
 
     // ---------------------------------------------------------------- testing
@@ -190,18 +238,27 @@ public class SquadTactics
 
     public IEnumerable<string> PlayNames
     {
-        get { foreach (GoapAction a in goap.Actions) yield return a.Name; }
+        get { foreach (GoapAction a in goap.Actions) { yield return a.Name; } }
     }
 
     // F6 menu
     public bool ForcePlay(string name)
     {
-        if (Squad == null || Player == null) return false;
+        if (Squad == null || Player == null)
+        {
+            return false;
+        }
         GoapAction action = goap.Actions.Find(a => a.Name == name);
-        if (action == null) return false;
+        if (action == null)
+        {
+            return false;
+        }
 
         Squad.ReportSighting(Player.Center, Player.Velocity);
-        if (name == "CutOff" && !FindExit()) return false;
+        if (name == "CutOff" && !FindExit())
+        {
+            return false;
+        }
         previewUntil = 0f;
         goap.Force(action);
         return true;
@@ -210,7 +267,10 @@ public class SquadTactics
     // F6 menu
     public void PreviewFormation(FormationShape shape, float seconds)
     {
-        if (Squad == null || Player == null) return;
+        if (Squad == null || Player == null)
+        {
+            return;
+        }
         goap.Stop();
         previewUntil = Time.time + seconds;
         Shape = shape;
@@ -237,7 +297,10 @@ public class SquadTactics
     WorldState Sense()
     {
         WorldState w = default;
-        if (Squad == null) return w;
+        if (Squad == null)
+        {
+            return w;
+        }
 
         bool known = Squad.TimeSinceKnown < 15f || Squad.Alert == SquadAlert.Searching;
         bool sees = Squad.TimeSinceSeen < 1f;
@@ -275,8 +338,14 @@ public class SquadTactics
         Vector3 leaderAxis = Flat(leader.transform.position - threat);
         foreach (GruntFollower f in AliveAll())
         {
-            if (!f.PlayerVisible) continue;
-            if (Vector3.Angle(leaderAxis, Flat(f.transform.position - threat)) > 60f) return true;
+            if (!f.PlayerVisible)
+            {
+                continue;
+            }
+            if (Vector3.Angle(leaderAxis, Flat(f.transform.position - threat)) > 60f)
+            {
+                return true;
+            }
         }
         return false;
     }
@@ -389,15 +458,24 @@ public class SquadTactics
             return BT.Action("Grenade",
                 () =>
                 {
-                    if (!accepted) return BTStatus.Failure;
-                    if (leader.LastGrenadeTime >= started) return BTStatus.Success;
+                    if (!accepted)
+                    {
+                        return BTStatus.Failure;
+                    }
+                    if (leader.LastGrenadeTime >= started)
+                    {
+                        return BTStatus.Success;
+                    }
                     return Time.time - started > 2.5f ? BTStatus.Failure : BTStatus.Running;
                 },
                 () =>
                 {
                     started = Time.time;
                     accepted = leader.RequestGrenade(Squad.KnownPos + Squad.KnownVel * 0.3f);
-                    if (accepted && Squad.AliveFollowers > 0) SendAssault(BiggerTeam(), false);
+                    if (accepted && Squad.AliveFollowers > 0)
+                    {
+                        SendAssault(BiggerTeam(), false);
+                    }
                 });
         };
         goap.Actions.Add(grenade);
@@ -454,7 +532,10 @@ public class SquadTactics
         return BT.Action("Bounding",
             () =>
             {
-                if (AverageDistance(Squad.KnownPos) <= leader.idealRange + 6f) return BTStatus.Success;
+                if (AverageDistance(Squad.KnownPos) <= leader.idealRange + 6f)
+                {
+                    return BTStatus.Success;
+                }
                 phase += Time.deltaTime;
                 if (TeamArrived(moving) || phase > 3.5f)
                 {
@@ -478,7 +559,10 @@ public class SquadTactics
         Shape = FormationShape.Wedge;
 
         List<GruntFollower> movers = AliveTeam(moving);
-        if (movers.Count == 0) return;
+        if (movers.Count == 0)
+        {
+            return;
+        }
         Vector3 centroid = Centroid(movers);
         Vector3 toThreat = Flat(threat - centroid);
         float dist = Vector3.Distance(centroid, threat);
@@ -494,7 +578,9 @@ public class SquadTactics
         }
 
         foreach (GruntFollower f in AliveTeam(moving == Fireteam.Alpha ? Fireteam.Bravo : Fireteam.Alpha))
+        {
             Assign(f, SquadOrder.Suppress);
+        }
 
         leader.Say(moving == Fireteam.Alpha ? "ALPHA, MOVE UP!" : "BRAVO, MOVE UP!", "bound");
     }
@@ -532,10 +618,14 @@ public class SquadTactics
 
         List<GruntFollower> movers = AliveTeam(team);
         for (int i = 0; i < movers.Count && i < spots.Count; i++)
+        {
             Assign(movers[i], SquadOrder.Flank, spots[i]);
+        }
 
         foreach (GruntFollower f in AliveTeam(team == Fireteam.Alpha ? Fireteam.Bravo : Fireteam.Alpha))
+        {
             Assign(f, SquadOrder.Suppress);
+        }
 
         leader.Say(team == Fireteam.Alpha ? "ALPHA, FLANK LEFT!" : "BRAVO, GO AROUND!", "flankteam");
     }
@@ -551,10 +641,14 @@ public class SquadTactics
 
         List<GruntFollower> movers = AliveTeam(team);
         for (int i = 0; i < movers.Count && i < spots.Count; i++)
+        {
             Assign(movers[i], SquadOrder.Advance, spots[i]);
+        }
 
         foreach (GruntFollower f in AliveTeam(team == Fireteam.Alpha ? Fireteam.Bravo : Fireteam.Alpha))
+        {
             Assign(f, SquadOrder.Suppress);
+        }
 
         leader.Say(bark ? "MOVE IN! FLUSH HIM OUT!" : "FRAG OUT! MOVE UP!", "assault");
     }
@@ -570,8 +664,14 @@ public class SquadTactics
 
         List<GruntFollower> alpha = AliveTeam(Fireteam.Alpha);
         List<GruntFollower> bravo = AliveTeam(Fireteam.Bravo);
-        for (int i = 0; i < alpha.Count && i < a.Count; i++) Assign(alpha[i], SquadOrder.Flank, a[i]);
-        for (int i = 0; i < bravo.Count && i < b.Count; i++) Assign(bravo[i], SquadOrder.Flank, b[i]);
+        for (int i = 0; i < alpha.Count && i < a.Count; i++)
+        {
+            Assign(alpha[i], SquadOrder.Flank, a[i]);
+        }
+        for (int i = 0; i < bravo.Count && i < b.Count; i++)
+        {
+            Assign(bravo[i], SquadOrder.Flank, b[i]);
+        }
 
         leader.Say("PINCER! BOTH SIDES!", "pincer");
     }
@@ -587,7 +687,10 @@ public class SquadTactics
         {
             Vector3 slot = threat + side.normalized * radius + across * (i - (n - 1) * 0.5f) * 3f;
             Vector3 spot = Snap(slot, 5f, threat, true, spots);
-            if (EQSTest.Clear(spot + Vector3.up * 1.5f, threat, IgnoreDynamic)) withSight++;
+            if (EQSTest.Clear(spot + Vector3.up * 1.5f, threat, IgnoreDynamic))
+            {
+                withSight++;
+            }
             spots.Add(spot);
         }
         return spots;
@@ -611,9 +714,15 @@ public class SquadTactics
                 map.Near(exitPoint, 14f, scratch);
                 foreach (TacticalMap.Point p in scratch)
                 {
-                    if (TooClose(p.position, used, 3f)) continue;
+                    if (TooClose(p.position, used, 3f))
+                    {
+                        continue;
+                    }
                     Vector3 eye = p.position + Vector3.up * 1.5f;
-                    if (!EQSTest.Clear(eye, exitPoint, IgnoreDynamic)) continue;
+                    if (!EQSTest.Clear(eye, exitPoint, IgnoreDynamic))
+                    {
+                        continue;
+                    }
 
                     float score = map.CoverFrom(p, threat) + (EQSTest.Clear(eye, threat, IgnoreDynamic) ? 0.5f : 0f)
                                   - Vector3.Distance(p.position, f.transform.position) / 40f;
@@ -631,7 +740,9 @@ public class SquadTactics
         }
 
         foreach (GruntFollower f in AliveTeam(team == Fireteam.Alpha ? Fireteam.Bravo : Fireteam.Alpha))
+        {
             Assign(f, SquadOrder.Suppress);
+        }
 
         leader.Say("CUT HIM OFF!", "cutoff");
     }
@@ -640,11 +751,17 @@ public class SquadTactics
     bool FindExit()
     {
         TacticalMap map = Map;
-        if (map == null || Squad == null) return false;
+        if (map == null || Squad == null)
+        {
+            return false;
+        }
 
         Vector3 from = Squad.KnownPos;
         Vector3 heading = Flat(Squad.KnownVel);
-        if (heading.sqrMagnitude < 0.01f) heading = Flat(from - leader.transform.position);
+        if (heading.sqrMagnitude < 0.01f)
+        {
+            heading = Flat(from - leader.transform.position);
+        }
 
         float bestScore = 0.2f;
         bool found = false;
@@ -652,17 +769,26 @@ public class SquadTactics
         foreach (Vector3 g in map.GrapplePoints)
         {
             float d = Vector3.Distance(g, from);
-            if (d > 40f || d < 4f) continue;
+            if (d > 40f || d < 4f)
+            {
+                continue;
+            }
             float score = Vector3.Dot(heading, Flat(g - from)) - d / 40f + (g.y - from.y > 2f ? 0.3f : 0f);
             if (score > bestScore) { bestScore = score; exitPoint = g; found = true; }
         }
 
         foreach (Collider w in map.WallRunWalls)
         {
-            if (w == null) continue;
+            if (w == null)
+            {
+                continue;
+            }
             Vector3 p = w.ClosestPoint(from);
             float d = Vector3.Distance(p, from);
-            if (d > 15f || d < 1f) continue;
+            if (d > 15f || d < 1f)
+            {
+                continue;
+            }
             float score = Vector3.Dot(heading, Flat(p - from)) - d / 30f + 0.1f;
             if (score > bestScore) { bestScore = score; exitPoint = p; found = true; }
         }
@@ -696,7 +822,10 @@ public class SquadTactics
 
             foreach (TacticalMap.Point p in scratch)
             {
-                if (WasSearched(p.position) || SeenBySquad(p.position)) continue;
+                if (WasSearched(p.position) || SeenBySquad(p.position))
+                {
+                    continue;
+                }
                 float score = (1f - Vector3.Distance(p.position, predicted) / radius) * 1.5f + (1f - p.exposure) * 0.5f;
                 options.Add((p.position, score));
             }
@@ -706,11 +835,20 @@ public class SquadTactics
         List<Vector3> picks = new List<Vector3>();
         foreach (var o in options)
         {
-            if (TooClose(o.pos, picks, 4f)) continue;
+            if (TooClose(o.pos, picks, 4f))
+            {
+                continue;
+            }
             picks.Add(o.pos);
-            if (picks.Count > Squad.AliveFollowers) break;
+            if (picks.Count > Squad.AliveFollowers)
+            {
+                break;
+            }
         }
-        if (picks.Count == 0) picks.Add(OnNavMesh(predicted));
+        if (picks.Count == 0)
+        {
+            picks.Add(OnNavMesh(predicted));
+        }
 
         leader.Board.Set(BB.SearchPos, picks[0]);
         Remember(picks[0]);
@@ -723,7 +861,10 @@ public class SquadTactics
             Assign(nearest, SquadOrder.Search, picks[i]);
             Remember(picks[i]);
         }
-        foreach (GruntFollower f in waiting) Assign(f, SquadOrder.Search, OnNavMesh(predicted));
+        foreach (GruntFollower f in waiting)
+        {
+            Assign(f, SquadOrder.Search, OnNavMesh(predicted));
+        }
 
         Squad.SetOrder(SquadOrder.Search);
         string[] lines = { "CHECK THE CORNERS.", "KEEP LOOKING.", "HE'S HERE SOMEWHERE." };
@@ -758,14 +899,20 @@ public class SquadTactics
     {
         f.Board.Set(BB.SquadOrder, order);
         if (!f.Board.TryGet(BB.AssignedSpot, out Vector3 current) || Vector3.Distance(current, spot) > threshold)
+        {
             f.Board.Set(BB.AssignedSpot, spot);
+        }
     }
 
     bool TeamArrived(Fireteam team)
     {
         foreach (GruntFollower f in AliveTeam(team))
+        {
             if (f.Board.TryGet(BB.AssignedSpot, out Vector3 spot) && Vector3.Distance(f.transform.position, spot) > 1.5f)
+            {
                 return false;
+            }
+        }
         return true;
     }
 
@@ -775,8 +922,14 @@ public class SquadTactics
     Fireteam SmallerTeam()
     {
         int a = AliveTeam(Fireteam.Alpha).Count, b = AliveTeam(Fireteam.Bravo).Count;
-        if (a == 0) return Fireteam.Bravo;
-        if (b == 0) return Fireteam.Alpha;
+        if (a == 0)
+        {
+            return Fireteam.Bravo;
+        }
+        if (b == 0)
+        {
+            return Fireteam.Alpha;
+        }
         return b <= a ? Fireteam.Bravo : Fireteam.Alpha;
     }
 
@@ -790,23 +943,39 @@ public class SquadTactics
     Vector3 Snap(Vector3 slot, float radius, Vector3 threat, bool needSight, List<Vector3> used)
     {
         TacticalMap map = Map;
-        if (map == null) return OnNavMesh(slot);
+        if (map == null)
+        {
+            return OnNavMesh(slot);
+        }
         return map.SnapToCover(slot, radius, threat, needSight, p => TooClose(p, used, 2f));
     }
 
     bool SeenBySquad(Vector3 point)
     {
         Vector3 target = point + Vector3.up;
-        if (EQSTest.Clear(leader.EyePosition, target, IgnoreDynamic)) return true;
+        if (EQSTest.Clear(leader.EyePosition, target, IgnoreDynamic))
+        {
+            return true;
+        }
         foreach (GruntFollower f in AliveAll())
-            if (EQSTest.Clear(f.EyePosition, target, IgnoreDynamic)) return true;
+        {
+            if (EQSTest.Clear(f.EyePosition, target, IgnoreDynamic))
+            {
+                return true;
+            }
+        }
         return false;
     }
 
     bool WasSearched(Vector3 p)
     {
         foreach (Searched s in searched)
-            if ((s.pos - p).sqrMagnitude < 36f) return true;
+        {
+            if ((s.pos - p).sqrMagnitude < 36f)
+            {
+                return true;
+            }
+        }
         return false;
     }
 
@@ -817,7 +986,12 @@ public class SquadTactics
     static bool TooClose(Vector3 p, List<Vector3> others, float min)
     {
         foreach (Vector3 o in others)
-            if ((o - p).sqrMagnitude < min * min) return true;
+        {
+            if ((o - p).sqrMagnitude < min * min)
+            {
+                return true;
+            }
+        }
         return false;
     }
 
@@ -833,22 +1007,34 @@ public class SquadTactics
     List<GruntFollower> AliveAll()
     {
         List<GruntFollower> list = new List<GruntFollower>();
-        if (Squad != null) list.AddRange(Squad.Alive(Squad.Followers));
+        if (Squad != null)
+        {
+            list.AddRange(Squad.Alive(Squad.Followers));
+        }
         return list;
     }
 
     List<GruntFollower> AliveTeam(Fireteam t)
     {
         List<GruntFollower> list = new List<GruntFollower>();
-        if (Squad != null) list.AddRange(Squad.Alive(Squad.Team(t)));
+        if (Squad != null)
+        {
+            list.AddRange(Squad.Alive(Squad.Team(t)));
+        }
         return list;
     }
 
     static Vector3 Centroid(List<GruntFollower> list)
     {
-        if (list.Count == 0) return Vector3.zero;
+        if (list.Count == 0)
+        {
+            return Vector3.zero;
+        }
         Vector3 sum = Vector3.zero;
-        foreach (GruntFollower f in list) sum += f.transform.position;
+        foreach (GruntFollower f in list)
+        {
+            sum += f.transform.position;
+        }
         return sum / list.Count;
     }
 

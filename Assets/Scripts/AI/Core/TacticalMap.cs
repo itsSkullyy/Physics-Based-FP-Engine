@@ -55,10 +55,16 @@ public class TacticalMap : MonoBehaviour
 
     public static TacticalMap Get()
     {
-        if (Instance != null) return Instance;
+        if (Instance != null)
+        {
+            return Instance;
+        }
 
         Instance = FindFirstObjectByType<TacticalMap>();
-        if (Instance != null) return Instance;
+        if (Instance != null)
+        {
+            return Instance;
+        }
 
         GameObject go = new GameObject("TacticalMap");
         Instance = go.AddComponent<TacticalMap>();
@@ -78,7 +84,10 @@ public class TacticalMap : MonoBehaviour
 
     void OnDestroy()
     {
-        if (Instance == this) Instance = null;
+        if (Instance == this)
+        {
+            Instance = null;
+        }
     }
 
     // ---------------------------------------------------------------- build
@@ -105,7 +114,10 @@ public class TacticalMap : MonoBehaviour
         {
             SampleTriangle(tri.vertices[tri.indices[t]], tri.vertices[tri.indices[t + 1]],
                 tri.vertices[tri.indices[t + 2]], candidates, taken);
-            if (candidates.Count >= maxPoints) break;
+            if (candidates.Count >= maxPoints)
+            {
+                break;
+            }
 
             if (sw.Elapsed.TotalMilliseconds > msPerFrame)
             {
@@ -150,31 +162,46 @@ public class TacticalMap : MonoBehaviour
         {
             for (float z = Mathf.Ceil(minZ / spacing) * spacing; z <= maxZ; z += spacing)
             {
-                if (!InTriangleXZ(x, z, a, b, c, out float y)) continue;
+                if (!InTriangleXZ(x, z, a, b, c, out float y))
+                {
+                    continue;
+                }
                 any = true;
                 TryAdd(new Vector3(x, y, z), into, taken);
             }
         }
 
-        if (!any) TryAdd((a + b + c) / 3f, into, taken);
+        if (!any)
+        {
+            TryAdd((a + b + c) / 3f, into, taken);
+        }
     }
 
     void TryAdd(Vector3 p, List<Vector3> into, HashSet<Vector3Int> taken)
     {
         Vector3Int key = new Vector3Int(Mathf.RoundToInt(p.x / spacing), Mathf.RoundToInt(p.y), Mathf.RoundToInt(p.z / spacing));
-        if (taken.Add(key)) into.Add(p);
+        if (taken.Add(key))
+        {
+            into.Add(p);
+        }
     }
 
     static bool InTriangleXZ(float x, float z, Vector3 a, Vector3 b, Vector3 c, out float y)
     {
         y = 0f;
         float d = (b.z - c.z) * (a.x - c.x) + (c.x - b.x) * (a.z - c.z);
-        if (Mathf.Abs(d) < 1e-6f) return false;
+        if (Mathf.Abs(d) < 1e-6f)
+        {
+            return false;
+        }
 
         float w1 = ((b.z - c.z) * (x - c.x) + (c.x - b.x) * (z - c.z)) / d;
         float w2 = ((c.z - a.z) * (x - c.x) + (a.x - c.x) * (z - c.z)) / d;
         float w3 = 1f - w1 - w2;
-        if (w1 < -0.001f || w2 < -0.001f || w3 < -0.001f) return false;
+        if (w1 < -0.001f || w2 < -0.001f || w3 < -0.001f)
+        {
+            return false;
+        }
 
         y = w1 * a.y + w2 * b.y + w3 * c.y;
         return true;
@@ -189,8 +216,14 @@ public class TacticalMap : MonoBehaviour
         for (int i = 0; i < 8; i++)
         {
             Vector3 dir = SectorDir(i);
-            if (Blocked(low, dir, coverCheckDistance)) p.lowCover |= (byte)(1 << i);
-            if (Blocked(high, dir, coverCheckDistance)) p.highCover |= (byte)(1 << i);
+            if (Blocked(low, dir, coverCheckDistance))
+            {
+                p.lowCover |= (byte)(1 << i);
+            }
+            if (Blocked(high, dir, coverCheckDistance))
+            {
+                p.highCover |= (byte)(1 << i);
+            }
         }
 
         int open = 0;
@@ -198,7 +231,10 @@ public class TacticalMap : MonoBehaviour
         for (int i = 0; i < exposureRays; i++)
         {
             float a = i * Mathf.PI * 2f / exposureRays;
-            if (!Blocked(eye, new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a)), exposureDistance)) open++;
+            if (!Blocked(eye, new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a)), exposureDistance))
+            {
+                open++;
+            }
         }
         p.exposure = open / (float)exposureRays;
 
@@ -206,7 +242,10 @@ public class TacticalMap : MonoBehaviour
         {
             foreach (Collider c in Physics.OverlapSphere(pos + Vector3.up, 3f, wallRunMask, QueryTriggerInteraction.Ignore))
             {
-                if (!string.IsNullOrEmpty(wallRunTag) && !c.CompareTag(wallRunTag)) continue;
+                if (!string.IsNullOrEmpty(wallRunTag) && !c.CompareTag(wallRunTag))
+                {
+                    continue;
+                }
                 p.nearWallRun = true;
                 break;
             }
@@ -219,7 +258,9 @@ public class TacticalMap : MonoBehaviour
     static bool Blocked(Vector3 origin, Vector3 dir, float distance)
     {
         if (!Physics.Raycast(origin, dir, out RaycastHit hit, distance, ~0, QueryTriggerInteraction.Ignore))
+        {
             return false;
+        }
         return hit.rigidbody == null;
     }
 
@@ -241,20 +282,30 @@ public class TacticalMap : MonoBehaviour
         {
             wallRunMask = ctrl.wallRunMask;
             wallRunTag = ctrl.wallRunTag;
-            if (wallRunMask.value == ~0 && string.IsNullOrEmpty(wallRunTag)) wallRunMask = 0;
+            if (wallRunMask.value == ~0 && string.IsNullOrEmpty(wallRunTag))
+            {
+                wallRunMask = 0;
+            }
         }
 
         foreach (Collider c in FindObjectsByType<Collider>(FindObjectsSortMode.None))
         {
-            if (c.GetComponentInParent<EnemyAgent>() != null) continue;
+            if (c.GetComponentInParent<EnemyAgent>() != null)
+            {
+                continue;
+            }
 
             if (g != null && (g.grappleMask.value & (1 << c.gameObject.layer)) != 0
                 && (string.IsNullOrEmpty(g.grappleTag) || c.CompareTag(g.grappleTag)))
+            {
                 grapplePoints.Add(c.bounds.center);
+            }
 
             if (wallRunMask.value != 0 && (wallRunMask.value & (1 << c.gameObject.layer)) != 0
                 && (string.IsNullOrEmpty(wallRunTag) || c.CompareTag(wallRunTag)) && !c.isTrigger)
+            {
                 wallRunWalls.Add(c);
+            }
         }
     }
 
@@ -265,18 +316,31 @@ public class TacticalMap : MonoBehaviour
 
     public void Near(Vector3 center, float radius, List<Point> into)
     {
-        if (!Ready) return;
+        if (!Ready)
+        {
+            return;
+        }
         Vector2Int lo = CellOf(center - new Vector3(radius, 0f, radius));
         Vector2Int hi = CellOf(center + new Vector3(radius, 0f, radius));
         float r2 = radius * radius;
 
         for (int x = lo.x; x <= hi.x; x++)
+        {
             for (int z = lo.y; z <= hi.y; z++)
             {
-                if (!cells.TryGetValue(new Vector2Int(x, z), out List<Point> list)) continue;
+                if (!cells.TryGetValue(new Vector2Int(x, z), out List<Point> list))
+                {
+                    continue;
+                }
                 foreach (Point p in list)
-                    if ((p.position - center).sqrMagnitude <= r2) into.Add(p);
+                {
+                    if ((p.position - center).sqrMagnitude <= r2)
+                    {
+                        into.Add(p);
+                    }
+                }
             }
+        }
     }
 
     public Point Nearest(Vector3 pos, float maxDistance = 4f)
@@ -298,16 +362,28 @@ public class TacticalMap : MonoBehaviour
     {
         Vector3 d = threat - p.position;
         d.y = 0f;
-        if (d.sqrMagnitude < 0.01f) return 0f;
+        if (d.sqrMagnitude < 0.01f)
+        {
+            return 0f;
+        }
 
         float angle = Mathf.Atan2(d.z, d.x) * Mathf.Rad2Deg;
         int sector = ((Mathf.RoundToInt(angle / 45f) % 8) + 8) % 8;
 
-        if ((p.highCover & (1 << sector)) != 0) return 1f;
-        if ((p.lowCover & (1 << sector)) != 0) return 0.6f;
+        if ((p.highCover & (1 << sector)) != 0)
+        {
+            return 1f;
+        }
+        if ((p.lowCover & (1 << sector)) != 0)
+        {
+            return 0.6f;
+        }
 
         int left = (sector + 7) % 8, right = (sector + 1) % 8;
-        if (((p.highCover >> left) & 1) != 0 || ((p.highCover >> right) & 1) != 0) return 0.3f;
+        if (((p.highCover >> left) & 1) != 0 || ((p.highCover >> right) & 1) != 0)
+        {
+            return 0.3f;
+        }
         return 0f;
     }
 
@@ -328,8 +404,14 @@ public class TacticalMap : MonoBehaviour
         float bestScore = float.MinValue;
         foreach (Point p in near)
         {
-            if (reject != null && reject(p.position)) continue;
-            if (needLineOfSight && !Clear(p.position + Vector3.up * eyeHeight, threat)) continue;
+            if (reject != null && reject(p.position))
+            {
+                continue;
+            }
+            if (needLineOfSight && !Clear(p.position + Vector3.up * eyeHeight, threat))
+            {
+                continue;
+            }
 
             float score = CoverFrom(p, threat) * 1.5f + (1f - Vector3.Distance(p.position, slot) / radius);
             if (score > bestScore)
@@ -339,7 +421,10 @@ public class TacticalMap : MonoBehaviour
             }
         }
 
-        if (best != null) return best.position;
+        if (best != null)
+        {
+            return best.position;
+        }
         return NavMesh.SamplePosition(slot, out NavMeshHit hit, radius + 2f, NavMesh.AllAreas) ? hit.position : slot;
     }
 
@@ -347,9 +432,17 @@ public class TacticalMap : MonoBehaviour
     {
         Vector3 d = to - from;
         float len = d.magnitude;
-        if (len < 0.01f) return true;
+        if (len < 0.01f)
+        {
+            return true;
+        }
         foreach (RaycastHit h in Physics.RaycastAll(from, d / len, len, ~0, QueryTriggerInteraction.Ignore))
-            if (h.rigidbody == null) return false;
+        {
+            if (h.rigidbody == null)
+            {
+                return false;
+            }
+        }
         return true;
     }
 }

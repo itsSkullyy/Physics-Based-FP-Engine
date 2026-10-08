@@ -26,7 +26,10 @@ public class WallShard : MonoBehaviour
         rend = GetComponent<MeshRenderer>();
 
         MeshFilter mf = GetComponent<MeshFilter>();
-        if (mf == null) mf = gameObject.AddComponent<MeshFilter>();
+        if (mf == null)
+        {
+            mf = gameObject.AddComponent<MeshFilter>();
+        }
         mf.sharedMesh = mesh;
         rend.sharedMaterial = material;
         rend.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
@@ -36,10 +39,16 @@ public class WallShard : MonoBehaviour
         startScale = worldScale;
 
         MeshCollider mc = GetComponent<MeshCollider>();
-        if (mc == null) mc = gameObject.AddComponent<MeshCollider>();
+        if (mc == null)
+        {
+            mc = gameObject.AddComponent<MeshCollider>();
+        }
         mc.sharedMesh = mesh;
         mc.convex = true;                     // required for a non-kinematic rigidbody
-        if (physMat != null) mc.material = physMat;
+        if (physMat != null)
+        {
+            mc.material = physMat;
+        }
 
         rb.interpolation = RigidbodyInterpolation.Interpolate;
         rb.collisionDetectionMode = CollisionDetectionMode.Discrete;
@@ -55,34 +64,53 @@ public class WallShard : MonoBehaviour
     void Update()
     {
         age += Time.deltaTime;
-
-        float remaining = life - age;
-        if (remaining <= fadeTime)
+        if (ShrinkOut())
         {
-            // Shrinks out instead of popping - opaque cel materials can't fade by alpha.
-            float t = Mathf.Clamp01(remaining / fadeTime);
-            transform.localScale = startScale * t;
+            return;
+        }
+        CheckSettled(Time.deltaTime);
+    }
 
-            if (t <= 0f)
-            {
-                Destroy(gameObject);
-                return;
-            }
+    // Shrinks out instead of popping - opaque cel materials can't fade by alpha.
+    // True once it's gone.
+    bool ShrinkOut()
+    {
+        float remaining = life - age;
+        if (remaining > fadeTime)
+        {
+            return false;
         }
 
-        if (!settled)
+        float t = Mathf.Clamp01(remaining / fadeTime);
+        transform.localScale = startScale * t;
+        if (t > 0f)
         {
-            settleCheckTimer -= Time.deltaTime;
-            if (settleCheckTimer <= 0f)
-            {
-                settleCheckTimer = 0.25f;
-                if (rb != null && rb.linearVelocity.sqrMagnitude < 0.04f &&
-                    rb.angularVelocity.sqrMagnitude < 0.04f)
-                {
-                    rb.Sleep();
-                    settled = true;
-                }
-            }
+            return false;
+        }
+
+        Destroy(gameObject);
+        return true;
+    }
+
+    // puts the rigidbody to sleep once it stops moving so settled shards cost nothing
+    void CheckSettled(float dt)
+    {
+        if (settled)
+        {
+            return;
+        }
+
+        settleCheckTimer -= dt;
+        if (settleCheckTimer > 0f)
+        {
+            return;
+        }
+        settleCheckTimer = 0.25f;
+
+        if (rb != null && rb.linearVelocity.sqrMagnitude < 0.04f && rb.angularVelocity.sqrMagnitude < 0.04f)
+        {
+            rb.Sleep();
+            settled = true;
         }
     }
 }

@@ -54,10 +54,16 @@ public class ExplosionFX : MonoBehaviour
 
     public static ExplosionFX Get()
     {
-        if (Instance != null) return Instance;
+        if (Instance != null)
+        {
+            return Instance;
+        }
 
         Instance = FindFirstObjectByType<ExplosionFX>();
-        if (Instance != null) return Instance;
+        if (Instance != null)
+        {
+            return Instance;
+        }
 
         GameObject go = new GameObject("ExplosionFX");
         Instance = go.AddComponent<ExplosionFX>();
@@ -77,7 +83,10 @@ public class ExplosionFX : MonoBehaviour
 
     void OnDestroy()
     {
-        if (Instance == this) Instance = null;
+        if (Instance == this)
+        {
+            Instance = null;
+        }
     }
 
     // ---------------------------------------------------------------- setup
@@ -85,10 +94,19 @@ public class ExplosionFX : MonoBehaviour
     void Build()
     {
         Shader s = Shader.Find("Universal Render Pipeline/Particles/Unlit");
-        if (s == null) s = Shader.Find("Particles/Standard Unlit");
-        if (s == null) s = Shader.Find("Sprites/Default");
+        if (s == null)
+        {
+            s = Shader.Find("Particles/Standard Unlit");
+        }
+        if (s == null)
+        {
+            s = Shader.Find("Sprites/Default");
+        }
         particleMat = new Material(s);
-        if (particleMat.HasProperty("_BaseColor")) particleMat.SetColor("_BaseColor", Color.white);
+        if (particleMat.HasProperty("_BaseColor"))
+        {
+            particleMat.SetColor("_BaseColor", Color.white);
+        }
 
         Mesh sphere = PrimitiveMesh(PrimitiveType.Sphere);
         Mesh cube = PrimitiveMesh(PrimitiveType.Cube);
@@ -176,8 +194,10 @@ public class ExplosionFX : MonoBehaviour
         Emit(flash, position, Vector3.zero, radius * 0.9f, 0.2f, flashColor);
 
         for (int i = 0; i < 6; i++)
+        {
             Emit(fire, position + Random.insideUnitSphere * 0.4f * s, Random.onUnitSphere * Random.Range(0.5f, 2.5f) * s,
                 Random.Range(1.4f, 2.2f) * s, Random.Range(0.45f, 0.75f), firePalette[Random.Range(0, firePalette.Length)]);
+        }
 
         for (int i = 0; i < 18; i++)
         {
@@ -208,10 +228,15 @@ public class ExplosionFX : MonoBehaviour
         StartRing(position, radius);
 
         if (showBoomText)
+        {
             booms.Add(new Boom { world = position + Vector3.up * 1.2f, start = Time.unscaledTime, tilt = Random.Range(-12f, 12f) });
+        }
 
         JuiceFX juice = JuiceFX.Get();
-        if (juice != null) juice.ImpactBurst(position, Vector3.up, 1f);
+        if (juice != null)
+        {
+            juice.ImpactBurst(position, Vector3.up, 1f);
+        }
 
         EnemySounds.PlayAt(EnemySounds.Explosion, position, 1f, Random.Range(0.92f, 1.05f), 80f);
     }
@@ -238,7 +263,9 @@ public class ExplosionFX : MonoBehaviour
         lr.enabled = true;
 
         if (Physics.Raycast(center + Vector3.up * 0.5f, Vector3.down, out RaycastHit hit, 3f, ~0, QueryTriggerInteraction.Ignore))
+        {
             center = hit.point;
+        }
 
         rings.Add(new Ring { line = lr, center = center + Vector3.up * 0.08f, radius = radius, start = Time.time });
     }
@@ -261,6 +288,13 @@ public class ExplosionFX : MonoBehaviour
 
     void Update()
     {
+        UpdateRings();
+        booms.RemoveAll(b => Time.unscaledTime - b.start > boomDuration);
+    }
+
+    // shockwave rings grow out along the ground and fade, then go back in the pool
+    void UpdateRings()
+    {
         for (int i = rings.Count - 1; i >= 0; i--)
         {
             Ring r = rings[i];
@@ -272,79 +306,112 @@ public class ExplosionFX : MonoBehaviour
                 rings.RemoveAt(i);
                 continue;
             }
+            DrawRing(r, t);
+        }
+    }
 
-            float eased = 1f - (1f - t) * (1f - t);
-            float rad = Mathf.Lerp(0.3f, r.radius * 1.6f, eased);
-            for (int k = 0; k < RingSegments; k++)
-            {
-                float a = k / (float)RingSegments * Mathf.PI * 2f;
-                r.line.SetPosition(k, r.center + new Vector3(Mathf.Cos(a) * rad, 0f, Mathf.Sin(a) * rad));
-            }
-
-            float width = Mathf.Lerp(0.7f, 0f, t) * Mathf.Max(0.4f, r.radius / 5f);
-            r.line.startWidth = width;
-            r.line.endWidth = width;
-            Color c = Color.Lerp(flashColor, firePalette[1], t);
-            r.line.startColor = c;
-            r.line.endColor = c;
+    void DrawRing(Ring r, float t)
+    {
+        float eased = 1f - (1f - t) * (1f - t);
+        float rad = Mathf.Lerp(0.3f, r.radius * 1.6f, eased);
+        for (int k = 0; k < RingSegments; k++)
+        {
+            float a = k / (float)RingSegments * Mathf.PI * 2f;
+            r.line.SetPosition(k, r.center + new Vector3(Mathf.Cos(a) * rad, 0f, Mathf.Sin(a) * rad));
         }
 
-        booms.RemoveAll(b => Time.unscaledTime - b.start > boomDuration);
+        float width = Mathf.Lerp(0.7f, 0f, t) * Mathf.Max(0.4f, r.radius / 5f);
+        r.line.startWidth = width;
+        r.line.endWidth = width;
+        Color c = Color.Lerp(flashColor, firePalette[1], t);
+        r.line.startColor = c;
+        r.line.endColor = c;
     }
 
     // ---------------------------------------------------------------- BOOM!
 
     void OnGUI()
     {
-        if (booms.Count == 0) return;
-        Camera cam = Camera.main;
-        if (cam == null) return;
-
-        if (boomStyle == null)
+        if (booms.Count == 0)
         {
-            boomStyle = new GUIStyle(GUI.skin.label)
-            {
-                alignment = TextAnchor.MiddleCenter,
-                fontStyle = FontStyle.Bold
-            };
+            return;
+        }
+        Camera cam = Camera.main;
+        if (cam == null)
+        {
+            return;
         }
 
+        EnsureBoomStyle();
         foreach (Boom b in booms)
         {
-            Vector3 sp = cam.WorldToScreenPoint(b.world);
-            if (sp.z <= 0f) continue;
-
-            float age = Time.unscaledTime - b.start;
-            float scale;
-            if (age < 0.12f) scale = Mathf.Lerp(0.2f, 1.35f, age / 0.12f);
-            else if (age < 0.25f) scale = Mathf.Lerp(1.35f, 1f, (age - 0.12f) / 0.13f);
-            else if (age > boomDuration - 0.25f) scale = Mathf.Lerp(1f, 0f, (age - (boomDuration - 0.25f)) / 0.25f);
-            else scale = 1f;
-
-            float distanceScale = Mathf.Clamp(14f / Mathf.Max(1f, sp.z), 0.45f, 1.4f);
-            int size = Mathf.Max(1, Mathf.RoundToInt(boomFontSize * scale * distanceScale));
-            boomStyle.fontSize = size;
-
-            Vector2 center = new Vector2(sp.x, Screen.height - sp.y);
-            Rect r = new Rect(center.x - size * 4f, center.y - size, size * 8f, size * 2f);
-
-            Matrix4x4 old = GUI.matrix;
-            GUIUtility.RotateAroundPivot(b.tilt, center);
-
-            // outline, shadow, fill
-            float o = Mathf.Max(2f, size * 0.06f);
-            boomStyle.normal.textColor = boomOutline;
-            for (int i = 0; i < 8; i++)
-            {
-                float a = i * Mathf.PI / 4f;
-                GUI.Label(new Rect(r.x + Mathf.Cos(a) * o, r.y + Mathf.Sin(a) * o, r.width, r.height), boomWord, boomStyle);
-            }
-            GUI.Label(new Rect(r.x + o * 1.6f, r.y + o * 2f, r.width, r.height), boomWord, boomStyle);
-
-            boomStyle.normal.textColor = boomColor;
-            GUI.Label(r, boomWord, boomStyle);
-
-            GUI.matrix = old;
+            DrawBoom(cam, b);
         }
+    }
+
+    void EnsureBoomStyle()
+    {
+        if (boomStyle != null)
+        {
+            return;
+        }
+        boomStyle = new GUIStyle(GUI.skin.label)
+        {
+            alignment = TextAnchor.MiddleCenter,
+            fontStyle = FontStyle.Bold
+        };
+    }
+
+    // pops in big, settles, then shrinks away at the end
+    float BoomScale(float age)
+    {
+        if (age < 0.12f)
+        {
+            return Mathf.Lerp(0.2f, 1.35f, age / 0.12f);
+        }
+        if (age < 0.25f)
+        {
+            return Mathf.Lerp(1.35f, 1f, (age - 0.12f) / 0.13f);
+        }
+        if (age > boomDuration - 0.25f)
+        {
+            return Mathf.Lerp(1f, 0f, (age - (boomDuration - 0.25f)) / 0.25f);
+        }
+        return 1f;
+    }
+
+    void DrawBoom(Camera cam, Boom b)
+    {
+        Vector3 sp = cam.WorldToScreenPoint(b.world);
+        if (sp.z <= 0f)
+        {
+            return;
+        }
+
+        float scale = BoomScale(Time.unscaledTime - b.start);
+        float distanceScale = Mathf.Clamp(14f / Mathf.Max(1f, sp.z), 0.45f, 1.4f);
+        int size = Mathf.Max(1, Mathf.RoundToInt(boomFontSize * scale * distanceScale));
+        boomStyle.fontSize = size;
+
+        Vector2 center = new Vector2(sp.x, Screen.height - sp.y);
+        Rect r = new Rect(center.x - size * 4f, center.y - size, size * 8f, size * 2f);
+
+        Matrix4x4 old = GUI.matrix;
+        GUIUtility.RotateAroundPivot(b.tilt, center);
+
+        // outline, shadow, fill
+        float o = Mathf.Max(2f, size * 0.06f);
+        boomStyle.normal.textColor = boomOutline;
+        for (int i = 0; i < 8; i++)
+        {
+            float a = i * Mathf.PI / 4f;
+            GUI.Label(new Rect(r.x + Mathf.Cos(a) * o, r.y + Mathf.Sin(a) * o, r.width, r.height), boomWord, boomStyle);
+        }
+        GUI.Label(new Rect(r.x + o * 1.6f, r.y + o * 2f, r.width, r.height), boomWord, boomStyle);
+
+        boomStyle.normal.textColor = boomColor;
+        GUI.Label(r, boomWord, boomStyle);
+
+        GUI.matrix = old;
     }
 }

@@ -23,7 +23,10 @@ public class EnemyRagdoll : MonoBehaviour
     {
         get
         {
-            if (IsLimp && HasBones && bones[0] != null) return bones[0].worldCenterOfMass;
+            if (IsLimp && HasBones && bones[0] != null)
+            {
+                return bones[0].worldCenterOfMass;
+            }
             return rootBody != null ? rootBody.worldCenterOfMass : transform.position;
         }
     }
@@ -49,13 +52,22 @@ public class EnemyRagdoll : MonoBehaviour
 
         Rigidbody[] all = GetComponentsInChildren<Rigidbody>(true);
         int count = 0;
-        foreach (Rigidbody rb in all) if (rb != rootBody) count++;
+        foreach (Rigidbody rb in all)
+        {
+            if (rb != rootBody)
+            {
+                count++;
+            }
+        }
 
         bones = new Rigidbody[count];
         int i = 0;
         foreach (Rigidbody rb in all)
         {
-            if (rb == rootBody) continue;
+            if (rb == rootBody)
+            {
+                continue;
+            }
             rb.isKinematic = true;
             rb.interpolation = RigidbodyInterpolation.Interpolate;
             bones[i++] = rb;
@@ -65,17 +77,29 @@ public class EnemyRagdoll : MonoBehaviour
     // impulse is a velocity change
     public void Activate(Vector3 impulse, Vector3 point)
     {
-        if (IsLimp) return;
+        if (IsLimp)
+        {
+            return;
+        }
         IsLimp = true;
 
         impulse *= impulseScale;
 
-        if (nav != null && nav.enabled) nav.enabled = false;
+        if (nav != null && nav.enabled)
+        {
+            nav.enabled = false;
+        }
 
         if (HasBones)
         {
-            if (anim != null) anim.enabled = false;
-            if (rootCollider != null) rootCollider.enabled = false;
+            if (anim != null)
+            {
+                anim.enabled = false;
+            }
+            if (rootCollider != null)
+            {
+                rootCollider.enabled = false;
+            }
 
             Rigidbody nearest = null;
             float best = float.MaxValue;
@@ -86,11 +110,17 @@ public class EnemyRagdoll : MonoBehaviour
                 float d = (b.worldCenterOfMass - point).sqrMagnitude;
                 if (d < best) { best = d; nearest = b; }
             }
-            if (nearest != null) nearest.AddForce(impulse * 0.9f, ForceMode.VelocityChange);
+            if (nearest != null)
+            {
+                nearest.AddForce(impulse * 0.9f, ForceMode.VelocityChange);
+            }
         }
         else
         {
-            if (anim != null) anim.enabled = false;
+            if (anim != null)
+            {
+                anim.enabled = false;
+            }
             rootBody.mass = fallbackMass;
             rootBody.isKinematic = false;
             rootBody.constraints = RigidbodyConstraints.None;
@@ -125,7 +155,10 @@ public class EnemyRagdoll : MonoBehaviour
 
         transform.SetPositionAndRotation(position, rotation);
 
-        if (rootCollider != null) rootCollider.enabled = true;
+        if (rootCollider != null)
+        {
+            rootCollider.enabled = true;
+        }
         if (anim != null)
         {
             anim.enabled = true;
@@ -136,7 +169,10 @@ public class EnemyRagdoll : MonoBehaviour
         if (nav != null)
         {
             nav.enabled = true;
-            if (nav.isOnNavMesh) nav.Warp(position);
+            if (nav.isOnNavMesh)
+            {
+                nav.Warp(position);
+            }
         }
     }
 }

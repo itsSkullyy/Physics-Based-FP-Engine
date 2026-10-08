@@ -14,7 +14,10 @@ public class StartZone : MonoBehaviour
 
     void OnTriggerEnter(Collider other)
     {
-        if (!other.CompareTag(playerTag)) return;
+        if (!other.CompareTag(playerTag))
+        {
+            return;
+        }
         CourseTimer.Get().StartRun();
     }
 }

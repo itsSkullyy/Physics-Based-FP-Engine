@@ -305,7 +305,10 @@ public static class GameSounds
             for (int i = 0; i < hits.Length; i++)
             {
                 float dt = t - hits[i];
-                if (dt < 0f) continue;
+                if (dt < 0f)
+                {
+                    continue;
+                }
                 float level = 1f - i * 0.17f;
                 v += Mathf.Sin(2f * Mathf.PI * (210f + i * 25f) * dt + 1.2f * Mathf.Sin(2f * Mathf.PI * 470f * dt)) * Env(dt, 0.0005f, 30f) * level;
             }
@@ -345,7 +348,10 @@ public static class GameSounds
         Osc boom = new Osc();
         float[] bits = new float[14];
         System.Random pick = new System.Random(7);
-        for (int i = 0; i < bits.Length; i++) bits[i] = 0.05f + (float)pick.NextDouble() * 0.8f;
+        for (int i = 0; i < bits.Length; i++)
+        {
+            bits[i] = 0.05f + (float)pick.NextDouble() * 0.8f;
+        }
         return (t, r) =>
         {
             float crash = lp.Next(Noise(r), Mathf.Lerp(2200f, 300f, t / 0.6f)) * Env(t, 0.001f, 5f);
@@ -354,7 +360,10 @@ public static class GameSounds
             for (int i = 0; i < bits.Length; i++)
             {
                 float dt = t - bits[i];
-                if (dt < 0f) continue;
+                if (dt < 0f)
+                {
+                    continue;
+                }
                 debris += Mathf.Sin(2f * Mathf.PI * (140f + i * 23f) * dt) * Env(dt, 0.0005f, 50f);
             }
             return Sat(crash * 1.2f + body + debris * 0.15f * (1f - t), 1.8f);

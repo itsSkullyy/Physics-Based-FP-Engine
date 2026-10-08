@@ -14,13 +14,19 @@ public class Deathplane : MonoBehaviour
 
     private void OnTriggerEnter(Collider other)
     {
-        if (!other.CompareTag(playerTag)) return;
+        if (!other.CompareTag(playerTag))
+        {
+            return;
+        }
 
         PlayerHealth health = other.GetComponentInParent<PlayerHealth>();
 
         if (health != null)
         {
-            if (health.respawnPoint == null) health.respawnPoint = respawnPoint;
+            if (health.respawnPoint == null)
+            {
+                health.respawnPoint = respawnPoint;
+            }
 
             if (kills)
             {
@@ -29,7 +35,10 @@ public class Deathplane : MonoBehaviour
             else
             {
                 health.Damage(damage);
-                if (respawnPoint != null) health.Teleport(respawnPoint.position);
+                if (respawnPoint != null)
+                {
+                    health.Teleport(respawnPoint.position);
+                }
             }
 
             return;

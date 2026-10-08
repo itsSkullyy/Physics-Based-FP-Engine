@@ -89,7 +89,10 @@ public class GruntSquad
 
     public void Add(GruntFollower f)
     {
-        if (Followers.Contains(f)) return;
+        if (Followers.Contains(f))
+        {
+            return;
+        }
         Followers.Add(f);
         f.AssignSquad(this);
     }
@@ -99,7 +102,10 @@ public class GruntSquad
     {
         Alpha.Clear();
         Bravo.Clear();
-        if (Leader == null) return;
+        if (Leader == null)
+        {
+            return;
+        }
 
         Transform lt = Leader.transform;
         List<GruntFollower> sorted = new List<GruntFollower>(Followers);
@@ -123,7 +129,10 @@ public class GruntSquad
     {
         Board.Set(BB.Alert, alert);
         Board.Set(BB.LeaderEngaged, alert == SquadAlert.Combat);
-        if (alert == SquadAlert.Combat) Alarm(60f);
+        if (alert == SquadAlert.Combat)
+        {
+            Alarm(60f);
+        }
     }
 
     public void Alarm(float seconds) => AlarmedUntil = Mathf.Max(AlarmedUntil, Time.time + seconds);
@@ -180,7 +189,10 @@ public class GruntSquad
     // ignored if someone saw him recently
     public void ReportNoise(Vector3 position)
     {
-        if (TimeSinceKnown < 1.5f) return;
+        if (TimeSinceKnown < 1.5f)
+        {
+            return;
+        }
         Board.Set(BB.KnownPos, position);
         Board.Set(BB.KnownVel, Vector3.zero);
         Board.Set(BB.KnownAt, Time.time);
@@ -190,7 +202,10 @@ public class GruntSquad
 
     public void Break()
     {
-        if (Broken) return;
+        if (Broken)
+        {
+            return;
+        }
         Board.Set(BB.LeaderAlive, false);
         Board.Set(BB.SquadBroken, true);
         Board.Set(BB.LeaderEngaged, false);
@@ -202,7 +217,12 @@ public class GruntSquad
         {
             int n = 0;
             foreach (GruntFollower f in Followers)
-                if (f != null && !f.IsDead) n++;
+            {
+                if (f != null && !f.IsDead)
+                {
+                    n++;
+                }
+            }
             return n;
         }
     }
@@ -210,6 +230,11 @@ public class GruntSquad
     public IEnumerable<GruntFollower> Alive(List<GruntFollower> list)
     {
         foreach (GruntFollower f in list)
-            if (f != null && !f.IsDead) yield return f;
+        {
+            if (f != null && !f.IsDead)
+            {
+                yield return f;
+            }
+        }
     }
 }

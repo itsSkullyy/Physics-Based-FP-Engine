@@ -39,7 +39,10 @@ public class RebindMenu : MonoBehaviour
 
     void Awake()
     {
-        if (router == null) router = PlayerInputRouter.Resolve(this);
+        if (router == null)
+        {
+            router = PlayerInputRouter.Resolve(this);
+        }
     }
 
     void Start()
@@ -50,21 +53,32 @@ public class RebindMenu : MonoBehaviour
     void BuildRows()
     {
         rows.Clear();
-        if (router == null) return;
+        if (router == null)
+        {
+            return;
+        }
 
         foreach (PlayerInputRouter.Entry entry in router.Registry)
         {
             InputAction action = entry.action?.Action;
-            if (action == null) continue;
+            if (action == null)
+            {
+                continue;
+            }
 
             for (int i = 0; i < action.bindings.Count; i++)
             {
                 UnityEngine.InputSystem.InputBinding b = action.bindings[i];
-                if (b.isComposite) continue;
+                if (b.isComposite)
+                {
+                    continue;
+                }
 
                 string label = entry.label;
                 if (b.isPartOfComposite && !string.IsNullOrEmpty(b.name))
+                {
                     label += "  ›  " + char.ToUpper(b.name[0]) + b.name.Substring(1);
+                }
 
                 rows.Add(new Row
                 {
@@ -79,24 +93,39 @@ public class RebindMenu : MonoBehaviour
 
     void Update()
     {
-        if (listening != null) return;
+        if (listening != null)
+        {
+            return;
+        }
 
         bool pressed =
             (Keyboard.current != null && toggleKey != Key.None && Keyboard.current[toggleKey].wasPressedThisFrame) ||
             (gamepadStartAlsoToggles && Gamepad.current != null && Gamepad.current.startButton.wasPressedThisFrame);
 
-        if (pressed) Toggle();
+        if (pressed)
+        {
+            Toggle();
+        }
     }
 
     public void Toggle()
     {
-        if (open) Close();
-        else Open();
+        if (open)
+        {
+            Close();
+        }
+        else
+        {
+            Open();
+        }
     }
 
     public void Open()
     {
-        if (open || router == null) return;
+        if (open || router == null)
+        {
+            return;
+        }
 
         open = true;
         status = "";
@@ -112,7 +141,10 @@ public class RebindMenu : MonoBehaviour
 
     public void Close()
     {
-        if (!open) return;
+        if (!open)
+        {
+            return;
+        }
 
         CancelListening();
         open = false;
@@ -156,7 +188,9 @@ public class RebindMenu : MonoBehaviour
             {
                 status += "   (also used by ";
                 for (int i = 0; i < result.conflicts.Count; i++)
+                {
                     status += (i > 0 ? ", " : "") + result.conflicts[i].label;
+                }
                 status += ")";
             }
 
@@ -168,7 +202,10 @@ public class RebindMenu : MonoBehaviour
 
     void OnGUI()
     {
-        if (!open || router == null) return;
+        if (!open || router == null)
+        {
+            return;
+        }
 
         Rect area = new Rect(
             (Screen.width - width) * 0.5f,
@@ -178,41 +215,59 @@ public class RebindMenu : MonoBehaviour
         GUI.Box(area, GUIContent.none);
         GUILayout.BeginArea(new Rect(area.x + 14f, area.y + 12f, area.width - 28f, area.height - 24f));
 
+        DrawHeader();
+        DrawBindingRows();
+        DrawFooterButtons();
+
+        GUILayout.EndArea();
+    }
+
+    void DrawHeader()
+    {
         GUILayout.Label("Controls", new GUIStyle(GUI.skin.label) { fontSize = 20 });
         GUILayout.Label(status.Length > 0 ? status : "Click a binding to change it.");
         GUILayout.Space(6f);
+    }
 
+    void DrawBindingRows()
+    {
         scroll = GUILayout.BeginScrollView(scroll);
-
         for (int i = 0; i < rows.Count; i++)
         {
-            Row row = rows[i];
-
-            GUILayout.BeginHorizontal();
-            GUILayout.Label(row.label, GUILayout.Width(220f));
-            GUILayout.Label(row.gamepad ? "Pad" : "K&M", GUILayout.Width(42f));
-
-            bool waiting = listening == row;
-            string face = waiting ? "< press a control >" : row.action.DisplayAt(row.index);
-
-            GUI.enabled = listening == null;
-            if (GUILayout.Button(face, GUILayout.Width(190f)) && listening == null)
-                StartRebind(row);
-
-            if (GUILayout.Button("Reset", GUILayout.Width(60f)) && listening == null)
-            {
-                InputRebinding.ResetBinding(row.action, row.index);
-                router.SaveBindings();
-                status = row.label + " reset.";
-            }
-            GUI.enabled = true;
-
-            GUILayout.EndHorizontal();
+            DrawBindingRow(rows[i]);
         }
-
         GUILayout.EndScrollView();
         GUILayout.Space(6f);
+    }
 
+    void DrawBindingRow(Row row)
+    {
+        GUILayout.BeginHorizontal();
+        GUILayout.Label(row.label, GUILayout.Width(220f));
+        GUILayout.Label(row.gamepad ? "Pad" : "K&M", GUILayout.Width(42f));
+
+        bool waiting = listening == row;
+        string face = waiting ? "< press a control >" : row.action.DisplayAt(row.index);
+
+        GUI.enabled = listening == null;
+        if (GUILayout.Button(face, GUILayout.Width(190f)) && listening == null)
+        {
+            StartRebind(row);
+        }
+
+        if (GUILayout.Button("Reset", GUILayout.Width(60f)) && listening == null)
+        {
+            InputRebinding.ResetBinding(row.action, row.index);
+            router.SaveBindings();
+            status = row.label + " reset.";
+        }
+        GUI.enabled = true;
+
+        GUILayout.EndHorizontal();
+    }
+
+    void DrawFooterButtons()
+    {
         GUILayout.BeginHorizontal();
         if (GUILayout.Button("Reset All", GUILayout.Height(26f)))
         {
@@ -229,7 +284,5 @@ public class RebindMenu : MonoBehaviour
             Close();
         }
         GUILayout.EndHorizontal();
-
-        GUILayout.EndArea();
     }
 }

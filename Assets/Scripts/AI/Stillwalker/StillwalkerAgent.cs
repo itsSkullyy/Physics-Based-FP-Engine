@@ -115,10 +115,15 @@ public class StillwalkerAgent : Agent, IStillwalkerPolicy
     void ConfigureBehaviorParameters()
     {
         BehaviorParameters bp = GetComponent<BehaviorParameters>();
-        if (bp == null) return;
+        if (bp == null)
+        {
+            return;
+        }
 
         if (string.IsNullOrEmpty(bp.BehaviorName) || bp.BehaviorName == "My Behavior")
+        {
             bp.BehaviorName = "Stillwalker";
+        }
         bp.BrainParameters.VectorObservationSize = ObservationSize;
         bp.BrainParameters.ActionSpec = new ActionSpec(2, new[] { 2 });
 
@@ -130,7 +135,10 @@ public class StillwalkerAgent : Agent, IStillwalkerPolicy
     {
         why = null;
         BehaviorParameters bp = GetComponent<BehaviorParameters>();
-        if (bp == null || bp.BehaviorType == BehaviorType.HeuristicOnly) return true;
+        if (bp == null || bp.BehaviorType == BehaviorType.HeuristicOnly)
+        {
+            return true;
+        }
         if (bp.Model == null)
         {
             why = "No model on Behavior Parameters.";
@@ -143,7 +151,10 @@ public class StillwalkerAgent : Agent, IStillwalkerPolicy
             int want = ObservationSize * Mathf.Max(1, bp.BrainParameters.NumStackedVectorObservations);
             foreach (Model.Input input in model.inputs)
             {
-                if (input.name != "obs_0") continue;
+                if (input.name != "obs_0")
+                {
+                    continue;
+                }
                 int[] shape = input.shape.ToIntArray();
                 int got = shape.Length > 0 ? shape[shape.Length - 1] : -1;
                 if (got != want)
@@ -178,7 +189,10 @@ public class StillwalkerAgent : Agent, IStillwalkerPolicy
 
     public override void OnEpisodeBegin()
     {
-        if (!trainingMode || ghost == null) return;
+        if (!trainingMode || ghost == null)
+        {
+            return;
+        }
 
         // ML-Agents runs at execution order -50, so this can be called before the Stillwalker
         // has woken up. Wait for it, FixedUpdate starts the episode once it's ready.
@@ -199,7 +213,10 @@ public class StillwalkerAgent : Agent, IStillwalkerPolicy
         if (recordings != null && recordings.Length > 0)
         {
             TextAsset pick = recordings[Random.Range(0, recordings.Length)];
-            if (pick != null && pick != ghost.playbackData) ghost.SetPlayback(pick);
+            if (pick != null && pick != ghost.playbackData)
+            {
+                ghost.SetPlayback(pick);
+            }
         }
         ghost.RestartPlayback(Random.value);
 
@@ -228,7 +245,10 @@ public class StillwalkerAgent : Agent, IStillwalkerPolicy
 
     static Vector3 FloorUnder(Vector3 point)
     {
-        if (NavMesh.SamplePosition(point, out NavMeshHit hit, 40f, NavMesh.AllAreas)) return hit.position;
+        if (NavMesh.SamplePosition(point, out NavMeshHit hit, 40f, NavMesh.AllAreas))
+        {
+            return hit.position;
+        }
         return point;
     }
 
@@ -240,10 +260,14 @@ public class StillwalkerAgent : Agent, IStillwalkerPolicy
         {
             Vector2 r = Random.insideUnitCircle.normalized * Random.Range(4f, spawnRadius);
             if (!NavMesh.SamplePosition(floor + new Vector3(r.x, 0f, r.y), out NavMeshHit hit, 3f, NavMesh.AllAreas))
+            {
                 continue;
+            }
             if (NavMesh.CalculatePath(floor, hit.position, NavMesh.AllAreas, spawnPath)
                 && spawnPath.status == NavMeshPathStatus.PathComplete)
+            {
                 return hit.position;
+            }
         }
         return floor;
     }
@@ -283,8 +307,14 @@ public class StillwalkerAgent : Agent, IStillwalkerPolicy
         sensor.AddObservation(s.myVelocityLocal.x / 20f);
         sensor.AddObservation(s.myVelocityLocal.z / 20f);
 
-        for (int i = 0; i < 8; i++) sensor.AddObservation(s.escapeRoom01[i]);
-        for (int i = 0; i < 8; i++) sensor.AddObservation(s.escapeHidden[i]);
+        for (int i = 0; i < 8; i++)
+        {
+            sensor.AddObservation(s.escapeRoom01[i]);
+        }
+        for (int i = 0; i < 8; i++)
+        {
+            sensor.AddObservation(s.escapeHidden[i]);
+        }
 
         sensor.AddObservation(s.profile.speed01);
         sensor.AddObservation(s.profile.airborne01);
@@ -302,13 +332,22 @@ public class StillwalkerAgent : Agent, IStillwalkerPolicy
         lastMove = transform.TransformDirection(local);
         lastFast = actions.DiscreteActions[0] == 1;
 
-        if (trainingMode) ShapeRewards();
+        if (trainingMode)
+        {
+            ShapeRewards();
+        }
     }
 
     void ShapeRewards()
     {
-        if (body.Seen) AddReward(seenPenalty);
-        if (!body.Hurt) return;
+        if (body.Seen)
+        {
+            AddReward(seenPenalty);
+        }
+        if (!body.Hurt)
+        {
+            return;
+        }
 
         float scale = body.OneHitAway ? oneHitAwayScale : 1f;
         Vector3 d = ghost.Feet - transform.position;
@@ -316,8 +355,14 @@ public class StillwalkerAgent : Agent, IStillwalkerPolicy
         float dist = d.magnitude;
         float wanted = body.retreatDistance + body.retreatPerCrack * body.Cracks;
 
-        if (dist > wanted * 0.8f && !body.Exposed) AddReward(safeWhileHurtReward * scale);
-        if (dist < 8f) AddReward(closeWhileHurtPenalty * scale);
+        if (dist > wanted * 0.8f && !body.Exposed)
+        {
+            AddReward(safeWhileHurtReward * scale);
+        }
+        if (dist < 8f)
+        {
+            AddReward(closeWhileHurtPenalty * scale);
+        }
     }
 
     // Heuristic Only baseline: run when hurt, otherwise hold the stalking band
@@ -356,7 +401,10 @@ public class StillwalkerAgent : Agent, IStillwalkerPolicy
 
     public void OnStillwalkerEvent(StillwalkerEvent e)
     {
-        if (!trainingMode) return;
+        if (!trainingMode)
+        {
+            return;
+        }
 
         switch (e)
         {
@@ -382,45 +430,72 @@ public class StillwalkerAgent : Agent, IStillwalkerPolicy
     // runs before PlayerMotionTracker (order 50), so the hunter's move is sampled this step
     void FixedUpdate()
     {
-        if (!PolicyActive) return;
+        if (!PolicyActive)
+        {
+            return;
+        }
 
         if (++fixedCount % Mathf.Max(1, decisionPeriod) == 0)
+        {
             RequestDecision();
+        }
 
-        if (!trainingMode || ghost == null) return;
+        if (!trainingMode || ghost == null)
+        {
+            return;
+        }
+        if (HandleEpisodeBoundaries(Time.fixedDeltaTime))
+        {
+            return;
+        }
 
+        StepTrainingPlayer(Time.fixedDeltaTime);
+    }
+
+    // Starts, ends or restarts the episode when it needs to. True if it did, so the rest
+    // of the step is skipped.
+    bool HandleEpisodeBoundaries(float dt)
+    {
         if (beginPending)
         {
             OnEpisodeBegin();
-            return;
+            return true;
         }
 
         if (endAfterDeath)
         {
             endAfterDeath = false;
             EndEpisode();
-            return;
+            return true;
         }
 
         // Safety net: if it ever ends up off the NavMesh (launches take it off for under a
         // second) it can't move, so restart rather than burn the rest of the episode.
         // EpisodeInterrupted means it isn't blamed for it.
-        offMeshTime = body.IsDead || body.OnNavMesh ? 0f : offMeshTime + Time.fixedDeltaTime;
+        offMeshTime = body.IsDead || body.OnNavMesh ? 0f : offMeshTime + dt;
         if (offMeshTime > 2f)
         {
             Debug.LogWarning($"[StillwalkerAgent] {name} got stuck off the NavMesh at {transform.position}, restarting the episode.", this);
             EpisodeInterrupted();
-            return;
+            return true;
         }
 
-        episodeTimer += Time.fixedDeltaTime;
+        episodeTimer += dt;
         if (episodeTimer > episodeLength)
         {
             EndEpisode();
-            return;
+            return true;
         }
+        return false;
+    }
 
-        if (hunterEpisode) hunter.Step(Time.fixedDeltaTime, body, ghost);
+    // the fake player's turn: the hunter bot moves (if it's a hunter episode), then pogo and axe attacks
+    void StepTrainingPlayer(float dt)
+    {
+        if (hunterEpisode)
+        {
+            hunter.Step(dt, body, ghost);
+        }
         SimulatePogo();
         SimulateAxe();
     }
@@ -429,7 +504,10 @@ public class StillwalkerAgent : Agent, IStillwalkerPolicy
     void SimulatePogo()
     {
         pogoCooldown -= Time.fixedDeltaTime;
-        if (pogoCooldown > 0f || ghost.IsGrounded) return;
+        if (pogoCooldown > 0f || ghost.IsGrounded)
+        {
+            return;
+        }
 
         Vector3 d = ghost.Feet - transform.position;
         float height = d.y;
@@ -444,7 +522,10 @@ public class StillwalkerAgent : Agent, IStillwalkerPolicy
                 direction = Vector3.down,
                 force = 1f
             });
-            if (hunterEpisode) hunter.Bounce();
+            if (hunterEpisode)
+            {
+                hunter.Bounce();
+            }
         }
     }
 
@@ -453,13 +534,19 @@ public class StillwalkerAgent : Agent, IStillwalkerPolicy
     void SimulateAxe()
     {
         body.TrainingAxeThreat = 0f;
-        if (!simulateAxe || body.IsDead) return;
+        if (!simulateAxe || body.IsDead)
+        {
+            return;
+        }
 
         if (axeInFlight)
         {
             float left = axeArrive - Time.time;
             body.TrainingAxeThreat = 1f - Mathf.Clamp01(left / 1.2f);
-            if (left > 0f) return;
+            if (left > 0f)
+            {
+                return;
+            }
 
             axeInFlight = false;
             Vector3 miss = body.ChestPosition - axeAim;
@@ -474,16 +561,25 @@ public class StillwalkerAgent : Agent, IStillwalkerPolicy
                     force = 1f
                 });
             }
-            else AddReward(axeDodgedReward);
+            else
+            {
+                AddReward(axeDodgedReward);
+            }
 
             nextAxe = Time.time + Random.Range(axeIntervalMin, axeIntervalMax) * AxeIntervalScale();
             return;
         }
 
-        if (Time.time < nextAxe) return;
+        if (Time.time < nextAxe)
+        {
+            return;
+        }
 
         Vector3 to = body.ChestPosition - ghost.CameraPosition;
-        if (to.magnitude > axeRange || !body.Exposed || ghost.LookAngleTo(body.ChestPosition) > 60f) return;
+        if (to.magnitude > axeRange || !body.Exposed || ghost.LookAngleTo(body.ChestPosition) > 60f)
+        {
+            return;
+        }
 
         float skill = hunterEpisode ? hunter.Skill : 0.6f;
         float flight = to.magnitude / axeSpeed;
@@ -494,7 +590,10 @@ public class StillwalkerAgent : Agent, IStillwalkerPolicy
 
     float AxeIntervalScale()
     {
-        if (!hunterEpisode) return 1.3f;
+        if (!hunterEpisode)
+        {
+            return 1.3f;
+        }
         switch (hunter.CurrentStyle)
         {
             case StillwalkerHunterBot.Style.Kiter: return 0.55f;

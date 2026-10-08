@@ -83,12 +83,17 @@ public static class InputRebinding
         {
             result.display = target.DisplayAt(bindingIndex);
             if (router != null)
+            {
                 result.conflicts = FindConflicts(router, target, bindingIndex);
+            }
         }
 
         op.Dispose();
 
-        if (reEnable) target.Enable();
+        if (reEnable)
+        {
+            target.Enable();
+        }
 
         onFinish?.Invoke(result);
     }
@@ -100,19 +105,34 @@ public static class InputRebinding
         List<Conflict> found = new List<Conflict>();
 
         string path = target.EffectivePath(bindingIndex);
-        if (string.IsNullOrEmpty(path) || router == null) return found;
+        if (string.IsNullOrEmpty(path) || router == null)
+        {
+            return found;
+        }
 
         foreach (PlayerInputRouter.Entry entry in router.Registry)
         {
             GameAction ga = entry.action;
             InputAction a = ga?.Action;
-            if (a == null) continue;
+            if (a == null)
+            {
+                continue;
+            }
 
             for (int i = 0; i < a.bindings.Count; i++)
             {
-                if (ga == target && i == bindingIndex) continue;
-                if (a.bindings[i].isComposite) continue;
-                if (a.bindings[i].effectivePath != path) continue;
+                if (ga == target && i == bindingIndex)
+                {
+                    continue;
+                }
+                if (a.bindings[i].isComposite)
+                {
+                    continue;
+                }
+                if (a.bindings[i].effectivePath != path)
+                {
+                    continue;
+                }
 
                 found.Add(new Conflict { action = ga, bindingIndex = i, label = entry.label });
             }
@@ -125,11 +145,20 @@ public static class InputRebinding
     public static void ResetBinding(GameAction target, int bindingIndex)
     {
         InputAction action = target?.Action;
-        if (action == null) return;
+        if (action == null)
+        {
+            return;
+        }
 
         bool wasEnabled = action.enabled;
-        if (wasEnabled) action.Disable();
+        if (wasEnabled)
+        {
+            action.Disable();
+        }
         action.ApplyBindingOverride(bindingIndex, default(UnityEngine.InputSystem.InputBinding));
-        if (wasEnabled) action.Enable();
+        if (wasEnabled)
+        {
+            action.Enable();
+        }
     }
 }

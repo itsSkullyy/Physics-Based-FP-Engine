@@ -34,7 +34,9 @@ public abstract class EQSTest
     public static EQSTest OnNavMesh(float maxSnap = 1.5f) => new FuncTest("OnNavMesh", true, item =>
     {
         if (!NavMesh.SamplePosition(item.Point, out NavMeshHit hit, maxSnap, NavMesh.AllAreas))
+        {
             return -1f;
+        }
         item.Point = hit.position;
         return 1f;
     });
@@ -43,7 +45,10 @@ public abstract class EQSTest
         new FuncTest("Distance", false, item =>
         {
             float d = Vector3.Distance(item.Point, to());
-            if (d < min || d > max) return -1f;
+            if (d < min || d > max)
+            {
+                return -1f;
+            }
             float t = Mathf.InverseLerp(min, max, d);
             return curve != null ? Mathf.Clamp01(curve.Evaluate(t)) : t;
         });
@@ -66,7 +71,10 @@ public abstract class EQSTest
             to.y = 0f;
             Vector3 dir = direction();
             dir.y = 0f;
-            if (to.sqrMagnitude < 0.001f || dir.sqrMagnitude < 0.001f) return 0.5f;
+            if (to.sqrMagnitude < 0.001f || dir.sqrMagnitude < 0.001f)
+            {
+                return 0.5f;
+            }
             float d = Vector3.Dot(to.normalized, dir.normalized);
             float t = (d + 1f) * 0.5f;
             return curve != null ? Mathf.Clamp01(curve.Evaluate(t)) : t;
@@ -83,7 +91,9 @@ public abstract class EQSTest
                 Vector3 dir = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a));
                 if (Physics.Raycast(o, dir, out RaycastHit hit, radius, ~0, QueryTriggerInteraction.Ignore)
                     && hit.rigidbody == null)
+                {
                     best = Mathf.Min(best, hit.distance);
+                }
             }
             return best >= radius ? 0f : 1f - best / radius;
         });
@@ -95,12 +105,18 @@ public abstract class EQSTest
     {
         Vector3 d = to - from;
         float len = d.magnitude;
-        if (len < 0.01f) return true;
+        if (len < 0.01f)
+        {
+            return true;
+        }
 
         RaycastHit[] hits = Physics.RaycastAll(from, d / len, len, ~0, QueryTriggerInteraction.Ignore);
         foreach (RaycastHit h in hits)
         {
-            if (ignore != null && ignore(h.collider)) continue;
+            if (ignore != null && ignore(h.collider))
+            {
+                continue;
+            }
             return false;
         }
         return true;
@@ -144,8 +160,12 @@ public static class EQSGen
         {
             Vector3 c = center();
             for (float x = -halfExtent; x <= halfExtent; x += spacing)
+            {
                 for (float z = -halfExtent; z <= halfExtent; z += spacing)
+                {
                     items.Add(new EQSItem { Point = c + new Vector3(x, 0f, z) });
+                }
+            }
         });
 
     public static EQSGenerator From(Action<List<EQSItem>> fill) => new FuncGen(fill);
@@ -203,7 +223,10 @@ public class EQSQuery
                     item.Valid = false;
                     break;
                 }
-                if (t.FilterOnly) continue;
+                if (t.FilterOnly)
+                {
+                    continue;
+                }
 
                 total += s * t.Weight;
                 weights += t.Weight;
@@ -216,7 +239,10 @@ public class EQSQuery
             }
 
             item.Score = weights > 0f ? total / weights : 1f;
-            if (best == null || item.Score > best.Score) best = item;
+            if (best == null || item.Score > best.Score)
+            {
+                best = item;
+            }
         }
 
         LastBest = best;
@@ -227,7 +253,13 @@ public class EQSQuery
     public List<EQSItem> Best(int count, float minSpacing)
     {
         List<EQSItem> sorted = new List<EQSItem>();
-        foreach (EQSItem i in LastItems) if (i.Valid) sorted.Add(i);
+        foreach (EQSItem i in LastItems)
+        {
+            if (i.Valid)
+            {
+                sorted.Add(i);
+            }
+        }
         sorted.Sort((a, b) => b.Score.CompareTo(a.Score));
 
         List<EQSItem> picked = new List<EQSItem>();
@@ -235,11 +267,19 @@ public class EQSQuery
         {
             bool tooClose = false;
             foreach (EQSItem p in picked)
+            {
                 if (Vector3.Distance(i.Point, p.Point) < minSpacing) { tooClose = true; break; }
-            if (tooClose) continue;
+            }
+            if (tooClose)
+            {
+                continue;
+            }
 
             picked.Add(i);
-            if (picked.Count >= count) break;
+            if (picked.Count >= count)
+            {
+                break;
+            }
         }
         return picked;
     }
@@ -258,10 +298,16 @@ public class EQSService : MonoBehaviour
 
     public static EQSService Get()
     {
-        if (Instance != null) return Instance;
+        if (Instance != null)
+        {
+            return Instance;
+        }
 
         Instance = FindFirstObjectByType<EQSService>();
-        if (Instance != null) return Instance;
+        if (Instance != null)
+        {
+            return Instance;
+        }
 
         GameObject go = new GameObject("EQSService");
         Instance = go.AddComponent<EQSService>();
@@ -280,14 +326,20 @@ public class EQSService : MonoBehaviour
 
     void OnDestroy()
     {
-        if (Instance == this) Instance = null;
+        if (Instance == this)
+        {
+            Instance = null;
+        }
     }
 
     public bool IsPending(EQSQuery q) => pending.ContainsKey(q);
 
     public void Enqueue(EQSQuery query, Action<EQSItem> done)
     {
-        if (query == null) return;
+        if (query == null)
+        {
+            return;
+        }
         if (pending.ContainsKey(query))
         {
             pending[query] = done;

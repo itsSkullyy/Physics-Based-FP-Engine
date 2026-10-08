@@ -61,12 +61,17 @@ public static class Synth
     // factory runs once per clip so filters/oscillators inside keep their state
     public static AudioClip Make(string name, float seconds, int seed, float db, Func<Func<float, System.Random, float>> factory)
     {
-        if (cache.TryGetValue(name, out AudioClip c) && c != null) return c;
+        if (cache.TryGetValue(name, out AudioClip c) && c != null)
+        {
+            return c;
+        }
 
         int count = Mathf.CeilToInt(seconds * Rate);
         float[] data = Render(count, seed, factory());
         for (int i = 0; i < count; i++)
+        {
             data[i] *= Mathf.Clamp01((count - i) / (Rate * 0.01f));
+        }
 
         Normalise(data, db);
         return Store(name, data);
@@ -75,7 +80,10 @@ public static class Synth
     // tail crossfaded into the start so it loops
     public static AudioClip MakeLoop(string name, float seconds, int seed, float db, Func<Func<float, System.Random, float>> factory)
     {
-        if (cache.TryGetValue(name, out AudioClip c) && c != null) return c;
+        if (cache.TryGetValue(name, out AudioClip c) && c != null)
+        {
+            return c;
+        }
 
         int count = Mathf.CeilToInt(seconds * Rate);
         int fade = Mathf.Min(count / 4, Mathf.CeilToInt(0.08f * Rate));
@@ -108,18 +116,27 @@ public static class Synth
             peak = Mathf.Max(peak, Mathf.Abs(v));
         }
         float rms = (float)Math.Sqrt(sum / Mathf.Max(1, data.Length));
-        if (rms < 1e-6f || peak < 1e-6f) return;
+        if (rms < 1e-6f || peak < 1e-6f)
+        {
+            return;
+        }
 
         float target = ReferenceRms * Mathf.Pow(10f, db / 20f);
         float gain = Mathf.Min(target / rms, 0.95f / peak);
-        for (int i = 0; i < data.Length; i++) data[i] = Mathf.Clamp(data[i] * gain, -1f, 1f);
+        for (int i = 0; i < data.Length; i++)
+        {
+            data[i] = Mathf.Clamp(data[i] * gain, -1f, 1f);
+        }
     }
 
     static float[] Render(int count, int seed, Func<float, System.Random, float> wave)
     {
         float[] data = new float[count];
         System.Random rnd = new System.Random(seed);
-        for (int i = 0; i < count; i++) data[i] = wave(i / (float)Rate, rnd);
+        for (int i = 0; i < count; i++)
+        {
+            data[i] = wave(i / (float)Rate, rnd);
+        }
         return data;
     }
 
@@ -143,7 +160,10 @@ public static class Synth
 
     static void EnsurePools()
     {
-        if (root != null) return;
+        if (root != null)
+        {
+            return;
+        }
 
         root = new GameObject("SynthAudio");
         root.hideFlags = HideFlags.HideInHierarchy;
@@ -174,7 +194,10 @@ public static class Synth
 
     public static void Play(AudioClip clip, float volume = 1f, float pitch = 1f)
     {
-        if (clip == null || Volume <= 0f) return;
+        if (clip == null || Volume <= 0f)
+        {
+            return;
+        }
         EnsurePools();
 
         AudioSource s = Take(sources2D, ref next2D);
@@ -186,7 +209,10 @@ public static class Synth
 
     public static void PlayAt(AudioClip clip, Vector3 position, float volume = 1f, float pitch = 1f, float maxDistance = 45f)
     {
-        if (clip == null || Volume <= 0f) return;
+        if (clip == null || Volume <= 0f)
+        {
+            return;
+        }
         EnsurePools();
 
         AudioSource s = Take(sources3D, ref next3D);
@@ -218,7 +244,10 @@ public static class Synth
     public static AudioSource MakeLoopSource(AudioClip clip, Transform parent, bool spatial, float maxDistance = 30f)
     {
         GameObject go = new GameObject("SynthLoop_" + (clip != null ? clip.name : "none"));
-        if (parent != null) go.transform.SetParent(parent, false);
+        if (parent != null)
+        {
+            go.transform.SetParent(parent, false);
+        }
         AudioSource s = go.AddComponent<AudioSource>();
         s.clip = clip;
         s.loop = true;
@@ -235,12 +264,21 @@ public static class Synth
     // call every frame
     public static void Drive(AudioSource s, float volume, float pitch, float rate = 10f)
     {
-        if (s == null) return;
+        if (s == null)
+        {
+            return;
+        }
         float k = 1f - Mathf.Exp(-rate * Time.unscaledDeltaTime);
         s.volume = Mathf.Lerp(s.volume, volume * Volume, k);
         s.pitch = Mathf.Lerp(s.pitch, pitch, k);
 
-        if (s.volume > 0.005f && !s.isPlaying) s.Play();
-        else if (s.volume <= 0.005f && volume <= 0f && s.isPlaying) s.Stop();
+        if (s.volume > 0.005f && !s.isPlaying)
+        {
+            s.Play();
+        }
+        else if (s.volume <= 0.005f && volume <= 0f && s.isPlaying)
+        {
+            s.Stop();
+        }
     }
 }

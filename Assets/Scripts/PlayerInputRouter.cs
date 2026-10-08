@@ -163,13 +163,17 @@ public class PlayerInputRouter : MonoBehaviour
         BuildRegistry();
 
         if (loadSavedBindingsOnAwake)
+        {
             LoadBindings();
+        }
     }
 
     void OnEnable()
     {
         for (int i = 0; i < registry.Count; i++)
+        {
             registry[i].action.Enable();
+        }
 
         lastEnabled = inputEnabled;
         ApplyEnabledState();
@@ -183,14 +187,19 @@ public class PlayerInputRouter : MonoBehaviour
         buttonWatch = null;
 
         for (int i = 0; i < registry.Count; i++)
+        {
             registry[i].action.Disable();
+        }
 
         StopRumble();
     }
 
     void OnDestroy()
     {
-        if (Instance == this) Instance = null;
+        if (Instance == this)
+        {
+            Instance = null;
+        }
     }
 
     void Update()
@@ -209,8 +218,14 @@ public class PlayerInputRouter : MonoBehaviour
     {
         for (int i = 0; i < registry.Count; i++)
         {
-            if (inputEnabled) registry[i].action.Enable();
-            else registry[i].action.Disable();
+            if (inputEnabled)
+            {
+                registry[i].action.Enable();
+            }
+            else
+            {
+                registry[i].action.Disable();
+            }
         }
 
         if (!inputEnabled)
@@ -228,16 +243,25 @@ public class PlayerInputRouter : MonoBehaviour
 
         foreach (FieldInfo f in fields)
         {
-            if (f.FieldType != typeof(GameAction)) continue;
+            if (f.FieldType != typeof(GameAction))
+            {
+                continue;
+            }
 
             // Rebuild from Default() rather than trust the serialized copy - a stale
             // deserialized GameAction can end up with a binding array that no longer
             // matches its own action's internal state.
             GameAction fresh = Default(f.Name);
-            if (fresh != null) f.SetValue(this, fresh);
+            if (fresh != null)
+            {
+                f.SetValue(this, fresh);
+            }
 
             GameAction ga = f.GetValue(this) as GameAction;
-            if (ga == null) continue;
+            if (ga == null)
+            {
+                continue;
+            }
 
             registry.Add(new Entry { field = f.Name, label = Prettify(f.Name), action = ga });
         }
@@ -245,14 +269,20 @@ public class PlayerInputRouter : MonoBehaviour
 
     static string Prettify(string field)
     {
-        if (string.IsNullOrEmpty(field)) return field;
+        if (string.IsNullOrEmpty(field))
+        {
+            return field;
+        }
 
         System.Text.StringBuilder sb = new System.Text.StringBuilder();
         sb.Append(char.ToUpper(field[0]));
 
         for (int i = 1; i < field.Length; i++)
         {
-            if (char.IsUpper(field[i])) sb.Append(' ');
+            if (char.IsUpper(field[i]))
+            {
+                sb.Append(' ');
+            }
             sb.Append(field[i]);
         }
 
@@ -265,7 +295,10 @@ public class PlayerInputRouter : MonoBehaviour
     {
         get
         {
-            if (!inputEnabled) return Vector2.zero;
+            if (!inputEnabled)
+            {
+                return Vector2.zero;
+            }
 
             Vector2 m = move.ReadVector();
             return m.sqrMagnitude > 1f ? m.normalized : m;
@@ -277,7 +310,10 @@ public class PlayerInputRouter : MonoBehaviour
     {
         get
         {
-            if (lookFrame != Time.frameCount) ComputeLook();
+            if (lookFrame != Time.frameCount)
+            {
+                ComputeLook();
+            }
             return lookDelta;
         }
     }
@@ -289,8 +325,14 @@ public class PlayerInputRouter : MonoBehaviour
         lookFrame = Time.frameCount;
         lookDelta = Vector2.zero;
 
-        if (!inputEnabled) return;
-        if (blockLookWhenCursorFree && Cursor.lockState != CursorLockMode.Locked) return;
+        if (!inputEnabled)
+        {
+            return;
+        }
+        if (blockLookWhenCursorFree && Cursor.lockState != CursorLockMode.Locked)
+        {
+            return;
+        }
 
         Vector2 d = lookMouse.ReadVector() * mouseLookScale;
 
@@ -300,14 +342,20 @@ public class PlayerInputRouter : MonoBehaviour
             d += stick * gamepadLookSpeed * Time.unscaledDeltaTime;
         }
 
-        if (invertLookY) d.y = -d.y;
+        if (invertLookY)
+        {
+            d.y = -d.y;
+        }
         lookDelta = d;
     }
 
     Vector2 ShapeStick(Vector2 raw)
     {
         float mag = raw.magnitude;
-        if (mag <= gamepadLookDeadzone) return Vector2.zero;
+        if (mag <= gamepadLookDeadzone)
+        {
+            return Vector2.zero;
+        }
 
         float t = Mathf.InverseLerp(gamepadLookDeadzone, 1f, mag);
         t = Mathf.Pow(Mathf.Clamp01(t), gamepadLookExponent);
@@ -319,10 +367,19 @@ public class PlayerInputRouter : MonoBehaviour
 
     void OnAnyButton(InputControl control)
     {
-        if (control?.device == null) return;
+        if (control?.device == null)
+        {
+            return;
+        }
 
-        if (control.device is Gamepad) SetScheme(Scheme.Gamepad);
-        else if (control.device is Keyboard || control.device is Mouse) SetScheme(Scheme.KeyboardMouse);
+        if (control.device is Gamepad)
+        {
+            SetScheme(Scheme.Gamepad);
+        }
+        else if (control.device is Keyboard || control.device is Mouse)
+        {
+            SetScheme(Scheme.KeyboardMouse);
+        }
     }
 
     void DetectAnalogDevice()
@@ -346,12 +403,17 @@ public class PlayerInputRouter : MonoBehaviour
 
         Mouse mouse = Mouse.current;
         if (mouse != null && mouse.delta.ReadValue().sqrMagnitude > 4f)
+        {
             SetScheme(Scheme.KeyboardMouse);
+        }
     }
 
     void SetScheme(Scheme s)
     {
-        if (active == s) return;
+        if (active == s)
+        {
+            return;
+        }
 
         active = s;
 
@@ -369,8 +431,14 @@ public class PlayerInputRouter : MonoBehaviour
     /// Low and high are the two motors, 0..1.
     public void Rumble(float low, float high, float duration)
     {
-        if (!enableRumble || !inputEnabled || duration <= 0f) return;
-        if (Gamepad.current == null) return;
+        if (!enableRumble || !inputEnabled || duration <= 0f)
+        {
+            return;
+        }
+        if (Gamepad.current == null)
+        {
+            return;
+        }
 
         StopRumble();
         rumbleRoutine = StartCoroutine(RumbleRoutine(
@@ -387,7 +455,10 @@ public class PlayerInputRouter : MonoBehaviour
         float end = Time.unscaledTime + duration;
         while (Time.unscaledTime < end)
         {
-            if (Gamepad.current == null) break;
+            if (Gamepad.current == null)
+            {
+                break;
+            }
 
             float k = Mathf.InverseLerp(end, end - duration, Time.unscaledTime);
             Gamepad.current.SetMotorSpeeds(low * k, high * k);
@@ -431,7 +502,10 @@ public class PlayerInputRouter : MonoBehaviour
         for (int i = 0; i < registry.Count; i++)
         {
             string json = registry[i].action.SaveOverrides();
-            if (string.IsNullOrEmpty(json)) continue;
+            if (string.IsNullOrEmpty(json))
+            {
+                continue;
+            }
 
             payload.entries.Add(new SavedBinding { field = registry[i].field, overrides = json });
         }
@@ -442,10 +516,16 @@ public class PlayerInputRouter : MonoBehaviour
 
     public void LoadBindings()
     {
-        if (!PlayerPrefs.HasKey(saveKey)) return;
+        if (!PlayerPrefs.HasKey(saveKey))
+        {
+            return;
+        }
 
         SavedBindings payload = JsonUtility.FromJson<SavedBindings>(PlayerPrefs.GetString(saveKey));
-        if (payload?.entries == null) return;
+        if (payload?.entries == null)
+        {
+            return;
+        }
 
         foreach (SavedBinding saved in payload.entries)
         {
@@ -458,7 +538,9 @@ public class PlayerInputRouter : MonoBehaviour
     public void ResetAllBindings()
     {
         for (int i = 0; i < registry.Count; i++)
+        {
             registry[i].action.ClearOverrides();
+        }
 
         PlayerPrefs.DeleteKey(saveKey);
         PlayerPrefs.Save();
@@ -467,7 +549,12 @@ public class PlayerInputRouter : MonoBehaviour
     public Entry Find(string field)
     {
         for (int i = 0; i < registry.Count; i++)
-            if (registry[i].field == field) return registry[i];
+        {
+            if (registry[i].field == field)
+            {
+                return registry[i];
+            }
+        }
 
         return default;
     }
@@ -478,14 +565,19 @@ public class PlayerInputRouter : MonoBehaviour
     // bindings if none exists yet.
     public static PlayerInputRouter Resolve(Component owner)
     {
-        if (Instance != null) return Instance;
+        if (Instance != null)
+        {
+            return Instance;
+        }
 
         PlayerInputRouter router = owner != null
             ? owner.GetComponentInParent<PlayerInputRouter>()
             : null;
 
         if (router == null)
+        {
             router = FindFirstObjectByType<PlayerInputRouter>();
+        }
 
         if (router == null && owner != null)
         {

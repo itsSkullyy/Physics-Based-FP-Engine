@@ -22,7 +22,10 @@ public class CourseHUD : MonoBehaviour
 
     void OnGUI()
     {
-        if (timer == null) return;
+        if (timer == null)
+        {
+            return;
+        }
         EnsureStyles();
 
         DrawShadowed(CourseTimer.Format(timer.Elapsed), Screen.width * 0.5f,
@@ -47,7 +50,10 @@ public class CourseHUD : MonoBehaviour
 
     void EnsureStyles()
     {
-        if (clockStyle != null) return;
+        if (clockStyle != null)
+        {
+            return;
+        }
 
         clockStyle = new GUIStyle(GUI.skin.label)
         {

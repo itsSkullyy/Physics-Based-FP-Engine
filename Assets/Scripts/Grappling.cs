@@ -180,10 +180,7 @@ public class Grappling : MonoBehaviour
 
     void Awake()
     {
-        if (controller == null) controller = GetComponent<FirstPersonCharacterController>();
-        if (rb == null) rb = GetComponent<Rigidbody>();
-        if (input == null) input = PlayerInputRouter.Resolve(this);
-
+        FindComponents();
         if (controller == null)
         {
             Debug.LogError("Grappling needs a FirstPersonCharacterController.", this);
@@ -191,21 +188,62 @@ public class Grappling : MonoBehaviour
             return;
         }
 
-        if (gunTip == null) gunTip = controller.cameraTransform;
+        if (gunTip == null)
+        {
+            gunTip = controller.cameraTransform;
+        }
+        SetupRope();
+        FindCamera();
+        MakeReticleTextures();
+    }
 
+    void FindComponents()
+    {
+        if (controller == null)
+        {
+            controller = GetComponent<FirstPersonCharacterController>();
+        }
+        if (rb == null)
+        {
+            rb = GetComponent<Rigidbody>();
+        }
+        if (input == null)
+        {
+            input = PlayerInputRouter.Resolve(this);
+        }
+    }
+
+    void SetupRope()
+    {
         if (ropeLine == null && useOwnWorldRope)
+        {
             ropeLine = CreateWorldRope();
+        }
 
         if (ropeLine == null)
+        {
             Debug.LogWarning("Grappling has no LineRenderer. Rope will be invisible.", this);
+        }
         else
+        {
             ropeLine.useWorldSpace = true;
+        }
+    }
 
+    void FindCamera()
+    {
         if (controller.cameraTransform != null)
+        {
             cam = controller.cameraTransform.GetComponent<Camera>();
+        }
         if (cam == null)
+        {
             cam = Camera.main;
+        }
+    }
 
+    void MakeReticleTextures()
+    {
         dotTex = MakeDotTexture(16);
         arcTex = MakeArcTexture(160, reticleRingThickness, 4, reticleSegmentGap, 16f);
         chevronTex = MakeChevronTexture(64, 0.17f);
@@ -235,9 +273,15 @@ public class Grappling : MonoBehaviour
         if (mat == null)
         {
             Shader s = Shader.Find("Sprites/Default");
-            if (s != null) mat = new Material(s);
+            if (s != null)
+            {
+                mat = new Material(s);
+            }
         }
-        if (mat != null) lr.material = mat;
+        if (mat != null)
+        {
+            lr.material = mat;
+        }
 
         return lr;
     }
@@ -245,7 +289,9 @@ public class Grappling : MonoBehaviour
     void OnDestroy()
     {
         if (ropeObject != null)
+        {
             Destroy(ropeObject);
+        }
     }
 
     void Update()
@@ -255,30 +301,65 @@ public class Grappling : MonoBehaviour
         UpdateTarget();
         UpdateReticle(Time.deltaTime);
 
-        if (input != null)
+        if (input == null)
         {
-            if (swingEquipped)
+            return;
+        }
+        HandleSwingInput();
+        HandleZipInput();
+        HandleReelInput(Time.deltaTime);
+
+        // jumping off a swing is applied in FixedUpdate with the rope solver
+        if (isSwinging && input.jump.Pressed && !controller.IsGrounded)
+        {
+            jumpQueued = true;
+        }
+    }
+
+    // swing only works with the grapple slot equipped, swapping away lets go
+    void HandleSwingInput()
+    {
+        if (swingEquipped)
+        {
+            if (input.grappleSwing.Pressed)
             {
-                if (input.grappleSwing.Pressed) TryAttach();
-                if (input.grappleSwing.Released && isSwinging) Detach(false);
+                TryAttach();
             }
-            else if (isSwinging)
+            if (input.grappleSwing.Released && isSwinging)
             {
                 Detach(false);
             }
+        }
+        else if (isSwinging)
+        {
+            Detach(false);
+        }
 
-            if (input.grapplePull.Pressed) TryStartZip();
-            if (input.grapplePull.Released) StopZip();
+    }
 
-            if (isSwinging)
-            {
-                float scroll = input.ScrollY;
-                if (Mathf.Abs(scroll) > 0.01f)
-                    pendingReel += Mathf.Sign(scroll) * manualReelSpeed * Time.deltaTime;
-            }
+    void HandleZipInput()
+    {
+        if (input.grapplePull.Pressed)
+        {
+            TryStartZip();
+        }
+        if (input.grapplePull.Released)
+        {
+            StopZip();
+        }
+    }
 
-            if (isSwinging && input.jump.Pressed && !controller.IsGrounded)
-                jumpQueued = true;
+    // scroll wheel reels the rope in or out, applied in FixedUpdate
+    void HandleReelInput(float dt)
+    {
+        if (!isSwinging)
+        {
+            return;
+        }
+        float scroll = input.ScrollY;
+        if (Mathf.Abs(scroll) > 0.01f)
+        {
+            pendingReel += Mathf.Sign(scroll) * manualReelSpeed * dt;
         }
     }
 
@@ -290,22 +371,17 @@ public class Grappling : MonoBehaviour
             return;
         }
 
-        if (!isSwinging) return;
-
-        if (rb.isKinematic || controller.IsVaulting)
+        if (!isSwinging)
+        {
+            return;
+        }
+        if (SwingShouldEnd())
         {
             Detach(false);
             return;
         }
 
         float dt = Time.fixedDeltaTime;
-
-        if (!AnchorStillValid())
-        {
-            Detach(false);
-            return;
-        }
-
         UpdateRopeLength(dt);
         ApplySwingGravity();
         ApplyAirControl();
@@ -315,8 +391,14 @@ public class Grappling : MonoBehaviour
         ApplyAboveAnchorDamping(dt);
         ClampSpeed(dt);
 
-        if (jumpQueued) Detach(true);
+        if (jumpQueued)
+        {
+            Detach(true);
+        }
     }
+
+    // vaulting, going kinematic or the anchor disappearing all drop the rope
+    bool SwingShouldEnd() => rb.isKinematic || controller.IsVaulting || !AnchorStillValid();
 
     void LateUpdate()
     {
@@ -328,7 +410,10 @@ public class Grappling : MonoBehaviour
     void UpdateTarget()
     {
         hasTarget = false;
-        if (controller.cameraTransform == null || isZipping || isSwinging) return;
+        if (controller.cameraTransform == null || isZipping || isSwinging)
+        {
+            return;
+        }
 
         Transform camT = controller.cameraTransform;
 
@@ -343,26 +428,47 @@ public class Grappling : MonoBehaviour
 
         foreach (Collider c in candidates)
         {
-            if (c.attachedRigidbody == rb) continue;
-            if (!string.IsNullOrEmpty(grappleTag) && !c.CompareTag(grappleTag)) continue;
+            if (c.attachedRigidbody == rb)
+            {
+                continue;
+            }
+            if (!string.IsNullOrEmpty(grappleTag) && !c.CompareTag(grappleTag))
+            {
+                continue;
+            }
 
             IZipTarget zt = c.GetComponentInParent<IZipTarget>();
-            if (zt != null && !zt.ZipTargetValid) continue;
+            if (zt != null && !zt.ZipTargetValid)
+            {
+                continue;
+            }
 
             Vector3 nearest = c.bounds.ClosestPoint(camT.position);
             Vector3 toNearest = nearest - camT.position;
             float nearDist = toNearest.magnitude;
-            if (nearDist < minTargetDistance || nearDist > maxGrappleDistance) continue;
+            if (nearDist < minTargetDistance || nearDist > maxGrappleDistance)
+            {
+                continue;
+            }
 
             float angle = Vector3.Angle(camT.forward, toNearest);
-            if (angle > aimAssistAngle) continue;
+            if (angle > aimAssistAngle)
+            {
+                continue;
+            }
 
             Vector3 point = GrapplePointFor(c, camT.position);
             Vector3 toPoint = point - camT.position;
             float pointDist = toPoint.magnitude;
-            if (pointDist < 0.05f) continue;
+            if (pointDist < 0.05f)
+            {
+                continue;
+            }
 
-            if (IsBlocked(camT.position, toPoint / pointDist, pointDist, c)) continue;
+            if (IsBlocked(camT.position, toPoint / pointDist, pointDist, c))
+            {
+                continue;
+            }
 
             float score = (angle / aimAssistAngle) * angleWeight +
                           (nearDist / maxGrappleDistance) * distanceWeight;
@@ -392,15 +498,22 @@ public class Grappling : MonoBehaviour
     Vector3 GrapplePointFor(Collider c, Vector3 from)
     {
         if (attachToObjectCenter)
+        {
             return c.bounds.center;
+        }
 
         Vector3 nearest = c.bounds.ClosestPoint(from);
         Vector3 to = nearest - from;
         float d = to.magnitude;
-        if (d < 0.001f) return nearest;
+        if (d < 0.001f)
+        {
+            return nearest;
+        }
 
         if (c.Raycast(new Ray(from, to / d), out RaycastHit surf, maxGrappleDistance))
+        {
             return surf.point;
+        }
 
         return nearest;
     }
@@ -410,16 +523,31 @@ public class Grappling : MonoBehaviour
     bool IsBlocked(Vector3 origin, Vector3 dir, float dist, Collider target)
     {
         float check = dist - 0.05f;
-        if (check <= 0.05f) return false;
+        if (check <= 0.05f)
+        {
+            return false;
+        }
 
         RaycastHit[] hits = Physics.RaycastAll(origin, dir, check, ~0, QueryTriggerInteraction.Ignore);
 
         foreach (RaycastHit h in hits)
         {
-            if (h.collider == null) continue;
-            if (h.collider == target) continue;
-            if (h.collider.attachedRigidbody == rb) continue;
-            if (SameObject(h.collider, target)) continue;
+            if (h.collider == null)
+            {
+                continue;
+            }
+            if (h.collider == target)
+            {
+                continue;
+            }
+            if (h.collider.attachedRigidbody == rb)
+            {
+                continue;
+            }
+            if (SameObject(h.collider, target))
+            {
+                continue;
+            }
 
             return true;
         }
@@ -429,8 +557,14 @@ public class Grappling : MonoBehaviour
 
     static bool SameObject(Collider a, Collider b)
     {
-        if (a == null || b == null) return false;
-        if (a.attachedRigidbody != null && a.attachedRigidbody == b.attachedRigidbody) return true;
+        if (a == null || b == null)
+        {
+            return false;
+        }
+        if (a.attachedRigidbody != null && a.attachedRigidbody == b.attachedRigidbody)
+        {
+            return true;
+        }
 
         return a.transform == b.transform
             || a.transform.IsChildOf(b.transform)
@@ -448,7 +582,10 @@ public class Grappling : MonoBehaviour
         hitCollider = null;
 
         Transform camT = controller.cameraTransform;
-        if (camT == null) return false;
+        if (camT == null)
+        {
+            return false;
+        }
 
         if (hasTarget)
         {
@@ -477,7 +614,9 @@ public class Grappling : MonoBehaviour
             }
 
             if (!h.collider.isTrigger)
+            {
                 return false;
+            }
         }
 
         return false;
@@ -485,7 +624,10 @@ public class Grappling : MonoBehaviour
 
     static float RadiusOf(Collider c)
     {
-        if (c == null) return 0f;
+        if (c == null)
+        {
+            return 0f;
+        }
 
         Vector3 e = c.bounds.extents;
         return Mathf.Max(e.x, Mathf.Max(e.y, e.z));
@@ -493,8 +635,14 @@ public class Grappling : MonoBehaviour
 
     void TryStartZip()
     {
-        if (isZipping || isSwinging || controller.IsVaulting) return;
-        if (!TryGetGrapplePoint(out Vector3 point, out Collider col)) return;
+        if (isZipping || isSwinging || controller.IsVaulting)
+        {
+            return;
+        }
+        if (!TryGetGrapplePoint(out Vector3 point, out Collider col))
+        {
+            return;
+        }
 
         zipTarget = col != null ? col.GetComponentInParent<IZipTarget>() : null;
         if (zipTarget != null && !zipTarget.ZipTargetValid) { zipTarget = null; return; }
@@ -508,7 +656,10 @@ public class Grappling : MonoBehaviour
 
     public void StopZip()
     {
-        if (!isZipping) return;
+        if (!isZipping)
+        {
+            return;
+        }
 
         isZipping = false;
         controller.IsZipping = false;
@@ -516,7 +667,9 @@ public class Grappling : MonoBehaviour
         zipTarget = null;
 
         if (ropeLine != null)
+        {
             ropeLine.positionCount = 0;
+        }
     }
 
     void HandleZip()
@@ -578,21 +731,41 @@ public class Grappling : MonoBehaviour
 
         Vector3 wish = ReadWishDir();
         if (wish != Vector3.zero)
+        {
             rb.AddForce(wish * zipSteerForce, ForceMode.Acceleration);
+        }
     }
 
     void TryAttach()
     {
-        if (!swingEquipped) return;
-        if (isSwinging || isZipping || cooldownTimer > 0f) return;
-        if (controller.IsVaulting) return;
-        if (!TryGetGrapplePoint(out Vector3 point, out Collider col)) return;
+        if (!swingEquipped)
+        {
+            return;
+        }
+        if (isSwinging || isZipping || cooldownTimer > 0f)
+        {
+            return;
+        }
+        if (controller.IsVaulting)
+        {
+            return;
+        }
+        if (!TryGetGrapplePoint(out Vector3 point, out Collider col))
+        {
+            return;
+        }
 
         // no swinging from enemies
-        if (col != null && col.GetComponentInParent<IZipTarget>() != null) return;
+        if (col != null && col.GetComponentInParent<IZipTarget>() != null)
+        {
+            return;
+        }
 
         float dist = Vector3.Distance(Pos, point);
-        if (dist < minSwingDistance || dist > maxSwingDistance) return;
+        if (dist < minSwingDistance || dist > maxSwingDistance)
+        {
+            return;
+        }
 
         anchor = point;
         anchorRadius = attachToObjectCenter && respectTargetRadius ? RadiusOf(col) : 0f;
@@ -615,11 +788,16 @@ public class Grappling : MonoBehaviour
         float above = AboveAnchorAmount();
 
         Vector3 wish = ReadWishDir();
-        if (wish == Vector3.zero) wish = controller.FlatForward;
+        if (wish == Vector3.zero)
+        {
+            wish = controller.FlatForward;
+        }
 
         Vector3 tangent = Vector3.ProjectOnPlane(wish, ropeDir);
         if (tangent.sqrMagnitude < 0.001f)
+        {
             tangent = Vector3.ProjectOnPlane(controller.FlatForward, ropeDir);
+        }
 
         float fall = Mathf.Max(0f, -vel.y);
         float boost = swingLaunchSpeed + fall * fallToSwingConversion;
@@ -634,7 +812,9 @@ public class Grappling : MonoBehaviour
         }
 
         if (above > 0.01f)
+        {
             vel += ropeDir * (dropInSpeed * above);
+        }
 
         rb.linearVelocity = vel;
     }
@@ -642,13 +822,19 @@ public class Grappling : MonoBehaviour
     float AboveAnchorAmount()
     {
         Vector3 toAnchor = anchor - Pos;
-        if (toAnchor.sqrMagnitude < 0.0001f) return 0f;
+        if (toAnchor.sqrMagnitude < 0.0001f)
+        {
+            return 0f;
+        }
         return Mathf.Clamp01(Vector3.Dot(toAnchor.normalized, Vector3.down));
     }
 
     public void Detach(bool jumped)
     {
-        if (!isSwinging) return;
+        if (!isSwinging)
+        {
+            return;
+        }
 
         isSwinging = false;
         controller.IsSwinging = false;
@@ -658,7 +844,9 @@ public class Grappling : MonoBehaviour
         cooldownTimer = reattachCooldown;
 
         if (ropeLine != null)
+        {
             ropeLine.positionCount = 0;
+        }
 
         Vector3 v = rb.linearVelocity;
 
@@ -678,7 +866,9 @@ public class Grappling : MonoBehaviour
         float ceiling = CurrentCeiling;
         float speed = v.magnitude;
         if (speed > ceiling)
+        {
             v *= ceiling / speed;
+        }
 
         rb.linearVelocity = v;
     }
@@ -688,8 +878,14 @@ public class Grappling : MonoBehaviour
         Vector3 pos = Pos;
         float dist = Vector3.Distance(pos, anchor);
 
-        if (dist > maxSwingDistance * 1.5f) return false;
-        if (!breakOnObstruction) return true;
+        if (dist > maxSwingDistance * 1.5f)
+        {
+            return false;
+        }
+        if (!breakOnObstruction)
+        {
+            return true;
+        }
 
         Vector3 dir = (anchor - pos) / Mathf.Max(dist, 0.001f);
         float checkDist = dist - obstructionTolerance - anchorRadius;
@@ -725,7 +921,9 @@ public class Grappling : MonoBehaviour
         }
 
         if (slackTakeUpSpeed > 0f && dist < ropeLength && above < 0.15f)
+        {
             ropeLength = Mathf.MoveTowards(ropeLength, dist, slackTakeUpSpeed * dt);
+        }
 
         ropeLength = Mathf.Clamp(ropeLength, floor, maxSwingDistance);
     }
@@ -735,7 +933,10 @@ public class Grappling : MonoBehaviour
         Vector3 pos = Pos;
         Vector3 toAnchor = anchor - pos;
         float dist = toAnchor.magnitude;
-        if (dist < 0.01f) return;
+        if (dist < 0.01f)
+        {
+            return;
+        }
 
         Vector3 dir = toAnchor / dist;
 
@@ -745,7 +946,10 @@ public class Grappling : MonoBehaviour
             return;
         }
 
-        if (dist <= ropeLength) return;
+        if (dist <= ropeLength)
+        {
+            return;
+        }
 
         Vector3 vel = rb.linearVelocity;
         Vector3 predicted = vel + Physics.gravity * (ActiveGravityScale * dt);
@@ -754,7 +958,9 @@ public class Grappling : MonoBehaviour
 
         float outward = -Vector3.Dot(predicted, dir);
         if (outward > 0f)
+        {
             impulse += dir * outward;
+        }
 
         float stiffness = Mathf.Lerp(ropeStiffness, aboveAnchorStiffness, AboveAnchorAmount());
         float error = dist - ropeLength;
@@ -764,7 +970,9 @@ public class Grappling : MonoBehaviour
         {
             float up = Vector3.Dot(impulse, Vector3.up);
             if (up > 0f)
+            {
                 impulse -= Vector3.up * up * (1f - groundedLift);
+            }
         }
 
         rb.linearVelocity = vel + impulse;
@@ -772,46 +980,79 @@ public class Grappling : MonoBehaviour
 
     void ApplyGroundStick()
     {
-        if (!controller.IsGrounded || RopeIdleOnGround) return;
-        if (controller.CurrentSpeed < groundStickMinSpeed) return;
+        if (!controller.IsGrounded || RopeIdleOnGround)
+        {
+            return;
+        }
+        if (controller.CurrentSpeed < groundStickMinSpeed)
+        {
+            return;
+        }
 
         float dist = Vector3.Distance(Pos, anchor);
-        if (dist < ropeLength) return;
+        if (dist < ropeLength)
+        {
+            return;
+        }
 
         rb.AddForce(Vector3.down * groundStickForce, ForceMode.Acceleration);
     }
 
     void ApplySlidePull()
     {
-        if (!SlideGrappling || slidePullAccel <= 0f) return;
+        if (!SlideGrappling || slidePullAccel <= 0f)
+        {
+            return;
+        }
 
         Vector3 pos = Pos;
         Vector3 toAnchor = anchor - pos;
         float dist = toAnchor.magnitude;
-        if (dist < ropeLength || dist < 0.01f) return;
+        if (dist < ropeLength || dist < 0.01f)
+        {
+            return;
+        }
 
         Vector3 vel = rb.linearVelocity;
-        if (vel.magnitude < slidePullMinSpeed) return;
+        if (vel.magnitude < slidePullMinSpeed)
+        {
+            return;
+        }
 
         Vector3 tangent = Vector3.ProjectOnPlane(vel, toAnchor / dist);
         tangent.y = 0f;
-        if (tangent.sqrMagnitude < 0.01f) return;
+        if (tangent.sqrMagnitude < 0.01f)
+        {
+            return;
+        }
 
         rb.AddForce(tangent.normalized * slidePullAccel, ForceMode.Acceleration);
     }
 
     void ApplyAboveAnchorDamping(float dt)
     {
-        if (aboveAnchorDamping <= 0f) return;
+        if (aboveAnchorDamping <= 0f)
+        {
+            return;
+        }
 
         float above = AboveAnchorAmount();
-        if (above < 0.5f) return;
+        if (above < 0.5f)
+        {
+            return;
+        }
 
         Vector3 vel = rb.linearVelocity;
-        if (vel.magnitude > aboveAnchorDampMaxSpeed) return;
+        if (vel.magnitude > aboveAnchorDampMaxSpeed)
+        {
+            return;
+        }
 
         Vector3 toAnchor = anchor - Pos;
-        if (toAnchor.sqrMagnitude < 0.0001f) return;
+        if (toAnchor.sqrMagnitude < 0.0001f)
+        {
+            return;
+        }
 
         Vector3 tangential = Vector3.ProjectOnPlane(vel, toAnchor.normalized);
 
@@ -821,10 +1062,16 @@ public class Grappling : MonoBehaviour
 
     void ApplySwingGravity()
     {
-        if (controller.IsGrounded) return;
+        if (controller.IsGrounded)
+        {
+            return;
+        }
 
         float scale = ActiveGravityScale;
-        if (Mathf.Approximately(scale, 1f)) return;
+        if (Mathf.Approximately(scale, 1f))
+        {
+            return;
+        }
 
         rb.AddForce(Physics.gravity * (scale - 1f), ForceMode.Acceleration);
     }
@@ -832,13 +1079,19 @@ public class Grappling : MonoBehaviour
     void ApplyAirControl()
     {
         Vector3 wish = ReadWishDir();
-        if (wish == Vector3.zero) return;
+        if (wish == Vector3.zero)
+        {
+            return;
+        }
 
         Vector3 ropeDir = (anchor - Pos).normalized;
 
         float outward = -Vector3.Dot(wish, ropeDir);
         Vector3 usable = outward > 0f ? wish + ropeDir * outward : wish;
-        if (usable.sqrMagnitude < 0.001f) return;
+        if (usable.sqrMagnitude < 0.001f)
+        {
+            return;
+        }
 
         rb.AddForce(usable.normalized * swingAirControl, ForceMode.Acceleration);
     }
@@ -849,7 +1102,10 @@ public class Grappling : MonoBehaviour
 
         Vector3 v = rb.linearVelocity;
         float speed = v.magnitude;
-        if (speed <= cap || speed < 0.01f) return;
+        if (speed <= cap || speed < 0.01f)
+        {
+            return;
+        }
 
         float target = Mathf.Max(cap, speed - speedClampDecel * dt);
         target = Mathf.Min(target, CurrentCeiling);
@@ -859,7 +1115,10 @@ public class Grappling : MonoBehaviour
 
     Vector3 ReadWishDir()
     {
-        if (input == null) return Vector3.zero;
+        if (input == null)
+        {
+            return Vector3.zero;
+        }
 
         Vector2 m = input.Move;
         Vector3 dir = controller.FlatRight * m.x + controller.FlatForward * m.y;
@@ -868,12 +1127,17 @@ public class Grappling : MonoBehaviour
 
     void DrawRope()
     {
-        if (ropeLine == null) return;
+        if (ropeLine == null)
+        {
+            return;
+        }
 
         if (!isSwinging && !isZipping)
         {
             if (ropeLine.positionCount != 0)
+            {
                 ropeLine.positionCount = 0;
+            }
             return;
         }
 
@@ -885,7 +1149,9 @@ public class Grappling : MonoBehaviour
         if (isZipping)
         {
             if (ropeLine.positionCount != 2)
+            {
                 ropeLine.positionCount = 2;
+            }
 
             ropeLine.SetPosition(0, start);
             ropeLine.SetPosition(1, currentRopeEnd);
@@ -894,7 +1160,9 @@ public class Grappling : MonoBehaviour
 
         int count = Mathf.Max(2, ropeSegments);
         if (ropeLine.positionCount != count)
+        {
             ropeLine.positionCount = count;
+        }
 
         float dist = Vector3.Distance(start, anchor);
         float slack = Mathf.Max(0f, ropeLength - dist) * sagAmount;
@@ -913,7 +1181,10 @@ public class Grappling : MonoBehaviour
     void UpdateReticle(float dt)
     {
         reticleSpin += reticleSpinSpeed * dt;
-        if (reticleSpin > 360f) reticleSpin -= 360f;
+        if (reticleSpin > 360f)
+        {
+            reticleSpin -= 360f;
+        }
 
         bool show = isZipping || isSwinging || hasTarget;
         if (!show)
@@ -927,33 +1198,45 @@ public class Grappling : MonoBehaviour
 
     void OnGUI()
     {
-        if (dotTex == null) return;
+        if (dotTex == null)
+        {
+            return;
+        }
 
         Color old = GUI.color;
+        DrawCrosshair();
+        if (lockT > 0.001f && cam != null && controller.cameraTransform != null)
+        {
+            DrawTargetReticle();
+        }
+        GUI.color = old;
+    }
 
+    void DrawCrosshair()
+    {
         float half = crosshairSize * 0.5f;
         GUI.color = crosshairColor;
         GUI.DrawTexture(new Rect(Screen.width * 0.5f - half, Screen.height * 0.5f - half,
             crosshairSize, crosshairSize), dotTex);
+    }
 
-        if (lockT > 0.001f && cam != null && controller.cameraTransform != null)
+    // homing reticle on the current target, smaller the further away it is
+    void DrawTargetReticle()
+    {
+        Vector3 worldPoint = isZipping ? zipPoint : (isSwinging ? anchor : targetDisplayPoint);
+        Vector3 sp = cam.WorldToScreenPoint(worldPoint);
+        if (sp.z <= 0f)
         {
-            Vector3 worldPoint = isZipping ? zipPoint : (isSwinging ? anchor : targetDisplayPoint);
-            Vector3 sp = cam.WorldToScreenPoint(worldPoint);
-
-            if (sp.z > 0f)
-            {
-                Vector2 screen = new Vector2(sp.x, Screen.height - sp.y);
-                float dist = Vector3.Distance(controller.cameraTransform.position, worldPoint);
-                float size = Mathf.Lerp(reticleSize * 1.35f, reticleSize * 0.7f,
-                    Mathf.Clamp01(dist / maxGrappleDistance));
-
-                bool locked = isZipping || isSwinging;
-                DrawReticle(screen, size, locked ? reticleLockedColor : reticleColor, locked);
-            }
+            return;
         }
 
-        GUI.color = old;
+        Vector2 screen = new Vector2(sp.x, Screen.height - sp.y);
+        float dist = Vector3.Distance(controller.cameraTransform.position, worldPoint);
+        float size = Mathf.Lerp(reticleSize * 1.35f, reticleSize * 0.7f,
+            Mathf.Clamp01(dist / maxGrappleDistance));
+
+        bool locked = isZipping || isSwinging;
+        DrawReticle(screen, size, locked ? reticleLockedColor : reticleColor, locked);
     }
 
     // Bracket ring turning one way, chevrons converging inward the other way, snapping
@@ -964,7 +1247,9 @@ public class Grappling : MonoBehaviour
         float scale = Mathf.Lerp(reticleSnapScale, 1f, ease);
 
         if (locked)
+        {
             scale *= 1f + Mathf.Sin(Time.time * lockedPulseSpeed) * lockedPulseAmount;
+        }
 
         float s = size * scale;
 
@@ -1045,7 +1330,10 @@ public class Grappling : MonoBehaviour
                         float fy = y + 0.25f + sy * 0.5f - r;
 
                         float d = Mathf.Sqrt(fx * fx + fy * fy);
-                        if (d < 0.001f) continue;
+                        if (d < 0.001f)
+                        {
+                            continue;
+                        }
 
                         float ang = Mathf.Repeat(Mathf.Atan2(fx, fy) * Mathf.Rad2Deg, 360f);
                         float local = Mathf.Repeat(ang + segSpan * 0.5f, segSpan) - segSpan * 0.5f;
@@ -1057,7 +1345,10 @@ public class Grappling : MonoBehaviour
                         bool onTick = perp <= thickness * 0.4f &&
                                       d <= ringR && d >= ringR - tickLength;
 
-                        if (onRing || onTick) a += 0.25f;
+                        if (onRing || onTick)
+                        {
+                            a += 0.25f;
+                        }
                     }
                 }
 
@@ -1100,7 +1391,10 @@ public class Grappling : MonoBehaviour
                                      ny <= 1f - thickness * 1.5f &&
                                      Mathf.Abs(nx - 0.5f) <= innerHalf;
 
-                        if (outer && !inner) a += 0.25f;
+                        if (outer && !inner)
+                        {
+                            a += 0.25f;
+                        }
                     }
                 }
 
@@ -1116,7 +1410,10 @@ public class Grappling : MonoBehaviour
 
     void OnDrawGizmosSelected()
     {
-        if (!Application.isPlaying || !isSwinging) return;
+        if (!Application.isPlaying || !isSwinging)
+        {
+            return;
+        }
 
         Gizmos.color = Color.cyan;
         Gizmos.DrawLine(transform.position, anchor);
