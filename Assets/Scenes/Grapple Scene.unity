@@ -1097,6 +1097,8 @@ MonoBehaviour:
   airKillTimeScale: 0.25
   deathImpulse: 7
   targetOverride: {fileID: 0}
+  stuckTime: 1.5
+  stuckProgress: 0.3
   logStateChanges: 0
   muzzle: {fileID: 2039576943}
   gunPivot: {fileID: 1460322157}
@@ -12843,6 +12845,8 @@ MonoBehaviour:
   airKillTimeScale: 0.25
   deathImpulse: 7
   targetOverride: {fileID: 0}
+  stuckTime: 1.5
+  stuckProgress: 0.3
   logStateChanges: 0
   muzzle: {fileID: 166168806}
   gunPivot: {fileID: 1576494940}
@@ -13454,6 +13458,8 @@ MonoBehaviour:
   airKillTimeScale: 0.25
   deathImpulse: 7
   targetOverride: {fileID: 0}
+  stuckTime: 1.5
+  stuckProgress: 0.3
   logStateChanges: 0
   muzzle: {fileID: 649259108}
   gunPivot: {fileID: 1703978927}
@@ -66065,6 +66071,8 @@ MonoBehaviour:
   airKillTimeScale: 0.25
   deathImpulse: 7
   targetOverride: {fileID: 0}
+  stuckTime: 1.5
+  stuckProgress: 0.3
   logStateChanges: 0
   muzzle: {fileID: 1907669275}
   gunPivot: {fileID: 1706823127}
@@ -73521,6 +73529,8 @@ MonoBehaviour:
   airKillTimeScale: 0.25
   deathImpulse: 7
   targetOverride: {fileID: 0}
+  stuckTime: 1.5
+  stuckProgress: 0.3
   logStateChanges: 0
   wakeRadius: 25
   seenAngle: 35
@@ -75330,6 +75340,8 @@ MonoBehaviour:
   airKillTimeScale: 0.25
   deathImpulse: 7
   targetOverride: {fileID: 0}
+  stuckTime: 1.5
+  stuckProgress: 0.3
   logStateChanges: 0
   muzzle: {fileID: 1474839562}
   gunPivot: {fileID: 1675044045}
