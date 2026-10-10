@@ -12,6 +12,8 @@ public class Deathplane : MonoBehaviour
     [SerializeField] private float damage = 35f;
     [SerializeField] private string playerTag = "Player";
 
+    public Transform RespawnPoint => respawnPoint;
+
     private void OnTriggerEnter(Collider other)
     {
         if (!other.CompareTag(playerTag))

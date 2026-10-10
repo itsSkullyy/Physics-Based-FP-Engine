@@ -102,6 +102,8 @@ public class BreakableWall : MonoBehaviour
     Vector3 spawnPos;
     Quaternion spawnRot;
 
+    public bool IsShattered => shattered;
+
     [Header("Debug Respawn")]
     [Tooltip("Rebuilds every breakable wall and clears all shards. Testing only.")]
     public Key respawnKey = Key.B;

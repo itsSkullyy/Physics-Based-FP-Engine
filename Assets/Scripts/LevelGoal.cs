@@ -47,6 +47,7 @@ public class LevelGoal : MonoBehaviour
     Vector3 startPos;
     float ambientTimer;
     bool collected;
+    Renderer[] hidden;
 
     void Reset()
     {
@@ -131,7 +132,9 @@ public class LevelGoal : MonoBehaviour
         }
 
         GetComponent<Collider>().enabled = false;
-        foreach (Renderer r in GetComponentsInChildren<Renderer>())
+        // only the ones that were showing, so a reset doesn't turn on anything left off on purpose
+        hidden = System.Array.FindAll(GetComponentsInChildren<Renderer>(), r => r.enabled);
+        foreach (Renderer r in hidden)
         {
             r.enabled = false;
         }
@@ -142,6 +145,33 @@ public class LevelGoal : MonoBehaviour
         {
             StartCoroutine(OpenExitAfterDelay(exit));
         }
+    }
+
+    /// Puts the pickup back for another run. LevelReset calls it when the player comes back
+    /// into this level. The exit portal shuts itself behind the player, so it's left alone.
+    public void ResetGoal()
+    {
+        if (!collected)
+        {
+            return;
+        }
+        collected = false;
+        StopAllCoroutines();
+
+        if (hidden != null)
+        {
+            foreach (Renderer r in hidden)
+            {
+                if (r != null)
+                {
+                    r.enabled = true;
+                }
+            }
+            hidden = null;
+        }
+
+        transform.position = startPos;
+        GetComponent<Collider>().enabled = true;
     }
 
     Portal FindExitPortal()

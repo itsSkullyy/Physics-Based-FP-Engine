@@ -1,20 +1,24 @@
 using System;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 // Speedrun-style clock for a traversal course. Starts counting the instant the scene
 // loads and keeps going until something (LevelGoal, FinishZone, ...) calls FinishRun.
+// Coming into another level through a portal starts it again for that level (LevelReset).
 // Runs on unscaled time so hitstop/impact-freeze moments don't make the clock free.
 public class CourseTimer : MonoBehaviour
 {
     public static CourseTimer Instance { get; private set; }
 
-    [Tooltip("PlayerPrefs key the best time is saved under. Bump the suffix to reset records.")]
+    [Tooltip("PlayerPrefs key the best time is saved under, with the level's scene name added on the end. Bump the suffix to reset records.")]
     public string bestTimeKey = "course.besttime.v1";
 
     public bool Running { get; private set; }
     public float Elapsed { get; private set; }
     public float BestTime { get; private set; } = -1f;
     public bool HasBestTime => BestTime >= 0f;
+    /// Scene name of the level being timed. Each level keeps its own best time.
+    public string Level { get; private set; }
 
     /// PauseMenu sets this while paused, separate from Running so a pause doesn't count
     /// as a finished/reset run.
@@ -43,14 +47,32 @@ public class CourseTimer : MonoBehaviour
         if (Instance != null && Instance != this) { Destroy(this); return; }
         Instance = this;
 
-        if (PlayerPrefs.HasKey(bestTimeKey))
-        {
-            BestTime = PlayerPrefs.GetFloat(bestTimeKey);
-        }
-
+        UseLevel(StartingLevel());
         Running = true;
         Elapsed = 0f;
     }
+
+    // The scene this timer was placed in. If PortalManager has already carried the player
+    // (and this with it) into DontDestroyOnLoad, the scene it tracks the player in.
+    string StartingLevel()
+    {
+        string own = gameObject.scene.name;
+        if (own != "DontDestroyOnLoad")
+        {
+            return own;
+        }
+        string space = PortalManager.PlayerSpace;
+        return !string.IsNullOrEmpty(space) ? space : SceneManager.GetActiveScene().name;
+    }
+
+    void UseLevel(string level)
+    {
+        Level = level;
+        string key = BestKey;
+        BestTime = PlayerPrefs.HasKey(key) ? PlayerPrefs.GetFloat(key) : -1f;
+    }
+
+    string BestKey => bestTimeKey + "." + Level;
 
     void OnDestroy()
     {
@@ -77,6 +99,14 @@ public class CourseTimer : MonoBehaviour
         RunStarted?.Invoke();
     }
 
+    /// Fresh run of a different level, with that level's best time. LevelReset calls this
+    /// when the player comes through a portal into it.
+    public void StartRun(string level)
+    {
+        UseLevel(level);
+        StartRun();
+    }
+
     /// Called by FinishZone / LevelGoal. No-op if no run is in progress.
     /// Returns whether this run beat the previous best.
     public bool FinishRun()
@@ -91,7 +121,7 @@ public class CourseTimer : MonoBehaviour
         if (newBest)
         {
             BestTime = Elapsed;
-            PlayerPrefs.SetFloat(bestTimeKey, BestTime);
+            PlayerPrefs.SetFloat(BestKey, BestTime);
             PlayerPrefs.Save();
         }
 

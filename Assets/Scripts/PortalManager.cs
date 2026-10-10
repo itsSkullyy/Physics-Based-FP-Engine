@@ -170,8 +170,12 @@ public class PortalManager : MonoBehaviour
     public void NotePlayerEntered(Scene scene)
     {
         if (!scene.IsValid()) return;
+        bool newLevel = scene.name != PlayerSceneName;
         PlayerSceneName = scene.name;
         UseSunOf(PlayerSceneName);
+
+        // walking into a level always starts it over: timer, goal, glass, enemies
+        if (newLevel) LevelReset.Enter(scene);
     }
 
     /// Restarts whichever scene the player is in right now (the level, or the tutorial).

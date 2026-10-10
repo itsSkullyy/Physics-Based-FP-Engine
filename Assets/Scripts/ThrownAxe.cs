@@ -34,8 +34,6 @@ public class ThrownAxe : MonoBehaviour
 
     [Header("Stick")]
     public LayerMask stickMask = ~0;
-    [Tooltip("Let the axe embed in trigger colliders. Turn on if grappleable props use trigger colliders.")]
-    public bool stickToTriggers = false;
     public float stickDepth = 0.12f;
     [Range(0f, 1f)] public float stickNormalBlend = 0.55f;
     public Vector3 stickEulerOffset = Vector3.zero;
@@ -711,9 +709,9 @@ public class ThrownAxe : MonoBehaviour
         dir = delta / dist;
         float castDist = dist + skinWidth;
 
-        QueryTriggerInteraction qti = stickToTriggers
-            ? QueryTriggerInteraction.Collide
-            : QueryTriggerInteraction.Ignore;
+        // Triggers are never something to stick in. They're checkpoints, tip zones, kill
+        // planes and the like, and the axe flies straight through them.
+        const QueryTriggerInteraction qti = QueryTriggerInteraction.Ignore;
 
         bool found = false;
         float bestDist = float.MaxValue;
@@ -734,7 +732,10 @@ public class ThrownAxe : MonoBehaviour
             return false;
         }
 
-        if (best.normal.sqrMagnitude < 0.001f)
+        // A sweep that starts already inside something reports distance 0 and a hit point
+        // of (0,0,0). Sticking at that point is what sent the axe to the middle of the map,
+        // so it sticks where the sweep started instead.
+        if (best.distance <= 0f || best.normal.sqrMagnitude < 0.001f)
         {
             best.normal = -dir;
             best.point = from;

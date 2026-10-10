@@ -118,7 +118,6 @@ public class BattleAxe : MonoBehaviour
 
     [Header("Thrown Axe Runtime Setup")]
     public LayerMask thrownStickMask = ~0;
-    public bool stickToTriggers = false;
     public float thrownScaleMultiplier = 1f;
     public float thrownGravityScale = 0.85f;
     public float headSweepRadius = 0.08f;
@@ -816,7 +815,6 @@ public class BattleAxe : MonoBehaviour
         }
 
         axe.stickMask = thrownStickMask;
-        axe.stickToTriggers = stickToTriggers;
         axe.gravityScale = thrownGravityScale;
         axe.sweepRadius = headSweepRadius;
         axe.stickDepth = stickDepth;

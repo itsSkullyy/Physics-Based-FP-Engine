@@ -17,6 +17,10 @@ public class Checkpoint : MonoBehaviour
     /// The last one the player walked through in this play session.
     public static Checkpoint Last { get; private set; }
 
+    /// Forgets the last checkpoint, so the next one walked through counts again. LevelReset
+    /// does this when the player starts a level over.
+    public static void ClearLast() => Last = null;
+
     public Vector3 SpawnPosition => (spawnPoint != null ? spawnPoint : transform).position;
     public Quaternion SpawnRotation
     {
