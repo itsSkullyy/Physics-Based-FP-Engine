@@ -29013,7 +29013,6 @@ MonoBehaviour:
   thrownStickMask:
     serializedVersion: 2
     m_Bits: 4294967295
-  stickToTriggers: 0
   thrownScaleMultiplier: 1
   thrownGravityScale: 1
   headSweepRadius: 0.08
@@ -38113,7 +38112,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   playerTag: Player
-  exitPortal: {fileID: 1686226700}
+  exitPortal: {fileID: 0}
   exitPortalDelay: 0.9
   bobHeight: 0.35
   bobSpeed: 1.6
@@ -50528,6 +50527,8 @@ MonoBehaviour:
   lightRange: 7
   lightIntensity: 3
   ambientInterval: 0.3
+  useRealAxeModel: 1
+  realAxeLength: 1.1
   tooltipSeconds: 10
   levelHint: Smash the glass to get out.
   pickupShake: 0.4
@@ -60097,6 +60098,8 @@ MonoBehaviour:
   lightRange: 7
   lightIntensity: 3
   ambientInterval: 0.3
+  useRealAxeModel: 1
+  realAxeLength: 1.1
   tooltipSeconds: 10
   levelHint: Zip from ledge to ledge to climb out.
   pickupShake: 0.4
@@ -94267,17 +94270,6 @@ PrefabInstance:
     m_AddedGameObjects: []
     m_AddedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: 7cf57c9c2994460c8ce670a2720ce7aa, type: 3}
---- !u!114 &1686226700 stripped
-MonoBehaviour:
-  m_CorrespondingSourceObject: {fileID: 100003, guid: 7cf57c9c2994460c8ce670a2720ce7aa, type: 3}
-  m_PrefabInstance: {fileID: 1686226699}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 0}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 09e94ed569534f2d968af14bf1f7fad1, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
 --- !u!4 &1686226701 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 100001, guid: 7cf57c9c2994460c8ce670a2720ce7aa, type: 3}
@@ -103083,6 +103075,38 @@ PrefabInstance:
     - target: {fileID: 200001, guid: 7cf57c9c2994460c8ce670a2720ce7aa, type: 3}
       propertyPath: m_LocalScale.y
       value: 6
+      objectReference: {fileID: 0}
+    - target: {fileID: 400001, guid: 7cf57c9c2994460c8ce670a2720ce7aa, type: 3}
+      propertyPath: m_LocalScale.x
+      value: 4.74
+      objectReference: {fileID: 0}
+    - target: {fileID: 400001, guid: 7cf57c9c2994460c8ce670a2720ce7aa, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 3.06
+      objectReference: {fileID: 0}
+    - target: {fileID: 500001, guid: 7cf57c9c2994460c8ce670a2720ce7aa, type: 3}
+      propertyPath: m_LocalScale.x
+      value: 4.74
+      objectReference: {fileID: 0}
+    - target: {fileID: 500001, guid: 7cf57c9c2994460c8ce670a2720ce7aa, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: -3.06
+      objectReference: {fileID: 0}
+    - target: {fileID: 600001, guid: 7cf57c9c2994460c8ce670a2720ce7aa, type: 3}
+      propertyPath: m_LocalScale.y
+      value: 6
+      objectReference: {fileID: 0}
+    - target: {fileID: 600001, guid: 7cf57c9c2994460c8ce670a2720ce7aa, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: -2.31
+      objectReference: {fileID: 0}
+    - target: {fileID: 700001, guid: 7cf57c9c2994460c8ce670a2720ce7aa, type: 3}
+      propertyPath: m_LocalScale.y
+      value: 6
+      objectReference: {fileID: 0}
+    - target: {fileID: 700001, guid: 7cf57c9c2994460c8ce670a2720ce7aa, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 2.31
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -118735,7 +118759,7 @@ PrefabInstance:
       objectReference: {fileID: 1247526444}
     - target: {fileID: 6712287553262668428, guid: f312d8312c81e074a8c144a8f4bfd487, type: 3}
       propertyPath: m_VersionIndex
-      value: 14
+      value: 17
       objectReference: {fileID: 0}
     - target: {fileID: 8550869846378311025, guid: f312d8312c81e074a8c144a8f4bfd487, type: 3}
       propertyPath: m_Mesh
