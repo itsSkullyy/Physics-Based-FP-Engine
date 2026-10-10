@@ -272,6 +272,12 @@ Seamless portals between different scenes. You can run, slide or dart through at
 
 Floating pickups that hand out the axe or the grapple. In the scene the game starts in, each one takes its ability off the player at load; touching it gives it back, switches to it and slides in a controls card on the left built from the player's current key bindings, plus an optional line about the room (Level Hint). `WeaponSlots` has `hasAxe` / `hasGrapple`: a slot you don't own is skipped when switching and hidden on the HUD, and without the grapple the whole `Grappling` component is off (no zip, swing or reticle). Arriving through a portal keeps what you had, and pickups you already own don't show. With no model under it a pickup builds a stand-in from primitives; add the real model as a child to replace it.
 
+### Tutorial blockout
+
+`Assets/Editor/TutorialBlockoutBuilder.cs`, `Scenes/Tutorial Blockout.unity`
+
+A grey-box of the full 16-room tutorial from the level design doc, in its own scene (a copy of Mirror Grapple Scene, so the player, cameras, portals and lighting come with it). Run **Tools > Tutorial Blockout > Build Blockout Scene** to build or rebuild it. Every piece is a ProBuilder cube set up like the existing obstacles (Ground layer, non-convex mesh collider): grey floors and walls, blue obstacles, red wall-run walls on the WallRun layer, yellow lintels over each exit, and the project's Grapple Point, BreakableWall and Portal prefabs. It also places the axe and grapple pickups, a tip zone for every new move, a checkpoint at every room and a fall reset in every pit, a start gate and finish on the Gauntlet, and moves Portal B onto the Gauntlet's island. Ceilings are collider-only so daylight still gets in. All sizes live in the builder as plain numbers, so tune them there and rebuild; rebuilding replaces everything under the `Tutorial Blockout` object.
+
 ### Tip zones, checkpoints and fall resets
 
 `TutorialTip.cs`, `Checkpoint.cs`, `FallReset.cs`
@@ -300,8 +306,8 @@ Assets/
     AI/Stillwalker/   Stillwalker, ML agent, training config
     Audio/            Synth and the sound recipes
   Enemies/            drop-in folders for Mixamo models and animations (see its README)
-  Scenes/             Grapple Scene (main course), Mirror Grapple Scene (tutorial), Stillwalker Training
-  Editor/             room builder
+  Scenes/             Grapple Scene (main course), Mirror Grapple Scene (tutorial), Tutorial Blockout, Stillwalker Training
+  Editor/             room builder, tutorial blockout builder
   Shaders/, Materials/, Prefabs/, Physics/, Input/
 ```
 
