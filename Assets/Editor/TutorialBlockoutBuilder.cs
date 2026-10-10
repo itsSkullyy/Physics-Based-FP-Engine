@@ -19,8 +19,10 @@ using UnityEngine.SceneManagement;
 //
 // USE: Tools > Tutorial Blockout > Build Blockout Scene. It builds into the Tutorial
 // Blockout scene (a copy of Mirror Grapple Scene), replacing everything under the
-// "Tutorial Blockout" object, and also adds the arrival portal to Grapple Scene that the
-// tutorial's exit portal leads to.
+// "Tutorial Blockout" object. It also wires Grapple Scene to it (the arrival portal the
+// tutorial's exit leads to, and the level's exit pointed back here instead of at Mirror
+// Grapple Scene) and puts the tutorial first in Build Settings with Mirror taken out.
+// Tools > Tutorial Blockout > Link Portals And Build Order does just that wiring.
 //
 // Each room is laid out in its own frame: you come in through the -x wall at x = 0, z = 0,
 // standing on y = 0, and x runs forward. Rooms are chained exit to entry by 6 m corridors,
@@ -77,6 +79,29 @@ public static class TutorialBlockoutBuilder
         EditorUtility.DisplayDialog("Tutorial Blockout", Build(), "OK");
     }
 
+    // Just the wiring between the tutorial and the level, without rebuilding the rooms.
+    [MenuItem("Tools/Tutorial Blockout/Link Portals And Build Order")]
+    static void LinkFromMenu()
+    {
+        if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo())
+        {
+            return;
+        }
+        string blockout = FindScene(BlockoutSceneName);
+        if (blockout == null)
+        {
+            EditorUtility.DisplayDialog("Tutorial Blockout", $"There's no '{BlockoutSceneName}' scene yet. Build it first.", "OK");
+            return;
+        }
+        if (!LoadAssets(out string problem))
+        {
+            EditorUtility.DisplayDialog("Tutorial Blockout", problem, "OK");
+            return;
+        }
+        string note = LinkLevel() + "\n\n" + SetBuildOrder(blockout);
+        EditorUtility.DisplayDialog("Tutorial Blockout", note, "OK");
+    }
+
     /// For -batchmode -executeMethod TutorialBlockoutBuilder.BuildFromCommandLine
     public static void BuildFromCommandLine()
     {
@@ -100,8 +125,6 @@ public static class TutorialBlockoutBuilder
                 return "Couldn't copy " + source + " to " + BlockoutScene + ".";
             }
         }
-        AddToBuildSettings(BlockoutScene);
-
         if (!LoadAssets(out string problem))
         {
             return problem;
@@ -137,7 +160,7 @@ public static class TutorialBlockoutBuilder
         EditorSceneManager.MarkSceneDirty(scene);
         EditorSceneManager.SaveScene(scene);
 
-        string levelNote = AddArrivalToLevel();
+        string levelNote = LinkLevel() + "\n\n" + SetBuildOrder(BlockoutScene);
 
         return $"Built the tutorial blockout in {BlockoutScene}: {built} pieces in 16 rooms.\n\n{levelNote}\n\n" +
                "Press Play in Tutorial Blockout to try it. Rebuilding replaces everything " +
@@ -158,18 +181,35 @@ public static class TutorialBlockoutBuilder
         return null;
     }
 
-    static void AddToBuildSettings(string path)
+    // The tutorial is where the game starts, so it goes first, then the level. The old
+    // tutorial it replaces comes out: left in, anything still pointing at it would stream
+    // it in on top of the new one, since every loaded scene shares the same world.
+    static string SetBuildOrder(string blockoutPath)
     {
-        List<EditorBuildSettingsScene> scenes = new List<EditorBuildSettingsScene>(EditorBuildSettings.scenes);
-        foreach (EditorBuildSettingsScene s in scenes)
+        string levelPath = FindScene(LevelSceneName);
+        List<EditorBuildSettingsScene> scenes = new List<EditorBuildSettingsScene>();
+        scenes.Add(new EditorBuildSettingsScene(blockoutPath, true));
+        if (levelPath != null)
         {
-            if (s.path == path)
-            {
-                return;
-            }
+            scenes.Add(new EditorBuildSettingsScene(levelPath, true));
         }
-        scenes.Add(new EditorBuildSettingsScene(path, true));
+        bool removedOld = false;
+        foreach (EditorBuildSettingsScene s in EditorBuildSettings.scenes)
+        {
+            if (s.path == blockoutPath || s.path == levelPath)
+            {
+                continue;
+            }
+            if (System.IO.Path.GetFileNameWithoutExtension(s.path) == SourceSceneName)
+            {
+                removedOld = true;
+                continue;
+            }
+            scenes.Add(s);
+        }
         EditorBuildSettings.scenes = scenes.ToArray();
+        return $"Build Settings: {BlockoutSceneName} first, then {LevelSceneName}" +
+               (removedOld ? $", and {SourceSceneName} taken out (the file is still there)." : ".");
     }
 
     static bool LoadAssets(out string problem)
@@ -288,42 +328,66 @@ public static class TutorialBlockoutBuilder
         }
     }
 
-    // The tutorial's exit portal leads to this one in Grapple Scene: closed until the
-    // tutorial ends, then it opens just ahead of the level's start.
-    static string AddArrivalToLevel()
+    // The two ways between the tutorial and Grapple Scene, each pair pointing at each other:
+    //   tutorial TutorialExit (end of the tutorial) <-> level TutorialArrival (level start)
+    //   level ExitPortal (end of the level)         <-> tutorial ArrivalPortal (tutorial start)
+    // The level's exit used to lead to the old tutorial; it's moved over to this one.
+    static string LinkLevel()
     {
         string levelPath = FindScene(LevelSceneName);
         if (levelPath == null)
         {
-            return $"Couldn't find '{LevelSceneName}', so the portal the tutorial exit leads to wasn't added.";
+            return $"Couldn't find '{LevelSceneName}', so the portals between it and the tutorial weren't linked.";
         }
         Scene level = EditorSceneManager.OpenScene(levelPath, OpenSceneMode.Additive);
+        List<string> notes = new List<string>();
+
+        bool hasArrival = false;
         foreach (Portal p in Object.FindObjectsByType<Portal>(FindObjectsInactive.Include, FindObjectsSortMode.None))
         {
-            if (p.gameObject.scene == level && p.portalId == "TutorialArrival")
+            if (p.gameObject.scene != level)
             {
-                EditorSceneManager.CloseScene(level, true);
-                return "Grapple Scene already has the TutorialArrival portal.";
+                continue;
+            }
+            if (p.portalId == "TutorialArrival")
+            {
+                hasArrival = true;
+            }
+            if (p.linkedSceneName == SourceSceneName && p.gameObject.activeInHierarchy)
+            {
+                SerializedObject link = new SerializedObject(p);
+                link.FindProperty("linkedSceneName").stringValue = BlockoutSceneName;
+                link.ApplyModifiedProperties();
+                notes.Add($"{LevelSceneName}'s '{p.name}' now leads to {BlockoutSceneName}/{p.linkedPortalId} instead of {SourceSceneName}.");
             }
         }
 
-        GameObject go = (GameObject)PrefabUtility.InstantiatePrefab(portalPrefab, level);
-        go.name = "Tutorial Arrival Portal";
-        go.transform.position = new Vector3(0f, 3f, 5f);
-        Portal portal = go.GetComponent<Portal>();
-        SerializedObject so = new SerializedObject(portal);
-        so.FindProperty("portalId").stringValue = "TutorialArrival";
-        so.FindProperty("linkedSceneName").stringValue = "Tutorial Blockout";
-        so.FindProperty("linkedPortalId").stringValue = "TutorialExit";
-        so.FindProperty("portalSize").vector2Value = new Vector2(4.5f, 6f);
-        so.FindProperty("startClosed").boolValue = true;
-        so.FindProperty("openPlacement").enumValueIndex = (int)Portal.OpenPlacement.AtSceneStart;
-        so.ApplyModifiedProperties();
+        if (!hasArrival)
+        {
+            GameObject go = (GameObject)PrefabUtility.InstantiatePrefab(portalPrefab, level);
+            go.name = "Tutorial Arrival Portal";
+            go.transform.position = new Vector3(0f, 3f, 5f);
+            Portal portal = go.GetComponent<Portal>();
+            SerializedObject so = new SerializedObject(portal);
+            so.FindProperty("portalId").stringValue = "TutorialArrival";
+            so.FindProperty("linkedSceneName").stringValue = BlockoutSceneName;
+            so.FindProperty("linkedPortalId").stringValue = "TutorialExit";
+            so.FindProperty("portalSize").vector2Value = new Vector2(4.5f, 6f);
+            so.FindProperty("startClosed").boolValue = true;
+            so.FindProperty("openPlacement").enumValueIndex = (int)Portal.OpenPlacement.AtSceneStart;
+            so.ApplyModifiedProperties();
+            notes.Add($"Added the TutorialArrival portal to {LevelSceneName} (it opens ahead of the level's start).");
+        }
 
+        if (notes.Count == 0)
+        {
+            EditorSceneManager.CloseScene(level, true);
+            return $"{LevelSceneName}'s portals already lead to the tutorial.";
+        }
         EditorSceneManager.MarkSceneDirty(level);
         EditorSceneManager.SaveScene(level);
         EditorSceneManager.CloseScene(level, true);
-        return "Added the TutorialArrival portal to Grapple Scene (it opens ahead of the level's start).";
+        return string.Join("\n", notes);
     }
 
     // ================================================================ Act 1: feet only

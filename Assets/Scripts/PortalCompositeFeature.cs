@@ -53,9 +53,14 @@ public class PortalCompositeFeature : ScriptableRendererFeature
             CommandBuffer cmd = CommandBufferPool.Get("Portal Composite");
             material.SetInt(StencilRefId, StencilRef);
 
+            // in game, only portals in the scene the player is in - another loaded scene's
+            // portals share the same world space but aren't really there
+            string space = camera.cameraType == CameraType.Game ? PortalManager.PlayerSpace : null;
+
             foreach (Portal portal in Portal.ActivePortals)
             {
                 if (!portal.IsRenderReady) continue;
+                if (!string.IsNullOrEmpty(space) && portal.gameObject.scene.name != space) continue;
 
                 Mesh mesh = portal.SurfaceMesh;
                 if (mesh == null) continue;

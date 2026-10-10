@@ -174,7 +174,13 @@ public class Portal : MonoBehaviour
     /// the far side. Used by things that move themselves rather than relying on trigger
     /// callbacks - a thrown axe flies with its colliders disabled, and an aim ray has no
     /// collider at all.
-    public static Portal FindSegmentCrossing(Vector3 from, Vector3 to, out Matrix4x4 matrix)
+    public static Portal FindSegmentCrossing(Vector3 from, Vector3 to, out Matrix4x4 matrix) =>
+        FindSegmentCrossing(from, to, PortalManager.PlayerSpace, out matrix);
+
+    /// Same, but only portals belonging to the scene named `space`. Every streamed-in
+    /// scene shares the one world, so a portal in another loaded scene can sit right where
+    /// this thing is flying without really being there. Empty space means any portal.
+    public static Portal FindSegmentCrossing(Vector3 from, Vector3 to, string space, out Matrix4x4 matrix)
     {
         matrix = Matrix4x4.identity;
 
@@ -185,6 +191,7 @@ public class Portal : MonoBehaviour
         {
             Portal portal = ActivePortals[i];
             if (portal == null) continue;
+            if (!string.IsNullOrEmpty(space) && portal.gameObject.scene.name != space) continue;
             if (!portal.TryGetSegmentCrossing(from, to, out float t)) continue;
             if (t >= nearestT) continue;
 
@@ -611,7 +618,11 @@ public class Portal : MonoBehaviour
     void OnAnyPlayerTravel(Portal entered, Portal exited)
     {
         if (!startClosed || !closeBehindPlayer) return;
-        if (entered != this && exited != this) return;
+        // a third portal pointing one-way at either end of the pair goes too, or it's left
+        // hanging open somewhere with nobody to close it
+        bool involved = entered == this || exited == this
+            || (linkedPortal != null && (linkedPortal == entered || linkedPortal == exited));
+        if (!involved) return;
         if (openState != OpenState.Open && openState != OpenState.Opening) return;
 
         // a beat after, so the player is clear of the opening before it shuts
@@ -1040,6 +1051,13 @@ public class Portal : MonoBehaviour
 
         linkedPortal = partner;
         EnsureRenderTexture();
+
+        if (partner.linkedSceneName != gameObject.scene.name || partner.linkedPortalId != portalId)
+        {
+            Debug.LogWarning($"[Portal] '{gameObject.scene.name}/{portalId}' leads to '{linkedSceneName}/{linkedPortalId}', " +
+                $"but that one leads to '{partner.linkedSceneName}/{partner.linkedPortalId}' instead. The two won't open, close " +
+                "or come back to each other together - point them at each other.", this);
+        }
         if (portalCamera != null) portalCamera.enabled = IsVisible;
 
         // keep a closed pair in step: whichever side was opened first opens the other
@@ -1135,14 +1153,28 @@ public class Portal : MonoBehaviour
             env.Apply();
             envSwapped = true;
         }
+
+        // the view through is lit by the far scene's sun, not the one the player is under
+        PortalManager.Get().UseSunOf(linkedSceneName);
+        sunSwapped = true;
     }
 
     void OnEndCameraRendering(ScriptableRenderContext context, Camera cam)
     {
-        if (cam != portalCamera || !envSwapped) return;
+        if (cam != portalCamera) return;
+
+        if (sunSwapped)
+        {
+            if (PortalManager.Instance != null) PortalManager.Instance.UseSunOf(PortalManager.PlayerSpace);
+            sunSwapped = false;
+        }
+
+        if (!envSwapped) return;
         pendingEnvSnapshot.Restore();
         envSwapped = false;
     }
+
+    bool sunSwapped;
 
     void ApplyObliqueClip(Camera cam)
     {
@@ -1231,6 +1263,9 @@ public class Portal : MonoBehaviour
     void OnTriggerEnter(Collider other)
     {
         if (trackedBody != null) return;
+        // a portal from a scene the player isn't in overlaps them without being there
+        string space = PortalManager.PlayerSpace;
+        if (!string.IsNullOrEmpty(space) && gameObject.scene.name != space) return;
 
         FirstPersonCharacterController controller = other.attachedRigidbody != null
             ? other.attachedRigidbody.GetComponent<FirstPersonCharacterController>()

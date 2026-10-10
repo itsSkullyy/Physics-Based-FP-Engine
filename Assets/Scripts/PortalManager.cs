@@ -161,9 +161,17 @@ public class PortalManager : MonoBehaviour
     /// a portal, so this is tracked separately for restarts.
     public string PlayerSceneName { get; private set; }
 
+    /// The scene the player is in, or null with no manager about. Portals and anything
+    /// that flies through them only count portals from this scene (or wherever the thing
+    /// itself has got to): every loaded scene shares the one world, so another scene's
+    /// portal can overlap the player without really being there.
+    public static string PlayerSpace => Instance != null ? Instance.PlayerSceneName : null;
+
     public void NotePlayerEntered(Scene scene)
     {
-        if (scene.IsValid()) PlayerSceneName = scene.name;
+        if (!scene.IsValid()) return;
+        PlayerSceneName = scene.name;
+        UseSunOf(PlayerSceneName);
     }
 
     /// Restarts whichever scene the player is in right now (the level, or the tutorial).
@@ -203,6 +211,8 @@ public class PortalManager : MonoBehaviour
 
         ResolvePersistentObjects();
         DisableDuplicatePlayerObjects(scene);
+        CollectSuns(scene);
+        UseSunOf(PlayerSceneName);
         StartCoroutine(EnsureNavMesh(scene));
     }
 
@@ -214,6 +224,8 @@ public class PortalManager : MonoBehaviour
         // the scene this manager woke up in finishing its own load, nothing is stale
         if (scene == startScene)
         {
+            CollectSuns(scene);
+            UseSunOf(PlayerSceneName);
             StartCoroutine(EnsureNavMesh(scene));
             return;
         }
@@ -239,8 +251,11 @@ public class PortalManager : MonoBehaviour
 
         StopAllCoroutines();
         sceneRefs.Clear();
+        suns.Clear();
         ResolvePersistentObjects();
         PlayerSceneName = scene.name;
+        CollectSuns(scene);
+        UseSunOf(PlayerSceneName);
 
         // The new scene's portals asked for their linked scenes before this ran, against the
         // old bookkeeping, so ask again.
@@ -285,6 +300,54 @@ public class PortalManager : MonoBehaviour
                 if (!cam.CompareTag("MainCamera")) continue;
                 Debug.Log($"[PortalManager] Disabling duplicate main camera '{cam.name}' found in additively loaded scene '{scene.name}'.", cam);
                 cam.gameObject.SetActive(false);
+            }
+        }
+    }
+
+    // ---------------------------------------------------------------- sunlight
+
+    readonly Dictionary<string, List<Light>> suns = new Dictionary<string, List<Light>>();
+
+    // Every scene has its own directional light, and streamed-in scenes share the one
+    // world, so with the tutorial and the level both loaded each one is lit by both suns:
+    // twice as bright, and the second sun fills in the first one's shadows. Only the sun
+    // of the scene the player is in stays on. Portal cameras switch to the far scene's
+    // sun for their own render (Portal.OnBeginCameraRendering).
+    void CollectSuns(Scene scene)
+    {
+        List<Light> list = new List<Light>();
+        foreach (GameObject root in scene.GetRootGameObjects())
+        {
+            if (root == persistentPlayer || root == persistentCamera || root == persistentVcam) continue;
+            foreach (Light light in root.GetComponentsInChildren<Light>())
+            {
+                if (light.type == LightType.Directional && light.enabled) list.Add(light);
+            }
+        }
+        suns[scene.name] = list;
+    }
+
+    /// Turns on the named scene's sun and every other loaded scene's off. A scene this
+    /// manager hasn't seen load yet is left alone.
+    public void UseSunOf(string sceneName)
+    {
+        if (string.IsNullOrEmpty(sceneName) || !suns.TryGetValue(sceneName, out List<Light> wanted)) return;
+
+        foreach (KeyValuePair<string, List<Light>> entry in suns)
+        {
+            bool on = entry.Key == sceneName;
+            foreach (Light light in entry.Value)
+            {
+                if (light != null && light.enabled != on) light.enabled = on;
+            }
+        }
+
+        foreach (Light light in wanted)
+        {
+            if (light != null)
+            {
+                RenderSettings.sun = light;
+                break;
             }
         }
     }
@@ -472,6 +535,7 @@ public class PortalManager : MonoBehaviour
         if (scene.isLoaded)
         {
             UnregisterScenePortals(sceneName);
+            suns.Remove(sceneName);
             if (builtNavMeshes.TryGetValue(sceneName, out List<NavMeshDataInstance> built))
             {
                 foreach (NavMeshDataInstance instance in built) instance.Remove();

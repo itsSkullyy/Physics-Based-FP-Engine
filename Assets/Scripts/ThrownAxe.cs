@@ -96,6 +96,11 @@ public class ThrownAxe : MonoBehaviour
 
     Rigidbody rb;
     Matrix4x4 portalTravel = Matrix4x4.identity;
+    // Scene whose portals the axe can fly through: the player's when thrown, then whichever
+    // scene each portal it goes through comes out in. Every loaded scene shares one world,
+    // so without this a portal from another scene that happens to overlap the throw (the
+    // level's portals while you're in the tutorial) would carry the axe off into it.
+    string space;
     Collider[] ownColliders;
     Collider[] ignored;
     TrailRenderer trail;
@@ -206,6 +211,7 @@ public class ThrownAxe : MonoBehaviour
         ignored = ignoreColliders;
         age = 0f;
         portalTravel = Matrix4x4.identity;
+        space = PortalManager.PlayerSpace;
 
         ownColliders = GetComponentsInChildren<Collider>(true);
 
@@ -320,15 +326,15 @@ public class ThrownAxe : MonoBehaviour
             // The head's path is checked first because the head leads the pivot and is
             // what the stick sweeps below actually use: waiting for the pivot to reach the
             // plane lets the head cross it and bury itself on the far side first.
-            Portal crossed = Portal.FindSegmentCrossing(lastHeadPos, nextHead, out Matrix4x4 portalMatrix);
+            Portal crossed = Portal.FindSegmentCrossing(lastHeadPos, nextHead, space, out Matrix4x4 portalMatrix);
             if (crossed == null)
             {
-                crossed = Portal.FindSegmentCrossing(pos, nextPos, out portalMatrix);
+                crossed = Portal.FindSegmentCrossing(pos, nextPos, space, out portalMatrix);
             }
 
             if (crossed != null)
             {
-                CarryThroughPortal(portalMatrix, nextPos, nextRot);
+                CarryThroughPortal(crossed, portalMatrix, nextPos, nextRot);
                 return;
             }
 
@@ -358,8 +364,13 @@ public class ThrownAxe : MonoBehaviour
     // going, the axis it spins about, and the head position the next sweep chains from -
     // a stale head position would sweep a line across the whole world and stick the axe
     // into the first thing that line clipped.
-    void CarryThroughPortal(Matrix4x4 portalMatrix, Vector3 crossingPos, Quaternion currentRot)
+    void CarryThroughPortal(Portal crossed, Matrix4x4 portalMatrix, Vector3 crossingPos, Quaternion currentRot)
     {
+        if (crossed.LinkedPortal != null)
+        {
+            space = crossed.LinkedPortal.gameObject.scene.name;
+        }
+
         Vector3 exitPos = portalMatrix.MultiplyPoint3x4(crossingPos);
         Quaternion exitRot = portalMatrix.rotation * currentRot;
 
@@ -617,9 +628,10 @@ public class ThrownAxe : MonoBehaviour
         // Flying home through the opening it came out of. Handled before the obstacle
         // sweep for the same reason as on the way out - otherwise it collides with the
         // room behind the portal instead of passing through.
-        if (Portal.FindSegmentCrossing(pos, pos + remaining, out Matrix4x4 returnMatrix) != null)
+        Portal back = Portal.FindSegmentCrossing(pos, pos + remaining, space, out Matrix4x4 returnMatrix);
+        if (back != null)
         {
-            CarryThroughPortal(returnMatrix, pos + remaining, rb.rotation);
+            CarryThroughPortal(back, returnMatrix, pos + remaining, rb.rotation);
             return;
         }
 
