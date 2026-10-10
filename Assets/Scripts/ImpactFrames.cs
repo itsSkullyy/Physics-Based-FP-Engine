@@ -144,9 +144,9 @@ public class ImpactFrames : MonoBehaviour
         Shader s = Shader.Find("Hidden/ImpactRedWorld");
         if (s == null)
         {
-            Debug.LogWarning("ImpactFrames: 'Hidden/ImpactRedWorld' shader not found. Add " +
-                             "ImpactRedWorld.shader to the project (and to Always Included " +
-                             "Shaders). Falling back to the flat red flash only.", this);
+            Debug.LogWarning("ImpactFrames: 'Hidden/ImpactRedWorld' shader not found. It needs " +
+                             "to be in a Resources folder to make it into a build. Falling back " +
+                             "to the flat red flash only.", this);
             recolourWorld = false;
             return;
         }

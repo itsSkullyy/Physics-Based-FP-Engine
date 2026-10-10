@@ -13,7 +13,9 @@ using UnityEngine.Rendering.Universal;
 // SETUP (one-time, per Renderer asset used by a build target - eg. PC_Renderer,
 // Mobile_Renderer): select the Universal Renderer Data asset in the Project window,
 // then in its Inspector click "Add Renderer Feature" and choose "Portal Composite
-// Feature". Nothing else to configure - it finds Custom/PortalComposite itself.
+// Feature". Nothing else to configure - it finds Custom/PortalComposite itself. That
+// shader has to stay in Assets/Shaders/Resources, or builds leave it out and no portal
+// shows anything.
 public class PortalCompositeFeature : ScriptableRendererFeature
 {
     class CompositePass : ScriptableRenderPass
@@ -87,7 +89,7 @@ public class PortalCompositeFeature : ScriptableRendererFeature
         Shader shader = Shader.Find("Custom/PortalComposite");
         if (shader == null)
         {
-            Debug.LogWarning("[PortalCompositeFeature] Could not find shader 'Custom/PortalComposite'. Portals will not render.");
+            Debug.LogWarning("[PortalCompositeFeature] Could not find shader 'Custom/PortalComposite'. Portals will not render. It needs to be in a Resources folder to make it into a build.");
             return;
         }
 

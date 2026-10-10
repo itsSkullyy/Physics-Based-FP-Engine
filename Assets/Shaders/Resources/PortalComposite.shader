@@ -12,6 +12,9 @@
 //
 // Bit 32 (the 6th stencil bit) is used rather than bit 1, to stay clear of any low bits
 // URP's own passes might reserve internally.
+//
+// Lives in a Resources folder on purpose. PortalCompositeFeature loads it by name and no
+// material uses it, so anywhere else a build strips it and portals show nothing.
 Shader "Custom/PortalComposite"
 {
     Properties

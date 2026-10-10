@@ -8,8 +8,9 @@ using UnityEngine.SceneManagement;
 // with the player's own key bindings. Arriving through a portal keeps whatever you
 // already had, so a pickup you already own just isn't there.
 //
-// With no renderers under it, it builds a simple stand-in model at runtime. Drop a real
-// model in as a child to replace it.
+// With no renderers under it, it makes its own model at runtime: the axe borrows the real
+// axe model off the player's thrown axe, the grapple gets a simple stand-in. Drop a model
+// in as a child to use that instead.
 [RequireComponent(typeof(SphereCollider))]
 public class AbilityPickup : MonoBehaviour
 {
@@ -32,6 +33,10 @@ public class AbilityPickup : MonoBehaviour
     public float lightRange = 7f;
     public float lightIntensity = 3f;
     public float ambientInterval = 0.3f;
+    [Tooltip("Axe only: show the game's real axe model (the one you throw) instead of the blocky stand-in.")]
+    public bool useRealAxeModel = true;
+    [Tooltip("How long the real axe model is, end to end, in metres.")]
+    public float realAxeLength = 1.1f;
 
     [Header("Tooltip")]
     public float tooltipSeconds = 10f;
@@ -238,9 +243,17 @@ public class AbilityPickup : MonoBehaviour
         {
             model = transform.childCount > 0 ? transform.GetChild(0) : null;
         }
+        else if (ability == Ability.Axe)
+        {
+            model = useRealAxeModel ? CopyRealAxe() : null;
+            if (model == null)
+            {
+                model = BuildAxe();
+            }
+        }
         else
         {
-            model = ability == Ability.Axe ? BuildAxe() : BuildGrapple();
+            model = BuildGrapple();
         }
 
         GameObject lightGo = new GameObject("Glow");
@@ -251,6 +264,93 @@ public class AbilityPickup : MonoBehaviour
         glow.range = lightRange;
         glow.intensity = lightIntensity;
         glow.shadows = LightShadows.None;
+    }
+
+    // Copies just the meshes off the player's thrown axe prefab (or the held model if there
+    // isn't one), so nothing on it - the ThrownAxe script, rigidbody, colliders - comes along.
+    // Stood upright with the head on top and sized to realAxeLength, whatever the model's own
+    // scale and facing. Null if there's no axe to copy.
+    Transform CopyRealAxe()
+    {
+        FirstPersonCharacterController player = PortalManager.FindPlayer();
+        BattleAxe held = player != null ? player.transform.root.GetComponentInChildren<BattleAxe>(true) : null;
+        if (held == null)
+        {
+            return null;
+        }
+        Transform source = held.thrownAxePrefab != null ? held.thrownAxePrefab.transform : held.axeVisual;
+        if (source == null)
+        {
+            return null;
+        }
+
+        Transform root = NewPivot("Axe Model");
+        root.localScale = Vector3.one;
+        Transform inner = new GameObject("Mesh").transform;
+        inner.SetParent(root, false);
+
+        Matrix4x4 toSource = source.worldToLocalMatrix;
+        Bounds bounds = default;
+        bool any = false;
+
+        foreach (MeshFilter filter in source.GetComponentsInChildren<MeshFilter>(true))
+        {
+            MeshRenderer renderer = filter.GetComponent<MeshRenderer>();
+            if (filter.sharedMesh == null || renderer == null)
+            {
+                continue;
+            }
+
+            Matrix4x4 m = toSource * filter.transform.localToWorldMatrix;
+            GameObject part = new GameObject(filter.name);
+            part.transform.SetParent(inner, false);
+            part.transform.localPosition = m.GetColumn(3);
+            part.transform.localRotation = m.rotation;
+            part.transform.localScale = m.lossyScale;
+            part.AddComponent<MeshFilter>().sharedMesh = filter.sharedMesh;
+            part.AddComponent<MeshRenderer>().sharedMaterials = renderer.sharedMaterials;
+
+            Bounds b = filter.sharedMesh.bounds;
+            for (int i = 0; i < 8; i++)
+            {
+                Vector3 corner = m.MultiplyPoint3x4(new Vector3(
+                    (i & 1) == 0 ? b.min.x : b.max.x,
+                    (i & 2) == 0 ? b.min.y : b.max.y,
+                    (i & 4) == 0 ? b.min.z : b.max.z));
+                if (!any) { bounds = new Bounds(corner, Vector3.zero); any = true; }
+                else
+                {
+                    bounds.Encapsulate(corner);
+                }
+            }
+        }
+
+        if (!any)
+        {
+            Destroy(root.gameObject);
+            return null;
+        }
+
+        // The handle runs along the model's longest side, and the head is the end furthest
+        // from the pivot (same guess ThrownAxe makes). Point that end up.
+        Vector3 size = bounds.size;
+        Vector3 axis = size.x >= size.y && size.x >= size.z ? Vector3.right
+            : size.y >= size.z ? Vector3.up
+            : Vector3.forward;
+        float far = Vector3.Dot(bounds.max, axis);
+        float near = Vector3.Dot(bounds.min, axis);
+        Vector3 headDir = Mathf.Abs(far) >= Mathf.Abs(near) ? axis : -axis;
+
+        float longest = Mathf.Max(size.x, size.y, size.z);
+        float scale = longest > 0.0001f ? realAxeLength / longest : 1f;
+
+        Quaternion upright = Quaternion.FromToRotation(headDir, Vector3.up);
+        inner.localRotation = upright;
+        inner.localScale = Vector3.one * scale;
+        inner.localPosition = -(upright * bounds.center) * scale;
+
+        root.localRotation = Quaternion.Euler(0f, 0f, 20f);
+        return root;
     }
 
     Transform BuildAxe()

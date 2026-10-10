@@ -1,8 +1,6 @@
-// Drop this file anywhere in your Assets folder. Unity compiles it automatically and
-// ImpactFrames finds it by name at runtime - no wiring, no material to assign.
-//
-// If you strip shaders on build, add "Hidden/ImpactRedWorld" to
-// Project Settings -> Graphics -> Always Included Shaders so it survives into the player.
+// ImpactFrames finds this by name at runtime - no wiring, no material to assign.
+// It has to stay in a Resources folder: nothing references it, so anywhere else the
+// build leaves it out and Shader.Find comes back empty in the player.
 //
 // This crushes the frame to a hard TWO-TONE red/black look: everything below a
 // brightness threshold goes to near-black, everything above ramps into red, with a thin
