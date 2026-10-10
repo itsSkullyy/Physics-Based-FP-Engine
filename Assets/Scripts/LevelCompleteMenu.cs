@@ -37,7 +37,10 @@ public class LevelCompleteMenu : MonoBehaviour
 
     public static LevelCompleteMenu Get()
     {
-        if (Instance != null) return Instance;
+        if (Instance != null)
+        {
+            return Instance;
+        }
 
         LevelCompleteMenu found = FindFirstObjectByType<LevelCompleteMenu>();
         if (found != null) { Instance = found; return Instance; }
@@ -55,12 +58,18 @@ public class LevelCompleteMenu : MonoBehaviour
 
     void OnDestroy()
     {
-        if (Instance == this) Instance = null;
+        if (Instance == this)
+        {
+            Instance = null;
+        }
     }
 
     public void Show(float time, char rankLetter, bool newBest)
     {
-        if (Showing) return;
+        if (Showing)
+        {
+            return;
+        }
 
         finalTime = time;
         rank = rankLetter;
@@ -69,7 +78,10 @@ public class LevelCompleteMenu : MonoBehaviour
         selected = 0;
 
         router = PlayerInputRouter.Instance;
-        if (router != null) router.inputEnabled = false;
+        if (router != null)
+        {
+            router.inputEnabled = false;
+        }
 
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
@@ -80,7 +92,10 @@ public class LevelCompleteMenu : MonoBehaviour
 
     void OnGUI()
     {
-        if (!Showing) return;
+        if (!Showing)
+        {
+            return;
+        }
 
         EnsureStyles();
 
@@ -91,40 +106,59 @@ public class LevelCompleteMenu : MonoBehaviour
         GUI.color = Color.white;
 
         GUILayout.BeginArea(new Rect(area.x + 20f, area.y + 18f, area.width - 40f, area.height - 36f));
+        float contentWidth = area.width - 40f;
+        DrawResults(contentWidth);
+        DrawButtons();
+        GUILayout.EndArea();
+    }
 
-        GUILayout.Label("LEVEL COMPLETE", titleStyle, GUILayout.Width(area.width - 40f));
+    // title, time (and New Best), rank letter in its colour
+    void DrawResults(float contentWidth)
+    {
+        GUILayout.Label("LEVEL COMPLETE", titleStyle, GUILayout.Width(contentWidth));
 
         GUILayout.Space(10f);
 
         string timeLabel = "Time  " + CourseTimer.Format(finalTime);
-        if (isNewBest) timeLabel += "   (New Best!)";
-        GUILayout.Label(timeLabel, timeStyle, GUILayout.Width(area.width - 40f));
+        if (isNewBest)
+        {
+            timeLabel += "   (New Best!)";
+        }
+        GUILayout.Label(timeLabel, timeStyle, GUILayout.Width(contentWidth));
 
         GUILayout.Space(4f);
 
         Color old = GUI.color;
         GUI.color = RankColor(rank);
-        GUILayout.Label(rank.ToString(), rankStyle, GUILayout.Width(area.width - 40f));
+        GUILayout.Label(rank.ToString(), rankStyle, GUILayout.Width(contentWidth));
         GUI.color = old;
 
         GUILayout.Space(16f);
+    }
 
+    void DrawButtons()
+    {
         GamepadMenu.Poll(ref selected, 2);
         bool confirm = GamepadMenu.Confirm();
 
         GUILayout.BeginHorizontal();
         if (GamepadMenu.Button("Try Again", 0, selected, confirm, buttonStyle, selectedButtonStyle, GUILayout.Height(34f)))
+        {
             Restart();
+        }
         if (GamepadMenu.Button("Close Game", 1, selected, confirm, buttonStyle, selectedButtonStyle, GUILayout.Height(34f)))
+        {
             QuitGame();
+        }
         GUILayout.EndHorizontal();
-
-        GUILayout.EndArea();
     }
 
     void EnsureStyles()
     {
-        if (buttonStyle != null) return;
+        if (buttonStyle != null)
+        {
+            return;
+        }
 
         whiteTex = MakeTex(Color.white);
         blackTex = MakeTex(Color.black);

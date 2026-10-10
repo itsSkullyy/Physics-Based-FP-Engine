@@ -41,36 +41,55 @@ public class PauseMenu : MonoBehaviour
         if (Instance != null && Instance != this) { Destroy(this); return; }
         Instance = this;
 
-        if (router == null) router = PlayerInputRouter.Resolve(this);
+        if (router == null)
+        {
+            router = PlayerInputRouter.Resolve(this);
+        }
     }
 
     void OnDestroy()
     {
-        if (Instance == this) Instance = null;
+        if (Instance == this)
+        {
+            Instance = null;
+        }
     }
 
     void Update()
     {
-        if (router == null) return;
-
-        bool pressed =
-            (Keyboard.current != null && toggleKey != Key.None && Keyboard.current[toggleKey].wasPressedThisFrame) ||
-            (Gamepad.current != null && Gamepad.current.startButton.wasPressedThisFrame);
-
-        if (open)
+        if (router == null)
         {
-            if (pressed) Resume();
             return;
         }
 
-        if (LevelCompleteMenu.Instance != null && LevelCompleteMenu.Instance.Showing) return;
+        bool pressed = PausePressed();
+        if (open)
+        {
+            if (pressed)
+            {
+                Resume();
+            }
+            return;
+        }
 
-        if (pressed) Open();
+        // the level complete screen has its own buttons, no pausing over it
+        bool levelDone = LevelCompleteMenu.Instance != null && LevelCompleteMenu.Instance.Showing;
+        if (pressed && !levelDone)
+        {
+            Open();
+        }
     }
+
+    bool PausePressed() =>
+        (Keyboard.current != null && toggleKey != Key.None && Keyboard.current[toggleKey].wasPressedThisFrame) ||
+        (Gamepad.current != null && Gamepad.current.startButton.wasPressedThisFrame);
 
     public void Open()
     {
-        if (open || router == null) return;
+        if (open || router == null)
+        {
+            return;
+        }
         open = true;
         selected = 0;
 
@@ -90,7 +109,10 @@ public class PauseMenu : MonoBehaviour
 
     public void Resume()
     {
-        if (!open) return;
+        if (!open)
+        {
+            return;
+        }
         open = false;
 
         Cursor.lockState = restoreLock;
@@ -120,7 +142,10 @@ public class PauseMenu : MonoBehaviour
 
     void OnGUI()
     {
-        if (!open) return;
+        if (!open)
+        {
+            return;
+        }
 
         EnsureStyles();
 
@@ -131,23 +156,31 @@ public class PauseMenu : MonoBehaviour
         GUI.color = Color.white;
 
         GUILayout.BeginArea(new Rect(area.x + 20f, area.y + 18f, area.width - 40f, area.height - 36f));
-
         GUILayout.Label("PAUSED", titleStyle);
         GUILayout.Space(20f);
+        DrawButtons();
+        GUILayout.EndArea();
+    }
 
+    void DrawButtons()
+    {
         GamepadMenu.Poll(ref selected, 3);
         bool confirm = GamepadMenu.Confirm();
 
         if (GamepadMenu.Button("Resume", 0, selected, confirm, buttonStyle, selectedButtonStyle, GUILayout.Height(36f)))
+        {
             Resume();
+        }
         GUILayout.Space(6f);
         if (GamepadMenu.Button("Restart", 1, selected, confirm, buttonStyle, selectedButtonStyle, GUILayout.Height(36f)))
+        {
             Restart();
+        }
         GUILayout.Space(6f);
         if (GamepadMenu.Button("Close Game", 2, selected, confirm, buttonStyle, selectedButtonStyle, GUILayout.Height(36f)))
+        {
             QuitGame();
-
-        GUILayout.EndArea();
+        }
     }
 
     void EnsureStyles()
@@ -168,7 +201,10 @@ public class PauseMenu : MonoBehaviour
             blackTex.hideFlags = HideFlags.HideAndDontSave;
         }
 
-        if (titleStyle != null) return;
+        if (titleStyle != null)
+        {
+            return;
+        }
 
         titleStyle = new GUIStyle(GUI.skin.label)
         {

@@ -1,0 +1,83 @@
+{
+    "hunter_skill": {
+        "lesson_num": 2
+    },
+    "hunter_chance": {
+        "lesson_num": 0
+    },
+    "hurt_start_chance": {
+        "lesson_num": 1
+    },
+    "Stillwalker": {
+        "checkpoints": [
+            {
+                "steps": 499936,
+                "file_path": "results\\stillwalker02\\Stillwalker\\Stillwalker-499936.onnx",
+                "reward": 1.1069999635219574,
+                "creation_time": 1791431708.2029357,
+                "auxillary_file_paths": [
+                    "results\\stillwalker02\\Stillwalker\\Stillwalker-499936.pt"
+                ]
+            },
+            {
+                "steps": 999984,
+                "file_path": "results\\stillwalker02\\Stillwalker\\Stillwalker-999984.onnx",
+                "reward": 0.2510001084634236,
+                "creation_time": 1791434518.7706392,
+                "auxillary_file_paths": [
+                    "results\\stillwalker02\\Stillwalker\\Stillwalker-999984.pt"
+                ]
+            },
+            {
+                "steps": 1499903,
+                "file_path": "results\\stillwalker02\\Stillwalker\\Stillwalker-1499903.onnx",
+                "reward": 0.4877001457847655,
+                "creation_time": 1791437242.4041023,
+                "auxillary_file_paths": [
+                    "results\\stillwalker02\\Stillwalker\\Stillwalker-1499903.pt"
+                ]
+            },
+            {
+                "steps": 1999913,
+                "file_path": "results\\stillwalker02\\Stillwalker\\Stillwalker-1999913.onnx",
+                "reward": 1.1467500732590754,
+                "creation_time": 1791440041.0706573,
+                "auxillary_file_paths": [
+                    "results\\stillwalker02\\Stillwalker\\Stillwalker-1999913.pt"
+                ]
+            },
+            {
+                "steps": 2499967,
+                "file_path": "results\\stillwalker02\\Stillwalker\\Stillwalker-2499967.onnx",
+                "reward": 1.5288668369253477,
+                "creation_time": 1791442874.1102898,
+                "auxillary_file_paths": [
+                    "results\\stillwalker02\\Stillwalker\\Stillwalker-2499967.pt"
+                ]
+            },
+            {
+                "steps": 2743219,
+                "file_path": "results\\stillwalker02\\Stillwalker\\Stillwalker-2743219.onnx",
+                "reward": 0.9470339930198013,
+                "creation_time": 1791444257.1974924,
+                "auxillary_file_paths": [
+                    "results\\stillwalker02\\Stillwalker\\Stillwalker-2743219.pt"
+                ]
+            }
+        ],
+        "final_checkpoint": {
+            "steps": 2743219,
+            "file_path": "results\\stillwalker02\\Stillwalker.onnx",
+            "reward": 0.9470339930198013,
+            "creation_time": 1791444257.1974924,
+            "auxillary_file_paths": [
+                "results\\stillwalker02\\Stillwalker\\Stillwalker-2743219.pt"
+            ]
+        }
+    },
+    "metadata": {
+        "stats_format_version": "0.3.0",
+        "mlagents_version": "1.1.0",
+        "torch_version": "2.2.2+cpu"
+    }
+}

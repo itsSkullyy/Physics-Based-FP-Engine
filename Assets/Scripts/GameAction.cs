@@ -42,7 +42,10 @@ public class GameAction
     public static GameAction Button(string name, params string[] paths)
     {
         GameAction ga = new GameAction(name, InputActionType.Button, null);
-        foreach (string p in paths) ga.Bind(p);
+        foreach (string p in paths)
+        {
+            ga.Bind(p);
+        }
         return ga;
     }
 
@@ -50,7 +53,10 @@ public class GameAction
     public static GameAction Axis(string name, params string[] paths)
     {
         GameAction ga = new GameAction(name, InputActionType.Value, "Axis");
-        foreach (string p in paths) ga.Bind(p);
+        foreach (string p in paths)
+        {
+            ga.Bind(p);
+        }
         return ga;
     }
 
@@ -65,14 +71,19 @@ public class GameAction
     public GameAction Bind(string path, string processors = null)
     {
         if (action != null && !string.IsNullOrEmpty(path))
+        {
             action.AddBinding(path, processors: processors);
+        }
         return this;
     }
 
     /// Fluent WASD-style composite. Digital normalized, so diagonals are not faster.
     public GameAction Composite2D(string up, string down, string left, string right)
     {
-        if (action == null) return this;
+        if (action == null)
+        {
+            return this;
+        }
 
         action.AddCompositeBinding("2DVector(mode=2)")
             .With("Up", up)
@@ -88,13 +99,19 @@ public class GameAction
     public void Enable()
     {
         InputAction a = Action;
-        if (a != null && !a.enabled) a.Enable();
+        if (a != null && !a.enabled)
+        {
+            a.Enable();
+        }
     }
 
     public void Disable()
     {
         InputAction a = Action;
-        if (a != null && a.enabled) a.Disable();
+        if (a != null && a.enabled)
+        {
+            a.Disable();
+        }
     }
 
     // ---------------------------------------------------------------- reading
@@ -120,10 +137,16 @@ public class GameAction
     /// FixedUpdate (which can run several times per rendered frame) can't double-fire.
     public bool ConsumePressed()
     {
-        if (!Pressed) return false;
+        if (!Pressed)
+        {
+            return false;
+        }
 
         int frame = Time.frameCount;
-        if (consumedFrame == frame) return false;
+        if (consumedFrame == frame)
+        {
+            return false;
+        }
 
         consumedFrame = frame;
         return true;
@@ -164,10 +187,16 @@ public class GameAction
     public string DisplayAt(int bindingIndex, string fallback = "-")
     {
         InputAction a = Action;
-        if (a == null || bindingIndex < 0 || bindingIndex >= a.bindings.Count) return fallback;
+        if (a == null || bindingIndex < 0 || bindingIndex >= a.bindings.Count)
+        {
+            return fallback;
+        }
 
         string path = a.bindings[bindingIndex].effectivePath;
-        if (string.IsNullOrEmpty(path)) return fallback;
+        if (string.IsNullOrEmpty(path))
+        {
+            return fallback;
+        }
 
         // Ask the live device first, so "<Gamepad>/buttonSouth" becomes "A" on an
         // Xbox pad or "Cross" on a DualSense instead of "Button South".
@@ -175,7 +204,9 @@ public class GameAction
         {
             InputControl control = InputControlPath.TryFindControl(Gamepad.current, path);
             if (control != null && !string.IsNullOrEmpty(control.displayName))
+            {
                 return control.displayName;
+            }
         }
 
         string display = a.GetBindingDisplayString(bindingIndex,
@@ -190,13 +221,22 @@ public class GameAction
     public int FindBindingIndex(bool gamepad)
     {
         InputAction a = Action;
-        if (a == null) return -1;
+        if (a == null)
+        {
+            return -1;
+        }
 
         for (int i = 0; i < a.bindings.Count; i++)
         {
             UnityEngine.InputSystem.InputBinding b = a.bindings[i];
-            if (b.isComposite) continue;
-            if (IsGamepadPath(b.effectivePath) == gamepad) return i;
+            if (b.isComposite)
+            {
+                continue;
+            }
+            if (IsGamepadPath(b.effectivePath) == gamepad)
+            {
+                return i;
+            }
         }
 
         return -1;
@@ -205,16 +245,25 @@ public class GameAction
     public bool IsGamepadBinding(int index)
     {
         InputAction a = Action;
-        if (a == null || index < 0 || index >= a.bindings.Count) return false;
+        if (a == null || index < 0 || index >= a.bindings.Count)
+        {
+            return false;
+        }
         return IsGamepadPath(a.bindings[index].effectivePath);
     }
 
     public static bool IsGamepadPath(string path)
     {
-        if (string.IsNullOrEmpty(path)) return false;
+        if (string.IsNullOrEmpty(path))
+        {
+            return false;
+        }
 
         string layout = InputControlPath.TryGetDeviceLayout(path);
-        if (string.IsNullOrEmpty(layout) || layout == "*") return false;
+        if (string.IsNullOrEmpty(layout) || layout == "*")
+        {
+            return false;
+        }
 
         layout = layout.Trim('<', '>');
         return InputSystem.IsFirstLayoutBasedOnSecond(layout, "Gamepad");
@@ -231,30 +280,51 @@ public class GameAction
     public void LoadOverrides(string json)
     {
         InputAction a = Action;
-        if (a == null || string.IsNullOrEmpty(json)) return;
+        if (a == null || string.IsNullOrEmpty(json))
+        {
+            return;
+        }
 
         bool wasEnabled = a.enabled;
-        if (wasEnabled) a.Disable();
+        if (wasEnabled)
+        {
+            a.Disable();
+        }
         a.LoadBindingOverridesFromJson(json);
-        if (wasEnabled) a.Enable();
+        if (wasEnabled)
+        {
+            a.Enable();
+        }
     }
 
     public void ClearOverrides()
     {
         InputAction a = Action;
-        if (a == null) return;
+        if (a == null)
+        {
+            return;
+        }
 
         bool wasEnabled = a.enabled;
-        if (wasEnabled) a.Disable();
+        if (wasEnabled)
+        {
+            a.Disable();
+        }
         a.RemoveAllBindingOverrides();
-        if (wasEnabled) a.Enable();
+        if (wasEnabled)
+        {
+            a.Enable();
+        }
     }
 
     /// Path this binding currently resolves to, override included.
     public string EffectivePath(int index)
     {
         InputAction a = Action;
-        if (a == null || index < 0 || index >= a.bindings.Count) return string.Empty;
+        if (a == null || index < 0 || index >= a.bindings.Count)
+        {
+            return string.Empty;
+        }
         return a.bindings[index].effectivePath;
     }
 }

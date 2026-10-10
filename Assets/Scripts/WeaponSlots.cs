@@ -58,24 +58,42 @@ public class WeaponSlots : MonoBehaviour
 
     void Awake()
     {
-        if (input == null) input = PlayerInputRouter.Resolve(this);
-        if (axe == null) axe = GetComponentInChildren<BattleAxe>(true);
-        if (grappling == null) grappling = GetComponent<Grappling>();
-        if (grappling == null) grappling = GetComponentInChildren<Grappling>(true);
+        if (input == null)
+        {
+            input = PlayerInputRouter.Resolve(this);
+        }
+        if (axe == null)
+        {
+            axe = GetComponentInChildren<BattleAxe>(true);
+        }
+        if (grappling == null)
+        {
+            grappling = GetComponent<Grappling>();
+        }
+        if (grappling == null)
+        {
+            grappling = GetComponentInChildren<Grappling>(true);
+        }
 
         Current = Mathf.Clamp(startSlot, 0, SlotCount - 1);
     }
 
     void OnEnable()
     {
-        if (axe == null) return;
+        if (axe == null)
+        {
+            return;
+        }
         axe.AxeThrown += OnAxeThrown;
         axe.AxeReturned += OnAxeReturned;
     }
 
     void OnDisable()
     {
-        if (axe == null) return;
+        if (axe == null)
+        {
+            return;
+        }
         axe.AxeThrown -= OnAxeThrown;
         axe.AxeReturned -= OnAxeReturned;
     }
@@ -91,7 +109,10 @@ public class WeaponSlots : MonoBehaviour
 
     void Update()
     {
-        if (input == null || !input.inputEnabled) return;
+        if (input == null || !input.inputEnabled)
+        {
+            return;
+        }
 
         cooldown -= Time.unscaledDeltaTime;
 
@@ -102,7 +123,10 @@ public class WeaponSlots : MonoBehaviour
         if (Hit(input.slotNext)) { SelectDown(); return; }
         if (Hit(input.slotPrev)) { SelectUp(); return; }
 
-        if (scrollSwitchesSlots) HandleScroll();
+        if (scrollSwitchesSlots)
+        {
+            HandleScroll();
+        }
     }
     
     static bool Hit(GameAction a) => a != null && a.Pressed;
@@ -114,12 +138,21 @@ public class WeaponSlots : MonoBehaviour
         float s = input.ScrollY;
 
         if (Mathf.Abs(s) < scrollThreshold) { scrollLatched = false; return; }
-        if (scrollLatched || cooldown > 0f) return;
+        if (scrollLatched || cooldown > 0f)
+        {
+            return;
+        }
 
         scrollLatched = true;
 
-        if (s > 0f) SelectUp();
-        else SelectDown();
+        if (s > 0f)
+        {
+            SelectUp();
+        }
+        else
+        {
+            SelectDown();
+        }
     }
 
     // ---------------------------------------------------------------- selection
@@ -138,14 +171,23 @@ public class WeaponSlots : MonoBehaviour
             ? ((index % SlotCount) + SlotCount) % SlotCount
             : Mathf.Clamp(index, 0, SlotCount - 1);
 
-        if (index == Current) return;
+        if (index == Current)
+        {
+            return;
+        }
 
         Current = index;
         cooldown = switchCooldown;
 
-        if (started) Apply();
+        if (started)
+        {
+            Apply();
+        }
 
-        if (logDebug) Debug.Log("[WeaponSlots] Slot " + (Current + 1) + " (" + CurrentSlot + ")", this);
+        if (logDebug)
+        {
+            Debug.Log("[WeaponSlots] Slot " + (Current + 1) + " (" + CurrentSlot + ")", this);
+        }
 
         SlotChanged?.Invoke(Current);
     }
@@ -153,14 +195,18 @@ public class WeaponSlots : MonoBehaviour
     void Apply()
     {
         if (axe != null)
+        {
             axe.SetEquipped(AxeEquipped);
+        }
 
         if (grappling != null)
         {
             grappling.swingEquipped = GrappleEquipped;
 
             if (!GrappleEquipped && grappling.IsSwinging)
+            {
                 grappling.Detach(false);
+            }
         }
     }
 
@@ -168,11 +214,17 @@ public class WeaponSlots : MonoBehaviour
 
     void OnAxeThrown()
     {
-        if (swapDownOnThrow) SelectDown();
+        if (swapDownOnThrow)
+        {
+            SelectDown();
+        }
     }
 
     void OnAxeReturned()
     {
-        if (swapBackOnAxeReturned) Select((int)Slot.Axe);
+        if (swapBackOnAxeReturned)
+        {
+            Select((int)Slot.Axe);
+        }
     }
 }

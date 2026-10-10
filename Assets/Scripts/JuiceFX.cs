@@ -73,7 +73,10 @@ public class JuiceFX : MonoBehaviour
 
     public static JuiceFX Get()
     {
-        if (Instance != null) return Instance;
+        if (Instance != null)
+        {
+            return Instance;
+        }
 
         JuiceFX found = FindFirstObjectByType<JuiceFX>();
         if (found != null)
@@ -102,7 +105,10 @@ public class JuiceFX : MonoBehaviour
 
     void OnDestroy()
     {
-        if (Instance == this) Instance = null;
+        if (Instance == this)
+        {
+            Instance = null;
+        }
     }
 
     // ---------------------------------------------------------------- public API
@@ -110,7 +116,10 @@ public class JuiceFX : MonoBehaviour
     /// Ring of dust spheres kicked outward along a surface. strength 0..1.
     public void LandDust(Vector3 point, Vector3 normal, float strength)
     {
-        if (dustCores == null) return;
+        if (dustCores == null)
+        {
+            return;
+        }
         strength = Mathf.Clamp01(strength);
 
         int count = Mathf.RoundToInt(Mathf.Lerp(dustMinCount, dustMaxCount, strength));
@@ -136,7 +145,10 @@ public class JuiceFX : MonoBehaviour
     /// Small continuous scuff, for sliding and footfalls.
     public void Scuff(Vector3 point, Vector3 normal, Vector3 drift, float strength)
     {
-        if (dustCores == null) return;
+        if (dustCores == null)
+        {
+            return;
+        }
         strength = Mathf.Clamp01(strength);
 
         int count = Mathf.Max(1, Mathf.RoundToInt(Mathf.Lerp(1f, 5f, strength)));
@@ -166,7 +178,10 @@ public class JuiceFX : MonoBehaviour
 
         LandDust(point, normal, strength * 0.7f);
 
-        if (sparkCores == null) return;
+        if (sparkCores == null)
+        {
+            return;
+        }
         Basis(normal, out Vector3 t1, out Vector3 t2);
 
         int count = Mathf.RoundToInt(Mathf.Lerp(sparkMinCount, sparkMaxCount, strength));
@@ -201,7 +216,10 @@ public class JuiceFX : MonoBehaviour
     /// Directionless air burst, for wall kicks, darts and mid-air pops.
     public void AirPuff(Vector3 point, Vector3 direction, float strength)
     {
-        if (dustCores == null) return;
+        if (dustCores == null)
+        {
+            return;
+        }
         strength = Mathf.Clamp01(strength);
 
         int count = Mathf.RoundToInt(Mathf.Lerp(dustMinCount, dustMaxCount * 0.7f, strength));
@@ -226,13 +244,18 @@ public class JuiceFX : MonoBehaviour
     /// Freezes time briefly. Physics step is scaled to match so nothing tunnels.
     public void Hitstop(float duration, float timeScale = 0.05f)
     {
-        if (!enableHitstop || duration <= 0f) return;
+        if (!enableHitstop || duration <= 0f)
+        {
+            return;
+        }
 
         duration = Mathf.Min(duration, maxHitstopDuration);
         hitstopEnd = Mathf.Max(hitstopEnd, Time.unscaledTime + duration);
 
         if (!hitstopRunning)
+        {
             StartCoroutine(HitstopRoutine(Mathf.Clamp(timeScale, 0.01f, 1f)));
+        }
     }
 
     IEnumerator HitstopRoutine(float scale)
@@ -243,7 +266,9 @@ public class JuiceFX : MonoBehaviour
         Time.fixedDeltaTime = defaultFixedDelta * scale;
 
         while (Time.unscaledTime < hitstopEnd)
+        {
             yield return null;
+        }
 
         Time.timeScale = 1f;
         Time.fixedDeltaTime = defaultFixedDelta;
@@ -255,7 +280,10 @@ public class JuiceFX : MonoBehaviour
     void EmitDust(ParticleSystem.EmitParams ep)
     {
         dustCores[Random.Range(0, dustCores.Length)].Emit(ep, 1);
-        if (dustOutline != null) dustOutline.Emit(ep, 1);
+        if (dustOutline != null)
+        {
+            dustOutline.Emit(ep, 1);
+        }
     }
 
     void EmitSpark(Vector3 position, Vector3 velocity, float size, float lifetime)
@@ -271,7 +299,10 @@ public class JuiceFX : MonoBehaviour
             : Random.rotation.eulerAngles;
 
         sparkCores[Random.Range(0, sparkCores.Length)].Emit(ep, 1);
-        if (sparkOutline != null) sparkOutline.Emit(ep, 1);
+        if (sparkOutline != null)
+        {
+            sparkOutline.Emit(ep, 1);
+        }
     }
 
     // ---------------------------------------------------------------- construction
@@ -301,7 +332,10 @@ public class JuiceFX : MonoBehaviour
                 sparkGravity, 0.05f, true);
         }
 
-        if (!drawOutlines || outlineWidth <= 0.001f) return;
+        if (!drawOutlines || outlineWidth <= 0.001f)
+        {
+            return;
+        }
 
         Material outlineMat = SolidMaterial(outlineColor);
         dustOutline = BuildSystem("DustOutline", MakeHull(sphere, outlineWidth), outlineMat,
@@ -427,21 +461,36 @@ public class JuiceFX : MonoBehaviour
         foreach (string n in names)
         {
             Shader s = Shader.Find(n);
-            if (s != null) return s;
+            if (s != null)
+            {
+                return s;
+            }
         }
         return Shader.Find("Sprites/Default");
     }
 
     static void SetTex(Material mat, Texture tex)
     {
-        if (mat.HasProperty("_MainTex")) mat.SetTexture("_MainTex", tex);
-        if (mat.HasProperty("_BaseMap")) mat.SetTexture("_BaseMap", tex);
+        if (mat.HasProperty("_MainTex"))
+        {
+            mat.SetTexture("_MainTex", tex);
+        }
+        if (mat.HasProperty("_BaseMap"))
+        {
+            mat.SetTexture("_BaseMap", tex);
+        }
     }
 
     static void SetColor(Material mat, Color c)
     {
-        if (mat.HasProperty("_Color")) mat.SetColor("_Color", c);
-        if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", c);
+        if (mat.HasProperty("_Color"))
+        {
+            mat.SetColor("_Color", c);
+        }
+        if (mat.HasProperty("_BaseColor"))
+        {
+            mat.SetColor("_BaseColor", c);
+        }
     }
 
     // ---------------------------------------------------------------- meshes
@@ -463,7 +512,9 @@ public class JuiceFX : MonoBehaviour
         };
 
         for (int i = 0; i < baseVerts.Count; i++)
+        {
             baseVerts[i] = baseVerts[i].normalized * 0.5f;
+        }
 
         int[] baseTris =
         {
@@ -605,11 +656,17 @@ public class JuiceFX : MonoBehaviour
 
     static void Basis(Vector3 normal, out Vector3 t1, out Vector3 t2)
     {
-        if (normal.sqrMagnitude < 0.001f) normal = Vector3.up;
+        if (normal.sqrMagnitude < 0.001f)
+        {
+            normal = Vector3.up;
+        }
         normal.Normalize();
 
         t1 = Vector3.Cross(normal, Vector3.up);
-        if (t1.sqrMagnitude < 0.001f) t1 = Vector3.Cross(normal, Vector3.forward);
+        if (t1.sqrMagnitude < 0.001f)
+        {
+            t1 = Vector3.Cross(normal, Vector3.forward);
+        }
         t1.Normalize();
 
         t2 = Vector3.Cross(normal, t1).normalized;

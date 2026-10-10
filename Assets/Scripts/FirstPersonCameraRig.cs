@@ -25,8 +25,14 @@ public class FirstPersonCameraRig : MonoBehaviour
     public float tiltLerpSpeed = 8f;
 
     [Header("Landing Dip")]
-    public float landDipBase = 0.08f;
-    public float landDipPerFallSpeed = 0.008f;
+    [Tooltip("Landings slower than this get no dip. A normal jump lands at about 9.")]
+    public float dipStartFallSpeed = 11f;
+    public float dipFullFallSpeed = 30f;
+    public float maxFallDip = 0.16f;
+    [Tooltip("How much of the dip is kept when landing at top speed or into a slide.")]
+    [Range(0f, 1f)] public float fastLandingDipKeep = 0.35f;
+    [Tooltip("Time to sink into the dip, so it eases down instead of snapping.")]
+    public float dipAttackTime = 0.05f;
     public float maxLandDip = 0.3f;
     public float dipRecoverSpeed = 7f;
 
@@ -40,19 +46,27 @@ public class FirstPersonCameraRig : MonoBehaviour
     float currentTilt;
     float currentRoll;
     float dip;
+    float dipTarget;
     float dipVelocity;
+    float dipTargetVelocity;
     bool wasGrounded;
     float lastFallSpeed;
     Vector3 baseLocalPos;
 
     void OnEnable()
     {
-        if (controller != null) controller.Teleported += OnPlayerTeleported;
+        if (controller != null)
+        {
+            controller.Teleported += OnPlayerTeleported;
+        }
     }
 
     void OnDisable()
     {
-        if (controller != null) controller.Teleported -= OnPlayerTeleported;
+        if (controller != null)
+        {
+            controller.Teleported -= OnPlayerTeleported;
+        }
     }
 
     // Cinemachine has no way to know a position change was a teleport rather than organic
@@ -61,34 +75,77 @@ public class FirstPersonCameraRig : MonoBehaviour
     void OnPlayerTeleported(Vector3 positionDelta)
     {
         if (cineCam != null)
+        {
             cineCam.OnTargetObjectWarped(transform, positionDelta);
+        }
+    }
+
+    /// 1 for a normal landing, down to fastLandingDipKeep when landing fast or crouched,
+    /// since those landings keep their speed and shouldn't feel like a stomp.
+    public static float LandingSoftness(FirstPersonCharacterController c, float fastKeep)
+    {
+        float speedT = Mathf.InverseLerp(c.baseSpeed, c.maxSpeed, c.CurrentSpeed);
+        if (c.IsSliding || c.IsAirSliding || c.CrouchAmount > 0.3f)
+        {
+            speedT = 1f;
+        }
+        return Mathf.Lerp(1f, fastKeep, speedT);
     }
 
     void Start()
     {
         baseLocalPos = transform.localPosition;
 
-        if (shaker == null) shaker = GetComponent<CameraShaker>();
-        if (shaker == null) shaker = CameraShaker.Instance;
-        if (shaker != null) shaker.MarkDriven();
-
-        if (controller != null && controller.cameraTransform == transform)
-            Debug.LogError("Rig is on the CameraAnchor. Put it on a child (CameraFX).", this);
-
-        if (cineCam != null && cineCam.transform == transform)
-            Debug.LogError("Rig is on the CinemachineCamera. Put it on CameraFX.", this);
-
+        HookUpShaker();
+        WarnAboutSetupMistakes();
         if (autoConfigureCineCam)
+        {
             ConfigureCineCam();
+        }
 
         currentFov = baseFov;
         if (cineCam != null)
+        {
             cineCam.Lens.FieldOfView = baseFov;
+        }
+    }
+
+    // the rig adds the shaker's offsets in itself, so the shaker shouldn't move the camera too
+    void HookUpShaker()
+    {
+        if (shaker == null)
+        {
+            shaker = GetComponent<CameraShaker>();
+        }
+        if (shaker == null)
+        {
+            shaker = CameraShaker.Instance;
+        }
+        if (shaker != null)
+        {
+            shaker.MarkDriven();
+        }
+    }
+
+    void WarnAboutSetupMistakes()
+    {
+        if (controller != null && controller.cameraTransform == transform)
+        {
+            Debug.LogError("Rig is on the CameraAnchor. Put it on a child (CameraFX).", this);
+        }
+
+        if (cineCam != null && cineCam.transform == transform)
+        {
+            Debug.LogError("Rig is on the CinemachineCamera. Put it on CameraFX.", this);
+        }
     }
 
     void ConfigureCineCam()
     {
-        if (cineCam == null) return;
+        if (cineCam == null)
+        {
+            return;
+        }
 
         cineCam.Target.TrackingTarget = transform;
 
@@ -101,20 +158,29 @@ public class FirstPersonCameraRig : MonoBehaviour
         RemoveIfPresent<CinemachineHardLookAt>();
 
         if (!cineCam.TryGetComponent(out CinemachineHardLockToTarget _))
+        {
             cineCam.gameObject.AddComponent<CinemachineHardLockToTarget>();
+        }
         if (!cineCam.TryGetComponent(out CinemachineRotateWithFollowTarget _))
+        {
             cineCam.gameObject.AddComponent<CinemachineRotateWithFollowTarget>();
+        }
     }
 
     void RemoveIfPresent<T>() where T : Component
     {
         if (cineCam != null && cineCam.TryGetComponent(out T comp))
+        {
             Destroy(comp);
+        }
     }
 
     void Update()
     {
-        if (controller == null) return;
+        if (controller == null)
+        {
+            return;
+        }
 
         TrackFall();
         UpdateLens();
@@ -126,12 +192,18 @@ public class FirstPersonCameraRig : MonoBehaviour
     {
         float vy = controller.Velocity.y;
         if (vy < 0f)
+        {
             lastFallSpeed = -vy;
+        }
 
         if (controller.IsGrounded && !wasGrounded)
         {
-            float amount = landDipBase + lastFallSpeed * landDipPerFallSpeed;
-            dip = Mathf.Min(dip + amount, maxLandDip);
+            float t = Mathf.InverseLerp(dipStartFallSpeed, dipFullFallSpeed, lastFallSpeed);
+            if (t > 0f)
+            {
+                float amount = t * t * maxFallDip * LandingSoftness(controller, fastLandingDipKeep);
+                dipTarget = Mathf.Min(dipTarget + amount, maxLandDip);
+            }
             lastFallSpeed = 0f;
         }
 
@@ -140,7 +212,10 @@ public class FirstPersonCameraRig : MonoBehaviour
 
     void UpdateLens()
     {
-        if (cineCam == null) return;
+        if (cineCam == null)
+        {
+            return;
+        }
 
         float speedT = Mathf.Clamp01((controller.CurrentSpeed - controller.baseSpeed) /
             Mathf.Max(1f, controller.maxSpeed * 1.6f - controller.baseSpeed));
@@ -171,7 +246,8 @@ public class FirstPersonCameraRig : MonoBehaviour
 
     void UpdateDip()
     {
-        dip = Mathf.SmoothDamp(dip, 0f, ref dipVelocity, 1f / dipRecoverSpeed);
+        dipTarget = Mathf.SmoothDamp(dipTarget, 0f, ref dipTargetVelocity, 1f / dipRecoverSpeed);
+        dip = Mathf.SmoothDamp(dip, dipTarget, ref dipVelocity, dipAttackTime);
 
         Vector3 shakeOffset = shaker != null ? shaker.PositionOffset : Vector3.zero;
         transform.localPosition = baseLocalPos + Vector3.down * dip + shakeOffset;
@@ -180,7 +256,7 @@ public class FirstPersonCameraRig : MonoBehaviour
     /// Punches the camera downward. Used by landings and heavy impacts.
     public void AddDip(float amount)
     {
-        dip = Mathf.Min(dip + Mathf.Max(0f, amount), maxLandDip);
+        dipTarget = Mathf.Min(dipTarget + Mathf.Max(0f, amount), maxLandDip);
     }
 
     void UpdateVaultRoll()

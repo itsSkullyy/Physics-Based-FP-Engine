@@ -52,19 +52,31 @@ public class PlayerHealth : MonoBehaviour
     void Awake()
     {
         body = GetComponent<Rigidbody>();
-        if (body == null) body = GetComponentInChildren<Rigidbody>();
+        if (body == null)
+        {
+            body = GetComponentInChildren<Rigidbody>();
+        }
 
         Current = maxHealth;
     }
 
     void Update()
     {
-        if (debugKeys) HandleDebugKeys();
+        if (debugKeys)
+        {
+            HandleDebugKeys();
+        }
 
-        if (!regenerate || IsDead || Current >= maxHealth) return;
+        if (!regenerate || IsDead || Current >= maxHealth)
+        {
+            return;
+        }
 
         regenTimer += Time.deltaTime;
-        if (regenTimer < regenDelay) return;
+        if (regenTimer < regenDelay)
+        {
+            return;
+        }
 
         Current = Mathf.Min(maxHealth, Current + regenPerSecond * Time.deltaTime);
     }
@@ -72,18 +84,33 @@ public class PlayerHealth : MonoBehaviour
     void HandleDebugKeys()
     {
         Keyboard kb = Keyboard.current;
-        if (kb == null) return;
+        if (kb == null)
+        {
+            return;
+        }
 
-        if (kb.kKey.wasPressedThisFrame) Damage(10f);
-        if (kb.lKey.wasPressedThisFrame) Heal(10f);
-        if (kb.jKey.wasPressedThisFrame) Kill();
+        if (kb.kKey.wasPressedThisFrame)
+        {
+            Damage(10f);
+        }
+        if (kb.lKey.wasPressedThisFrame)
+        {
+            Heal(10f);
+        }
+        if (kb.jKey.wasPressedThisFrame)
+        {
+            Kill();
+        }
     }
 
     // ---------------------------------------------------------------- API
 
     public void Damage(float amount)
     {
-        if (IsDead || invulnerable || amount <= 0f) return;
+        if (IsDead || invulnerable || amount <= 0f)
+        {
+            return;
+        }
 
         float taken = Mathf.Min(amount, Current);
         Current -= taken;
@@ -97,15 +124,24 @@ public class PlayerHealth : MonoBehaviour
 
         Damaged?.Invoke(taken);
 
-        if (Current <= 0.001f) Die();
+        if (Current <= 0.001f)
+        {
+            Die();
+        }
     }
 
     public void Heal(float amount)
     {
-        if (IsDead || amount <= 0f) return;
+        if (IsDead || amount <= 0f)
+        {
+            return;
+        }
 
         float given = Mathf.Min(amount, maxHealth - Current);
-        if (given <= 0f) return;
+        if (given <= 0f)
+        {
+            return;
+        }
 
         Current += given;
         Healed?.Invoke(given);
@@ -113,7 +149,10 @@ public class PlayerHealth : MonoBehaviour
 
     public void Kill()
     {
-        if (IsDead) return;
+        if (IsDead)
+        {
+            return;
+        }
 
         Current = 0f;
         Die();
@@ -124,11 +163,16 @@ public class PlayerHealth : MonoBehaviour
         IsDead = true;
 
         if (CameraShaker.Instance != null && deathShake > 0f)
+        {
             CameraShaker.Instance.AddTrauma(deathShake);
+        }
 
         Died?.Invoke();
 
-        if (respawnOnDeath) Respawn();
+        if (respawnOnDeath)
+        {
+            Respawn();
+        }
     }
 
     /// Full reset: back to max health and back to the respawn point.
@@ -138,8 +182,14 @@ public class PlayerHealth : MonoBehaviour
         Current = maxHealth;
         regenTimer = 0f;
 
-        if (respawnPoint != null) Teleport(respawnPoint.position);
-        else Debug.LogWarning("PlayerHealth has no respawnPoint, so the player was left where they died.", this);
+        if (respawnPoint != null)
+        {
+            Teleport(respawnPoint.position);
+        }
+        else
+        {
+            Debug.LogWarning("PlayerHealth has no respawnPoint, so the player was left where they died.", this);
+        }
 
         Respawned?.Invoke();
     }

@@ -1,4 +1,6 @@
+using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Serialization;
 
 // Thrown axe. Simulates its own arc and sweeps a continuous chain of segments along the
 // axe head's real path (plus the pivot's path) every physics step, so it never has a
@@ -38,7 +40,9 @@ public class ThrownAxe : MonoBehaviour
     [Range(0f, 1f)] public float stickNormalBlend = 0.55f;
     public Vector3 stickEulerOffset = Vector3.zero;
     public bool levelRoll = true;
-    public bool parentToSurface = true;
+    [Tooltip("Keep the axe locked to whatever it hit, so it rides along with moving enemies and platforms.")]
+    [FormerlySerializedAs("parentToSurface")]
+    public bool followSurface = true;
 
     [Header("Loose On Ground")]
     [Tooltip("A loose axe stops being a grapple anchor, so a zip pulls it back to you instead of pulling you to it.")]
@@ -114,12 +118,25 @@ public class ThrownAxe : MonoBehaviour
     float recallBestDist;
     float recallStuckTimer;
 
+    // The axe isn't parented to what it hits. Parenting breaks on rigidbodies, shears
+    // under non-uniformly scaled primitives and makes the axe count as part of the
+    // enemy for grapple/sight checks. Instead it remembers its pose relative to the
+    // collider and copies it every frame. stuckLocalRot is world space when there is
+    // no surface to follow.
+    Collider surfaceCollider;
+    bool hasSurface;
+    Vector3 stuckLocalPos;
     Quaternion stuckLocalRot;
     Vector3 wobbleAxisLocal = Vector3.right;
     float wobbleTimer;
 
+    static readonly List<ThrownAxe> live = new List<ThrownAxe>();
+
     public bool IsStuck => stuck;
     public bool IsRecalling => recalling;
+    public bool IsFlying => launched && !stuck && !dropped;
+    public Vector3 Velocity => velocity;
+    public static IReadOnlyList<ThrownAxe> Live => live;
     public Vector3 StickPoint => transform.position;
     public Vector3 HeadPosition => transform.position + HeadWorldOffset(transform.rotation);
 
@@ -140,6 +157,32 @@ public class ThrownAxe : MonoBehaviour
         rb.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
     }
 
+    void OnEnable() { live.Add(this); }
+    void OnDisable() { live.Remove(this); }
+
+    /// Drops every axe stuck in a collider at or under root. Call this when that object
+    /// is about to break apart or vanish.
+    public static void DropAllStuckIn(Transform root)
+    {
+        if (root == null)
+        {
+            return;
+        }
+
+        for (int i = live.Count - 1; i >= 0; i--)
+        {
+            ThrownAxe axe = live[i];
+            if (axe == null || !axe.hasSurface || axe.surfaceCollider == null)
+            {
+                continue;
+            }
+            if (axe.surfaceCollider.transform.IsChildOf(root))
+            {
+                axe.DropFromSurface();
+            }
+        }
+    }
+
     public void Launch(Vector3 launchVelocity, float spinDegreesPerSecond, Collider[] ignoreColliders)
     {
         Launch(launchVelocity, spinDegreesPerSecond, ignoreColliders, transform.position);
@@ -150,7 +193,10 @@ public class ThrownAxe : MonoBehaviour
     public void Launch(Vector3 launchVelocity, float spinDegreesPerSecond,
                        Collider[] ignoreColliders, Vector3 originPoint)
     {
-        if (rb == null) rb = GetComponent<Rigidbody>();
+        if (rb == null)
+        {
+            rb = GetComponent<Rigidbody>();
+        }
 
         velocity = launchVelocity;
         spinSpeed = spinDegreesPerSecond;
@@ -161,12 +207,21 @@ public class ThrownAxe : MonoBehaviour
         ownColliders = GetComponentsInChildren<Collider>(true);
 
         foreach (Collider c in ownColliders)
-            if (c != null) c.enabled = false;
+        {
+            if (c != null)
+            {
+                c.enabled = false;
+            }
+        }
 
         if (headPoint != null)
+        {
             headLocalOffset = transform.InverseTransformPoint(headPoint.position);
+        }
         else if (autoFitHead)
+        {
             FitHeadOffset();
+        }
 
         activeSpin = spinSpeed;
         if (scaleSpinWithThrowSpeed && spinReferenceSpeed > 0.01f)
@@ -182,41 +237,58 @@ public class ThrownAxe : MonoBehaviour
         rb.rotation = transform.rotation;
         lastHeadPos = transform.position + HeadWorldOffset(transform.rotation);
 
-        if (leaveTrail) CreateTrail();
+        if (leaveTrail)
+        {
+            CreateTrail();
+        }
 
         launched = true;
 
         if (SweepSegment(originPoint, lastHeadPos, sweepRadius, out RaycastHit spawnHit, out Vector3 spawnDir))
+        {
             Stick(spawnHit, spawnDir);
+        }
     }
 
     void FixedUpdate()
     {
+        float dt = Time.fixedDeltaTime;
         if (recalling)
         {
-            HandleRecall(Time.fixedDeltaTime);
+            HandleRecall(dt);
             return;
         }
 
         if (stuck)
         {
-            stuckTimer += Time.fixedDeltaTime;
+            stuckTimer += dt;
             return;
         }
 
-        if (!launched) return;
-
-        float dt = Time.fixedDeltaTime;
-        age += dt;
-
-        if ((maxLifetime > 0f && age > maxLifetime) || rb.position.y < despawnBelowY)
+        if (!launched || ExpiredThisStep(dt))
         {
-            Destroy(gameObject);
             return;
         }
 
         velocity += Physics.gravity * (gravityScale * dt);
+        SimulateFlight(dt);
+    }
 
+    bool ExpiredThisStep(float dt)
+    {
+        age += dt;
+        if ((maxLifetime > 0f && age > maxLifetime) || rb.position.y < despawnBelowY)
+        {
+            Destroy(gameObject);
+            return true;
+        }
+        return false;
+    }
+
+    // Moves the axe one physics step, split into sub-steps short enough that the
+    // spinning head can't skip past a surface between them.
+    void SimulateFlight(float dt)
+    {
         Vector3 pos = rb.position;
         Quaternion rot = rb.rotation;
 
@@ -247,7 +319,9 @@ public class ThrownAxe : MonoBehaviour
             // plane lets the head cross it and bury itself on the far side first.
             Portal crossed = Portal.FindSegmentCrossing(lastHeadPos, nextHead, out Matrix4x4 portalMatrix);
             if (crossed == null)
+            {
                 crossed = Portal.FindSegmentCrossing(pos, nextPos, out portalMatrix);
+            }
 
             if (crossed != null)
             {
@@ -255,21 +329,15 @@ public class ThrownAxe : MonoBehaviour
                 return;
             }
 
-            if (SweepSegment(lastHeadPos, nextHead, sweepRadius,
-                    out RaycastHit headHit, out Vector3 headDir))
+            if (SweepSegment(lastHeadPos, nextHead, sweepRadius, out RaycastHit headHit, out Vector3 headDir))
             {
-                rb.position = pos;
-                rb.rotation = rot;
-                Stick(headHit, headDir);
+                StickAt(pos, rot, headHit, headDir);
                 return;
             }
 
-            if (sweepBody && SweepSegment(pos, nextPos, bodySweepRadius,
-                    out RaycastHit bodyHit, out Vector3 bodyDir))
+            if (sweepBody && SweepSegment(pos, nextPos, bodySweepRadius, out RaycastHit bodyHit, out Vector3 bodyDir))
             {
-                rb.position = pos;
-                rb.rotation = rot;
-                Stick(bodyHit, bodyDir);
+                StickAt(pos, rot, bodyHit, bodyDir);
                 return;
             }
 
@@ -314,20 +382,79 @@ public class ThrownAxe : MonoBehaviour
         lastHeadPos = exitPos + HeadWorldOffset(exitRot);
     }
 
-    void Update()
+    void StickAt(Vector3 pos, Quaternion rot, RaycastHit hit, Vector3 dir)
     {
-        if (!stuck || wobbleTimer <= 0f) return;
+        rb.position = pos;
+        rb.rotation = rot;
+        Stick(hit, dir);
+    }
 
-        wobbleTimer -= Time.deltaTime;
-        float elapsed = stickWobbleDuration - Mathf.Max(0f, wobbleTimer);
+    // LateUpdate so it runs after animation, nav agents and rigidbody interpolation
+    // have put the surface where it'll be drawn this frame.
+    void LateUpdate()
+    {
+        if (!stuck || dropped)
+        {
+            return;
+        }
 
-        float amp = stickWobbleAngle * Mathf.Exp(-stickWobbleDamp * elapsed);
-        float angle = Mathf.Sin(elapsed * stickWobbleFrequency) * amp;
+        if (SurfaceGone())
+        {
+            DropFromSurface();
+            return;
+        }
 
-        transform.localRotation = stuckLocalRot * Quaternion.AngleAxis(angle, wobbleAxisLocal);
+        bool wobbling = wobbleTimer > 0f;
+        if (!hasSurface && !wobbling)
+        {
+            return;
+        }
 
-        if (wobbleTimer <= 0f)
-            transform.localRotation = stuckLocalRot;
+        ApplyStuckPose(StuckRotation(wobbling));
+    }
+
+    bool SurfaceGone() =>
+        hasSurface && (surfaceCollider == null || !surfaceCollider.enabled || !surfaceCollider.gameObject.activeInHierarchy);
+
+    // the rotation it was stuck at, following the surface, plus the decaying wobble
+    Quaternion StuckRotation(bool wobbling)
+    {
+        Quaternion rot = stuckLocalRot;
+        if (hasSurface)
+        {
+            rot = surfaceCollider.transform.rotation * rot;
+        }
+
+        if (wobbling)
+        {
+            wobbleTimer -= Time.deltaTime;
+            if (wobbleTimer > 0f)
+            {
+                float elapsed = stickWobbleDuration - wobbleTimer;
+                float amp = stickWobbleAngle * Mathf.Exp(-stickWobbleDamp * elapsed);
+                float angle = Mathf.Sin(elapsed * stickWobbleFrequency) * amp;
+                rot *= Quaternion.AngleAxis(angle, wobbleAxisLocal);
+            }
+        }
+        return rot;
+    }
+
+    void ApplyStuckPose(Quaternion rot)
+    {
+        if (hasSurface)
+        {
+            transform.SetPositionAndRotation(surfaceCollider.transform.TransformPoint(stuckLocalPos), rot);
+        }
+        else
+        {
+            transform.rotation = rot;
+        }
+    }
+
+    void ClearSurface()
+    {
+        hasSurface = false;
+        surfaceCollider = null;
     }
 
     // ---------------------------------------------------------------- recall
@@ -339,8 +466,14 @@ public class ThrownAxe : MonoBehaviour
     public bool Recall(Transform target, float catchRadius, System.Action onCaught,
                        System.Func<Vector3> targetPoint = null)
     {
-        if (target == null) return false;
-        if (!RecallReady) return false;
+        if (target == null)
+        {
+            return false;
+        }
+        if (!RecallReady)
+        {
+            return false;
+        }
 
         recallTarget = target;
         recallTargetPoint = targetPoint;
@@ -353,20 +486,33 @@ public class ThrownAxe : MonoBehaviour
         recallBestDist = float.MaxValue;
         recallStuckTimer = 0f;
 
-        transform.SetParent(null, true);
+        ClearSurface();
 
-        if (rb == null) rb = GetComponent<Rigidbody>();
+        if (rb == null)
+        {
+            rb = GetComponent<Rigidbody>();
+        }
         rb.isKinematic = true;
         rb.interpolation = RigidbodyInterpolation.Interpolate;
         rb.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
 
         if (ownColliders != null)
+        {
             foreach (Collider c in ownColliders)
-                if (c != null) c.enabled = false;
+            {
+                if (c != null)
+                {
+                    c.enabled = false;
+                }
+            }
+        }
 
         velocity = (RecallAimPoint() - HeadPosition).normalized * (recallMaxSpeed * 0.25f);
 
-        if (trail != null) trail.emitting = true;
+        if (trail != null)
+        {
+            trail.emitting = true;
+        }
 
         rb.useGravity = false;
         rb.linearVelocity = Vector3.zero;
@@ -377,7 +523,10 @@ public class ThrownAxe : MonoBehaviour
 
     Vector3 RecallAimPoint()
     {
-        if (recallTargetPoint != null) return recallTargetPoint();
+        if (recallTargetPoint != null)
+        {
+            return recallTargetPoint();
+        }
         return recallTarget != null ? recallTarget.position : transform.position;
     }
 
@@ -451,7 +600,9 @@ public class ThrownAxe : MonoBehaviour
         Vector3 desiredVel = desiredDir * recallMaxSpeed;
         velocity = Vector3.MoveTowards(velocity, desiredVel, recallAcceleration * dt);
         if (velocity.magnitude > recallMaxSpeed)
+        {
             velocity = velocity.normalized * recallMaxSpeed;
+        }
 
         // Collision-swept movement: the axe is kinematic with its colliders off, so we
         // sweep a sphere along the intended step and slide along whatever it hits.
@@ -504,7 +655,10 @@ public class ThrownAxe : MonoBehaviour
     /// Hard stop of a recall. Leaves the axe floating in place, not stuck.
     public void CancelRecall()
     {
-        if (!recalling) return;
+        if (!recalling)
+        {
+            return;
+        }
         recalling = false;
         velocity = Vector3.zero;
     }
@@ -514,7 +668,10 @@ public class ThrownAxe : MonoBehaviour
     /// Skips the embed cooldown. Used by the zip pull, which is its own gate.
     public void ForceRecallReady()
     {
-        if (recallCooldown > 0f) stuckTimer = Mathf.Max(stuckTimer, recallCooldown);
+        if (recallCooldown > 0f)
+        {
+            stuckTimer = Mathf.Max(stuckTimer, recallCooldown);
+        }
     }
 
     // ---------------------------------------------------------------- sweeping
@@ -526,7 +683,10 @@ public class ThrownAxe : MonoBehaviour
 
         Vector3 delta = to - from;
         float dist = delta.magnitude;
-        if (dist < 0.0001f) return false;
+        if (dist < 0.0001f)
+        {
+            return false;
+        }
 
         dir = delta / dist;
         float castDist = dist + skinWidth;
@@ -549,7 +709,10 @@ public class ThrownAxe : MonoBehaviour
         RaycastHit[] rayHits = Physics.RaycastAll(from, dir, castDist, stickMask, qti);
         found |= PickBest(rayHits, ref best, ref bestDist);
 
-        if (!found) return false;
+        if (!found)
+        {
+            return false;
+        }
 
         if (best.normal.sqrMagnitude < 0.001f)
         {
@@ -566,13 +729,25 @@ public class ThrownAxe : MonoBehaviour
 
         foreach (RaycastHit h in hits)
         {
-            if (h.collider == null) continue;
-            if (IsSelf(h.collider) || IsIgnored(h.collider)) continue;
+            if (h.collider == null)
+            {
+                continue;
+            }
+            if (IsSelf(h.collider) || IsIgnored(h.collider))
+            {
+                continue;
+            }
             // A portal's trigger volume is a doorway, not a surface. It reaches out well
             // in front of the opening, so without this the axe embeds itself in mid-air
             // short of the portal instead of flying through it.
-            if (h.collider.GetComponentInParent<Portal>() != null) continue;
-            if (h.distance >= bestDist) continue;
+            if (h.collider.GetComponentInParent<Portal>() != null)
+            {
+                continue;
+            }
+            if (h.distance >= bestDist)
+            {
+                continue;
+            }
 
             best = h;
             bestDist = h.distance;
@@ -584,21 +759,39 @@ public class ThrownAxe : MonoBehaviour
 
     bool IsSelf(Collider c)
     {
-        if (c.transform == transform || c.transform.IsChildOf(transform)) return true;
+        if (c.transform == transform || c.transform.IsChildOf(transform))
+        {
+            return true;
+        }
 
         if (ownColliders != null)
+        {
             for (int i = 0; i < ownColliders.Length; i++)
-                if (ownColliders[i] == c) return true;
+            {
+                if (ownColliders[i] == c)
+                {
+                    return true;
+                }
+            }
+        }
 
         return false;
     }
 
     bool IsIgnored(Collider c)
     {
-        if (ignored == null) return false;
+        if (ignored == null)
+        {
+            return false;
+        }
 
         for (int i = 0; i < ignored.Length; i++)
-            if (ignored[i] == c) return true;
+        {
+            if (ignored[i] == c)
+            {
+                return true;
+            }
+        }
 
         return false;
     }
@@ -616,7 +809,10 @@ public class ThrownAxe : MonoBehaviour
         velocity = Vector3.zero;
 
         Vector3 embed = Vector3.Lerp(travelDir, -hit.normal, stickNormalBlend);
-        if (embed.sqrMagnitude < 0.001f) embed = -hit.normal;
+        if (embed.sqrMagnitude < 0.001f)
+        {
+            embed = -hit.normal;
+        }
         embed.Normalize();
 
         Vector3 headDirLocal = headLocalOffset.sqrMagnitude > 0.0001f
@@ -633,7 +829,9 @@ public class ThrownAxe : MonoBehaviour
             {
                 Vector3 currentUp = Vector3.ProjectOnPlane(aligned * Vector3.up, embed);
                 if (currentUp.sqrMagnitude > 0.001f)
+                {
                     aligned = Quaternion.FromToRotation(currentUp, desiredUp) * aligned;
+                }
             }
         }
 
@@ -642,8 +840,8 @@ public class ThrownAxe : MonoBehaviour
         Vector3 headTarget = hit.point + embed * stickDepth;
         Vector3 finalPos = headTarget - HeadWorldOffset(aligned);
 
-        // Grab the collider we hit before reparenting, so a wall that destroys itself
-        // in response still gives us a valid reference this frame.
+        // Grab the collider up front, so a wall that destroys itself in response still
+        // gives us a valid reference this frame.
         Collider hitCollider = hit.collider;
 
         rb.isKinematic = true;
@@ -652,53 +850,85 @@ public class ThrownAxe : MonoBehaviour
         rb.position = finalPos;
         rb.rotation = aligned;
 
-        if (parentToSurface && hitCollider != null && hitCollider.attachedRigidbody == null)
-            transform.SetParent(hitCollider.transform, true);
+        hasSurface = followSurface && hitCollider != null;
+        surfaceCollider = hasSurface ? hitCollider : null;
+        if (hasSurface)
+        {
+            Transform s = hitCollider.transform;
+            stuckLocalPos = s.InverseTransformPoint(finalPos);
+            stuckLocalRot = Quaternion.Inverse(s.rotation) * aligned;
+        }
+        else
+        {
+            stuckLocalRot = aligned;
+        }
 
         wobbleAxisLocal = Vector3.Cross(headDirLocal, Vector3.up);
         if (wobbleAxisLocal.sqrMagnitude < 0.001f)
+        {
             wobbleAxisLocal = Vector3.Cross(headDirLocal, Vector3.forward);
+        }
         wobbleAxisLocal = wobbleAxisLocal.sqrMagnitude > 0.001f
             ? wobbleAxisLocal.normalized
             : Vector3.right;
 
-        stuckLocalRot = transform.localRotation;
         wobbleTimer = stickWobbleDuration;
 
         if (trail != null)
+        {
             trail.emitting = false;
+        }
 
         float force = Mathf.Clamp01(impactSpeed / Mathf.Max(1f, impactReferenceSpeed));
 
         JuiceFX fx = JuiceFX.Instance;
         if (fx != null)
+        {
             fx.ImpactBurst(hit.point, hit.normal, Mathf.Lerp(0.35f, 1f, force));
+        }
 
         if (CameraShaker.Instance != null)
+        {
             CameraShaker.Instance.AddTraumaAtPoint(hit.point, impactShake * force,
                 impactShakeFullRange, impactShakeMaxRange);
+        }
 
-        // A BreakableWall listens for this and shatters; anything else ignores it. Sent
-        // after our own juice so a wall's shatter feedback layers on top.
+        // Before the message below: if the hit breaks the wall or kills the enemy the axe
+        // gets dropped, and that has to come after this or the loose axe ends up
+        // grappleable again.
+        if (becomesGrappable)
+        {
+            MakeGrappable();
+        }
+
+        // A BreakableWall listens for this and shatters; enemies take damage; anything
+        // else ignores it. Sent after our own juice so a wall's shatter feedback layers
+        // on top.
         if (hitCollider != null)
+        {
             hitCollider.SendMessageUpwards("OnThrownAxeStuck", hit.point,
                 SendMessageOptions.DontRequireReceiver);
-
-        if (becomesGrappable)
-            MakeGrappable();
+        }
     }
 
-    // Called when the surface the axe stuck into is destroyed out from under it. The
-    // axe is already unparented by the caller; here it stops being a frozen kinematic
-    // prop and falls under gravity as a loose body, staying grappleable and recallable.
+    // Called when the surface the axe stuck into is destroyed, disabled or breaks apart.
+    // The axe stops being a frozen kinematic prop and falls under gravity as a loose
+    // body, staying recallable.
     public void DropFromSurface()
     {
-        if (!stuck || dropped) return;
+        if (!stuck || dropped)
+        {
+            return;
+        }
         dropped = true;
 
+        ClearSurface();
         wobbleTimer = 0f;
 
-        if (rb == null) rb = GetComponent<Rigidbody>();
+        if (rb == null)
+        {
+            rb = GetComponent<Rigidbody>();
+        }
         if (rb != null)
         {
             rb.isKinematic = false;
@@ -709,7 +939,10 @@ public class ThrownAxe : MonoBehaviour
             rb.linearVelocity = Vector3.down * 1.5f + Random.insideUnitSphere * 0.6f;
             rb.angularVelocity = Random.insideUnitSphere * 2f;
 
-            if (looseStopsBeingGrappleTarget) RemoveGrappleTargeting();
+            if (looseStopsBeingGrappleTarget)
+            {
+                RemoveGrappleTargeting();
+            }
         }
 
         void RemoveGrappleTargeting()
@@ -719,7 +952,9 @@ public class ThrownAxe : MonoBehaviour
             SetLayerRecursive(gameObject, originalLayer);
 
             if (!string.IsNullOrEmpty(grappleTag) && gameObject.CompareTag(grappleTag))
+            {
                 gameObject.tag = string.IsNullOrEmpty(originalTag) ? "Untagged" : originalTag;
+            }
         }
 
         // The grapple trigger colliders were turned into triggers when it stuck; make
@@ -729,7 +964,10 @@ public class ThrownAxe : MonoBehaviour
         {
             foreach (Collider c in ownColliders)
             {
-                if (c == null) continue;
+                if (c == null)
+                {
+                    continue;
+                }
                 c.enabled = true;
                 c.isTrigger = false;
             }
@@ -746,7 +984,10 @@ public class ThrownAxe : MonoBehaviour
             {
                 foreach (Collider c in ownColliders)
                 {
-                    if (c == null) continue;
+                    if (c == null)
+                    {
+                        continue;
+                    }
                     c.enabled = true;
                     c.isTrigger = true;
                 }
@@ -765,14 +1006,20 @@ public class ThrownAxe : MonoBehaviour
         {
             int layer = LayerMask.NameToLayer(grappleLayerName);
             if (layer >= 0)
+            {
                 SetLayerRecursive(gameObject, layer);
+            }
             else
+            {
                 Debug.LogWarning("ThrownAxe: layer '" + grappleLayerName + "' does not exist. " +
                                  "Create it or clear grappleLayerName.", this);
+            }
         }
 
         if (!string.IsNullOrEmpty(grappleTag))
+        {
             gameObject.tag = grappleTag;
+        }
     }
 
     // ---------------------------------------------------------------- trail
@@ -809,11 +1056,20 @@ public class ThrownAxe : MonoBehaviour
             if (shader != null)
             {
                 mat = new Material(shader);
-                if (mat.HasProperty("_Color")) mat.SetColor("_Color", solid);
-                if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", solid);
+                if (mat.HasProperty("_Color"))
+                {
+                    mat.SetColor("_Color", solid);
+                }
+                if (mat.HasProperty("_BaseColor"))
+                {
+                    mat.SetColor("_BaseColor", solid);
+                }
             }
         }
-        if (mat != null) trail.material = mat;
+        if (mat != null)
+        {
+            trail.material = mat;
+        }
     }
 
     // ---------------------------------------------------------------- helpers
@@ -826,7 +1082,10 @@ public class ThrownAxe : MonoBehaviour
     static Vector3 ComputeSpinAxis(Vector3 vel)
     {
         Vector3 flat = new Vector3(vel.x, 0f, vel.z);
-        if (flat.sqrMagnitude < 0.01f) return Vector3.right;
+        if (flat.sqrMagnitude < 0.01f)
+        {
+            return Vector3.right;
+        }
 
         Vector3 axis = Vector3.Cross(Vector3.up, flat.normalized);
         return axis.sqrMagnitude > 0.001f ? axis.normalized : Vector3.right;
@@ -837,7 +1096,10 @@ public class ThrownAxe : MonoBehaviour
     void FitHeadOffset()
     {
         Renderer[] renderers = GetComponentsInChildren<Renderer>();
-        if (renderers.Length == 0) return;
+        if (renderers.Length == 0)
+        {
+            return;
+        }
 
         Bounds local = new Bounds();
         bool init = false;
@@ -854,21 +1116,33 @@ public class ThrownAxe : MonoBehaviour
 
                 Vector3 p = transform.InverseTransformPoint(corner);
                 if (!init) { local = new Bounds(p, Vector3.zero); init = true; }
-                else local.Encapsulate(p);
+                else
+                {
+                    local.Encapsulate(p);
+                }
             }
         }
 
-        if (!init) return;
+        if (!init)
+        {
+            return;
+        }
 
         Vector3 c = local.center;
         Vector3 e = local.extents;
 
         if (e.z >= e.x && e.z >= e.y)
+        {
             headLocalOffset = new Vector3(c.x, c.y, FarEnd(c.z, e.z));
+        }
         else if (e.y >= e.x)
+        {
             headLocalOffset = new Vector3(c.x, FarEnd(c.y, e.y), c.z);
+        }
         else
+        {
             headLocalOffset = new Vector3(FarEnd(c.x, e.x), c.y, c.z);
+        }
     }
 
     static float FarEnd(float center, float extent)
@@ -882,7 +1156,9 @@ public class ThrownAxe : MonoBehaviour
     {
         go.layer = layer;
         foreach (Transform child in go.transform)
+        {
             SetLayerRecursive(child.gameObject, layer);
+        }
     }
 
     void OnDrawGizmosSelected()

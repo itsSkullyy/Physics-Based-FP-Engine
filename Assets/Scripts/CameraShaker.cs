@@ -67,7 +67,10 @@ public class CameraShaker : MonoBehaviour
 
     void OnDestroy()
     {
-        if (Instance == this) Instance = null;
+        if (Instance == this)
+        {
+            Instance = null;
+        }
     }
 
     public void MarkDriven() => driven = true;
@@ -84,7 +87,10 @@ public class CameraShaker : MonoBehaviour
     public void AddTraumaAtPoint(Vector3 point, float amount, float fullRange, float maxRange)
     {
         float d = Vector3.Distance(transform.position, point);
-        if (d >= maxRange) return;
+        if (d >= maxRange)
+        {
+            return;
+        }
 
         float falloff = 1f - Mathf.InverseLerp(fullRange, maxRange, d);
         AddTrauma(amount * falloff);
@@ -115,42 +121,62 @@ public class CameraShaker : MonoBehaviour
     void Update()
     {
         float dt = useUnscaledTime ? Time.unscaledDeltaTime : Time.deltaTime;
-        if (dt <= 0f) return;
+        if (dt <= 0f)
+        {
+            return;
+        }
 
         dt = Mathf.Min(dt, 0.05f);
         noiseTime += dt * noiseFrequency;
-
         trauma = Mathf.Max(0f, trauma - traumaDecay * dt);
-        float shake = Mathf.Pow(trauma, traumaExponent);
 
-        Vector3 noisePos = Vector3.zero;
-        Vector3 noiseRot = Vector3.zero;
-
-        if (shake > 0.0001f)
-        {
-            noisePos = new Vector3(
-                Noise(seedA) * maxPositionShake,
-                Noise(seedB) * maxPositionShake,
-                Noise(seedC) * maxPositionShake * 0.5f) * shake;
-
-            noiseRot = new Vector3(
-                Noise(seedD) * maxRotationShake,
-                Noise(seedE) * maxRotationShake,
-                Noise(seedF) * maxRotationShake) * shake;
-        }
-
-        Spring(ref kickPos, ref kickPosVel, kickStiffness, kickDamping, dt);
-        Spring(ref kickRot, ref kickRotVel, kickStiffness, kickDamping, dt);
-        SpringFloat(ref fovPunch, ref fovVel, fovStiffness, fovDamping, dt);
+        TraumaNoise(out Vector3 noisePos, out Vector3 noiseRot);
+        UpdateKickSprings(dt);
 
         PositionOffset = noisePos + kickPos;
         RotationOffset = Quaternion.Euler(noiseRot + kickRot);
+        ApplyOffsets();
+    }
 
-        if (!driven)
+    // shake = trauma ^ exponent, so small knocks barely move it and big ones really do
+    void TraumaNoise(out Vector3 noisePos, out Vector3 noiseRot)
+    {
+        noisePos = Vector3.zero;
+        noiseRot = Vector3.zero;
+
+        float shake = Mathf.Pow(trauma, traumaExponent);
+        if (shake <= 0.0001f)
         {
-            transform.localPosition = baseLocalPos + PositionOffset;
-            transform.localRotation = baseLocalRot * RotationOffset;
+            return;
         }
+
+        noisePos = new Vector3(
+            Noise(seedA) * maxPositionShake,
+            Noise(seedB) * maxPositionShake,
+            Noise(seedC) * maxPositionShake * 0.5f) * shake;
+
+        noiseRot = new Vector3(
+            Noise(seedD) * maxRotationShake,
+            Noise(seedE) * maxRotationShake,
+            Noise(seedF) * maxRotationShake) * shake;
+    }
+
+    void UpdateKickSprings(float dt)
+    {
+        Spring(ref kickPos, ref kickPosVel, kickStiffness, kickDamping, dt);
+        Spring(ref kickRot, ref kickRotVel, kickStiffness, kickDamping, dt);
+        SpringFloat(ref fovPunch, ref fovVel, fovStiffness, fovDamping, dt);
+    }
+
+    // only moves itself when nothing else (the camera rig) is reading the offsets
+    void ApplyOffsets()
+    {
+        if (driven)
+        {
+            return;
+        }
+        transform.localPosition = baseLocalPos + PositionOffset;
+        transform.localRotation = baseLocalRot * RotationOffset;
     }
 
     float Noise(float seed)

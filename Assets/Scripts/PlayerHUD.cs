@@ -85,33 +85,62 @@ public class PlayerHUD : MonoBehaviour
 
     void Awake()
     {
-        if (controller == null) controller = GetComponent<FirstPersonCharacterController>();
-        if (controller == null) controller = GetComponentInChildren<FirstPersonCharacterController>();
-        if (health == null) health = GetComponent<PlayerHealth>();
-        if (health == null) health = GetComponentInChildren<PlayerHealth>();
-        if (slots == null) slots = GetComponent<WeaponSlots>();
-        if (slots == null) slots = GetComponentInChildren<WeaponSlots>();
-        if (axe == null && slots != null) axe = slots.axe;
-        if (axe == null) axe = GetComponentInChildren<BattleAxe>(true);
+        controller = FindOnPlayer(controller);
+        health = FindOnPlayer(health);
+        slots = FindOnPlayer(slots);
+        if (axe == null && slots != null)
+        {
+            axe = slots.axe;
+        }
+        if (axe == null)
+        {
+            axe = GetComponentInChildren<BattleAxe>(true);
+        }
 
         healthT = health != null ? health.Normalized : 1f;
     }
 
+    // the inspector value if set, otherwise this object, otherwise a child
+    T FindOnPlayer<T>(T current) where T : Component
+    {
+        if (current != null)
+        {
+            return current;
+        }
+        T found = GetComponent<T>();
+        return found != null ? found : GetComponentInChildren<T>();
+    }
+
     void OnEnable()
     {
-        if (health != null) health.Damaged += OnDamaged;
+        if (health != null)
+        {
+            health.Damaged += OnDamaged;
+        }
     }
 
     void OnDisable()
     {
-        if (health != null) health.Damaged -= OnDamaged;
+        if (health != null)
+        {
+            health.Damaged -= OnDamaged;
+        }
     }
 
     void OnDestroy()
     {
-        if (genAxeIcon != null) Destroy(genAxeIcon);
-        if (genGrappleIcon != null) Destroy(genGrappleIcon);
-        if (genEmptyIcon != null) Destroy(genEmptyIcon);
+        if (genAxeIcon != null)
+        {
+            Destroy(genAxeIcon);
+        }
+        if (genGrappleIcon != null)
+        {
+            Destroy(genGrappleIcon);
+        }
+        if (genEmptyIcon != null)
+        {
+            Destroy(genEmptyIcon);
+        }
     }
 
     void OnDamaged(float amount) => flashTimer = damageFlashTime;
@@ -126,18 +155,29 @@ public class PlayerHUD : MonoBehaviour
 
         float targetSpeed = 0f;
         if (controller != null)
+        {
             targetSpeed = Mathf.Clamp01(controller.CurrentSpeed / Mathf.Max(1f, SpeedReference));
+        }
         speedT = Mathf.Lerp(speedT, targetSpeed, k);
 
-        if (flashTimer > 0f) flashTimer -= dt;
+        if (flashTimer > 0f)
+        {
+            flashTimer -= dt;
+        }
     }
 
     float SpeedReference
     {
         get
         {
-            if (speedReference > 0.01f) return speedReference;
-            if (controller == null) return 30f;
+            if (speedReference > 0.01f)
+            {
+                return speedReference;
+            }
+            if (controller == null)
+            {
+                return 30f;
+            }
             return Mathf.Max(controller.maxSpeed, controller.dartMaxSpeed);
         }
     }
@@ -146,7 +186,10 @@ public class PlayerHUD : MonoBehaviour
 
     void OnGUI()
     {
-        if (hideWhenCursorFree && Cursor.lockState != CursorLockMode.Locked) return;
+        if (hideWhenCursorFree && Cursor.lockState != CursorLockMode.Locked)
+        {
+            return;
+        }
 
         EnsureTextures();
         EnsureStyles();
@@ -154,7 +197,10 @@ public class PlayerHUD : MonoBehaviour
         Color old = GUI.color;
 
         DrawBars();
-        if (showSlots && slots != null) DrawSlots();
+        if (showSlots && slots != null)
+        {
+            DrawSlots();
+        }
 
         GUI.color = old;
     }
@@ -162,7 +208,10 @@ public class PlayerHUD : MonoBehaviour
     void DrawBars()
     {
         int rows = (showHealth && health != null ? 1 : 0) + (showSpeed && controller != null ? 1 : 0);
-        if (rows == 0) return;
+        if (rows == 0)
+        {
+            return;
+        }
 
         float stack = rows * barHeight + (rows - 1) * barGap;
         float y = Screen.height - margin - stack;
@@ -171,7 +220,9 @@ public class PlayerHUD : MonoBehaviour
         {
             Color c = HealthColor(healthT);
             if (flashTimer > 0f)
+            {
                 c = Color.Lerp(c, damageFlash, flashTimer / Mathf.Max(0.01f, damageFlashTime));
+            }
 
             DrawBar(new Rect(margin, y, barWidth, barHeight), healthT, c);
             y += barHeight + barGap;
@@ -181,8 +232,10 @@ public class PlayerHUD : MonoBehaviour
         {
             Color c = SpeedColor(speedT);
             if (speedT >= 0.995f)
+            {
                 c = Color.Lerp(c, Color.white,
                     (Mathf.Sin(Time.unscaledTime * peakPulseSpeed) * 0.5f + 0.5f) * 0.35f);
+            }
 
             DrawBar(new Rect(margin, y, barWidth, barHeight), speedT, c);
         }
@@ -211,16 +264,24 @@ public class PlayerHUD : MonoBehaviour
         for (int i = 0; i < count; i++)
         {
             bool active = slots.Current == i;
-            if (!active && !showInactiveSlots) continue;
+            if (!active && !showInactiveSlots)
+            {
+                continue;
+            }
 
             Rect r = new Rect(right - slotSize, top + i * (slotSize + slotGap), slotSize, slotSize);
             if (active)
+            {
                 r = new Rect(r.x - activeGrow, r.y - activeGrow * 0.5f,
                              r.width + activeGrow, r.height + activeGrow);
+            }
 
             DrawSlotIcon(r, i, active);
 
-            if (!showSlotNumbers) continue;
+            if (!showSlotNumbers)
+            {
+                continue;
+            }
 
             Rect numRect = new Rect(r.x + 2f, r.y, 22f, 18f);
             if (iconShadow)
@@ -238,7 +299,10 @@ public class PlayerHUD : MonoBehaviour
     void DrawSlotIcon(Rect chip, int index, bool active)
     {
         Texture2D icon = IconFor(index);
-        if (icon == null) return;
+        if (icon == null)
+        {
+            return;
+        }
 
         float pad = chip.width * 0.06f;
         Rect iconRect = new Rect(chip.x + pad, chip.y + pad,
@@ -247,7 +311,10 @@ public class PlayerHUD : MonoBehaviour
         bool thrown = index == (int)WeaponSlots.Slot.Axe && axe != null && axe.IsThrown;
 
         Color tint = active ? Color.white : inactiveTint;
-        if (thrown) tint.a *= 0.35f;
+        if (thrown)
+        {
+            tint.a *= 0.35f;
+        }
 
         if (iconShadow)
         {
@@ -261,10 +328,16 @@ public class PlayerHUD : MonoBehaviour
         GUI.color = tint;
         GUI.DrawTexture(iconRect, icon, ScaleMode.ScaleToFit, true);
 
-        if (!thrown || !showRecallProgress) return;
+        if (!thrown || !showRecallProgress)
+        {
+            return;
+        }
 
         ThrownAxe live = axe.ActiveAxe;
-        if (live == null) return;
+        if (live == null)
+        {
+            return;
+        }
 
         Rect bar = new Rect(chip.x + chip.width * 0.15f, chip.yMax - 5f, chip.width * 0.7f, 3f);
 
@@ -297,8 +370,14 @@ public class PlayerHUD : MonoBehaviour
 
     Color SpeedColor(float t)
     {
-        if (t < 0.34f) return Color.Lerp(speedIdle, speedCruise, t / 0.34f);
-        if (t < 0.67f) return Color.Lerp(speedCruise, speedFast, (t - 0.34f) / 0.33f);
+        if (t < 0.34f)
+        {
+            return Color.Lerp(speedIdle, speedCruise, t / 0.34f);
+        }
+        if (t < 0.67f)
+        {
+            return Color.Lerp(speedCruise, speedFast, (t - 0.34f) / 0.33f);
+        }
         return Color.Lerp(speedFast, speedPeak, (t - 0.67f) / 0.33f);
     }
 
@@ -306,7 +385,10 @@ public class PlayerHUD : MonoBehaviour
 
     void EnsureStyles()
     {
-        if (numberStyle != null) return;
+        if (numberStyle != null)
+        {
+            return;
+        }
 
         numberStyle = new GUIStyle(GUI.skin.label)
         {
@@ -327,9 +409,18 @@ public class PlayerHUD : MonoBehaviour
             whiteTex.hideFlags = HideFlags.HideAndDontSave;
         }
 
-        if (genAxeIcon == null && axeIcon == null) genAxeIcon = MakeIcon(128, AxeShape);
-        if (genGrappleIcon == null && grappleIcon == null) genGrappleIcon = MakeIcon(128, GrappleShape);
-        if (genEmptyIcon == null) genEmptyIcon = MakeIcon(128, EmptyShape);
+        if (genAxeIcon == null && axeIcon == null)
+        {
+            genAxeIcon = MakeIcon(128, AxeShape);
+        }
+        if (genGrappleIcon == null && grappleIcon == null)
+        {
+            genGrappleIcon = MakeIcon(128, GrappleShape);
+        }
+        if (genEmptyIcon == null)
+        {
+            genEmptyIcon = MakeIcon(128, EmptyShape);
+        }
     }
 
     // ---------------------------------------------------------------- generated icons
@@ -354,7 +445,10 @@ public class PlayerHUD : MonoBehaviour
                             (x + 0.25f + sx * 0.5f) / size,
                             (y + 0.25f + sy * 0.5f) / size);
 
-                        if (inside(p)) a += 0.25f;
+                        if (inside(p))
+                        {
+                            a += 0.25f;
+                        }
                     }
                 }
 
@@ -373,7 +467,9 @@ public class PlayerHUD : MonoBehaviour
     static bool AxeShape(Vector2 p)
     {
         if (SegDist(p, new Vector2(0.26f, 0.10f), new Vector2(0.70f, 0.90f)) < 0.055f)
+        {
             return true;
+        }
 
         return InQuad(p,
             new Vector2(0.60f, 0.56f),
@@ -385,11 +481,16 @@ public class PlayerHUD : MonoBehaviour
     static bool GrappleShape(Vector2 p)
     {
         if (SegDist(p, new Vector2(0.28f, 0.08f), new Vector2(0.50f, 0.50f)) < 0.055f)
+        {
             return true;
+        }
 
         Vector2 c = new Vector2(0.55f, 0.66f);
         float d = (p - c).magnitude;
-        if (Mathf.Abs(d - 0.22f) > 0.058f) return false;
+        if (Mathf.Abs(d - 0.22f) > 0.058f)
+        {
+            return false;
+        }
 
         float ang = Mathf.Repeat(Mathf.Atan2(p.y - c.y, p.x - c.x) * Mathf.Rad2Deg, 360f);
         return ang >= 20f && ang <= 300f;
@@ -404,7 +505,10 @@ public class PlayerHUD : MonoBehaviour
     {
         Vector2 ab = b - a;
         float len = ab.sqrMagnitude;
-        if (len < 0.000001f) return (p - a).magnitude;
+        if (len < 0.000001f)
+        {
+            return (p - a).magnitude;
+        }
 
         float t = Mathf.Clamp01(Vector2.Dot(p - a, ab) / len);
         return (p - (a + ab * t)).magnitude;

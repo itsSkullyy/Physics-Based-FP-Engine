@@ -30,13 +30,25 @@ public class RunThroughProbe : MonoBehaviour
 
     void Evaluate(Collider other)
     {
-        if (wall == null) return;
-        if (!string.IsNullOrEmpty(playerTag) && !other.CompareTag(playerTag)) return;
+        if (wall == null)
+        {
+            return;
+        }
+        if (!string.IsNullOrEmpty(playerTag) && !other.CompareTag(playerTag))
+        {
+            return;
+        }
 
         Rigidbody body = other.attachedRigidbody;
-        if (body == null) return;
+        if (body == null)
+        {
+            return;
+        }
 
-        if (body.linearVelocity.magnitude < speedThreshold) return;
+        if (body.linearVelocity.magnitude < speedThreshold)
+        {
+            return;
+        }
 
         Vector3 contact = GetComponent<Collider>().ClosestPoint(body.position);
         wall.OnRunThrough(body, contact);

@@ -25,7 +25,10 @@ public class CourseTimer : MonoBehaviour
 
     public static CourseTimer Get()
     {
-        if (Instance != null) return Instance;
+        if (Instance != null)
+        {
+            return Instance;
+        }
 
         CourseTimer found = FindFirstObjectByType<CourseTimer>();
         if (found != null) { Instance = found; return Instance; }
@@ -41,7 +44,9 @@ public class CourseTimer : MonoBehaviour
         Instance = this;
 
         if (PlayerPrefs.HasKey(bestTimeKey))
+        {
             BestTime = PlayerPrefs.GetFloat(bestTimeKey);
+        }
 
         Running = true;
         Elapsed = 0f;
@@ -49,12 +54,18 @@ public class CourseTimer : MonoBehaviour
 
     void OnDestroy()
     {
-        if (Instance == this) Instance = null;
+        if (Instance == this)
+        {
+            Instance = null;
+        }
     }
 
     void Update()
     {
-        if (!Running || Paused) return;
+        if (!Running || Paused)
+        {
+            return;
+        }
         Elapsed += Time.unscaledDeltaTime;
     }
 
@@ -70,7 +81,10 @@ public class CourseTimer : MonoBehaviour
     /// Returns whether this run beat the previous best.
     public bool FinishRun()
     {
-        if (!Running) return false;
+        if (!Running)
+        {
+            return false;
+        }
         Running = false;
 
         bool newBest = !HasBestTime || Elapsed < BestTime;
