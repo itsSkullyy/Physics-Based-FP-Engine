@@ -264,7 +264,7 @@ public class PlayerHUD : MonoBehaviour
         for (int i = 0; i < count; i++)
         {
             bool active = slots.Current == i;
-            if (!active && !showInactiveSlots)
+            if ((!active && !showInactiveSlots) || !slots.Owns(i))
             {
                 continue;
             }

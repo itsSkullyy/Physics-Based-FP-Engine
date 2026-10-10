@@ -266,6 +266,12 @@ Seamless portals between different scenes. You can run, slide or dart through at
 - **NavMesh on the other side.** A scene with portals but no baked NavMesh (the tutorial, right now) gets one built from its colliders when it loads. Baking a `NavMeshSurface` there skips this.
 - **One player.** A streamed-in scene's own Player copy is awake for a frame before it gets switched off. `PortalManager.FindPlayer()` always returns the live one, and the camera shaker and input router won't let the copy take over. Restarting goes through `PortalManager.ReloadScene` so the carried-over player is cleared first.
 
+### Ability pickups
+
+`AbilityPickup.cs`, `AbilityTooltip.cs`
+
+Floating pickups that hand out the axe or the grapple. In the scene the game starts in, each one takes its ability off the player at load; touching it gives it back, switches to it and slides in a controls card on the left built from the player's current key bindings, plus an optional line about the room (Level Hint). `WeaponSlots` has `hasAxe` / `hasGrapple`: a slot you don't own is skipped when switching and hidden on the HUD, and without the grapple the whole `Grappling` component is off (no zip, swing or reticle). Arriving through a portal keeps what you had, and pickups you already own don't show. With no model under it a pickup builds a stand-in from primitives; add the real model as a child to replace it.
+
 ### Room builder
 
 `Assets/Editor/RoomBuilder.cs`
@@ -274,7 +280,7 @@ Editor tool at **Tools > ProBuilder Rooms > Convert Selection To Room**. It take
 
 ### Tutorial level
 
-A first draft of the tutorial level in `Mirror Grapple Scene` (rebuilt with the room builder). The flow is tutorial, then through the portal into `Grapple Scene`, then out through the exit portal that opens at the end, which brings you back to the tutorial at the `Arrival Portal`. The `Exit Portal` (Grapple Scene) opens floating in front of you when you finish, and the `Arrival Portal` (tutorial) opens just ahead of the tutorial start. Switch either one's `Open Placement` to `Where Placed` to use its spot in the scene instead. `LevelGoal.exitPortal` points at the exit. There's also a `FrustumErrorProbe.cs` debug script for portal rendering sitting in a stash on `Experimental-Changes`.
+A first draft of the tutorial level in `Mirror Grapple Scene` (rebuilt with the room builder). The flow is tutorial, then through the portal into `Grapple Scene`, then out through the exit portal that opens at the end, which brings you back to the tutorial at the `Arrival Portal`. The `Exit Portal` (Grapple Scene) opens floating in front of you when you finish, and the `Arrival Portal` (tutorial) opens just ahead of the tutorial start. Switch either one's `Open Placement` to `Where Placed` to use its spot in the scene instead. `LevelGoal.exitPortal` points at the exit. The tutorial starts you with movement only: the axe pickup sits in the start room in front of a breakable wall that seals the corridor (run-through breaking is off on it), and the grapple pickup is on the platform in the pit room, with a zip point up to the exit ledge and another at the wall-run hall so a fall is one zip from a retry. There's also a `FrustumErrorProbe.cs` debug script for portal rendering sitting in a stash on `Experimental-Changes`.
 
 ---
 

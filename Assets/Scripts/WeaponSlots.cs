@@ -26,6 +26,12 @@ public class WeaponSlots : MonoBehaviour
     [Header("Start")]
     [Range(0, 2)] public int startSlot = 0;
 
+    [Header("Abilities")]
+    [Tooltip("Whether the player has the axe. AbilityPickup takes it away at the start of the tutorial and gives it back when picked up. A slot you don't have is skipped when switching and hidden on the HUD.")]
+    public bool hasAxe = true;
+    [Tooltip("Whether the player has the grapple (zip and swing). Same as above.")]
+    public bool hasGrapple = true;
+
     [Header("Switching")]
     [Tooltip("Mouse wheel (and d-pad up/down) cycles slots. Ignored while swinging, " +
              "because the wheel is reeling the rope then.")]
@@ -52,6 +58,14 @@ public class WeaponSlots : MonoBehaviour
     /// Fires with the new slot index whenever the selection changes.
     public event Action<int> SlotChanged;
 
+    /// Fires when the player is given an ability they didn't have.
+    public event Action<Slot> AbilityUnlocked;
+
+    public bool Owns(int index) =>
+        index == (int)Slot.Axe ? hasAxe : index == (int)Slot.Grapple ? hasGrapple : true;
+
+    public bool Owns(Slot slot) => Owns((int)slot);
+
     float cooldown;
     bool scrollLatched;
     bool started;
@@ -76,6 +90,65 @@ public class WeaponSlots : MonoBehaviour
         }
 
         Current = Mathf.Clamp(startSlot, 0, SlotCount - 1);
+        if (!Owns(Current))
+        {
+            Current = FirstOwned();
+        }
+    }
+
+    int FirstOwned()
+    {
+        for (int i = 0; i < SlotCount; i++)
+        {
+            if (Owns(i))
+            {
+                return i;
+            }
+        }
+        return (int)Slot.Empty;
+    }
+
+    /// Gives or takes away the axe or the grapple. Taking away the slot you're holding
+    /// moves you to the first one you still have.
+    public void SetOwned(Slot slot, bool owned, bool equip = false)
+    {
+        if (slot == Slot.Empty || Owns(slot) == owned)
+        {
+            if (owned && equip)
+            {
+                Select((int)slot);
+            }
+            return;
+        }
+
+        if (slot == Slot.Axe)
+        {
+            hasAxe = owned;
+        }
+        else
+        {
+            hasGrapple = owned;
+        }
+
+        if (!Owns(Current))
+        {
+            Current = FirstOwned();
+        }
+        if (owned && equip)
+        {
+            Current = (int)slot;
+        }
+
+        if (started)
+        {
+            Apply();
+        }
+        SlotChanged?.Invoke(Current);
+
+        if (owned)
+        {
+            AbilityUnlocked?.Invoke(slot);
+        }
     }
 
     void OnEnable()
@@ -157,21 +230,36 @@ public class WeaponSlots : MonoBehaviour
 
     // ---------------------------------------------------------------- selection
 
-    /// One slot toward slot 1.
-    public void SelectUp() => Select(Current - 1);
+    /// One slot toward slot 1, skipping slots you don't have.
+    public void SelectUp() => Step(-1);
 
-    /// One slot toward slot 3. This is what an axe throw does.
-    public void SelectDown() => Select(Current + 1);
+    /// One slot toward slot 3, skipping slots you don't have. This is what an axe throw does.
+    public void SelectDown() => Step(1);
+
+    void Step(int dir)
+    {
+        for (int i = 1; i < SlotCount; i++)
+        {
+            int index = Wrap(Current + dir * i);
+            if (Owns(index))
+            {
+                Select(index);
+                return;
+            }
+        }
+    }
+
+    int Wrap(int index) => wrapAround
+        ? ((index % SlotCount) + SlotCount) % SlotCount
+        : Mathf.Clamp(index, 0, SlotCount - 1);
 
     public void Equip(Slot slot) => Select((int)slot);
 
     public void Select(int index)
     {
-        index = wrapAround
-            ? ((index % SlotCount) + SlotCount) % SlotCount
-            : Mathf.Clamp(index, 0, SlotCount - 1);
+        index = Wrap(index);
 
-        if (index == Current)
+        if (index == Current || !Owns(index))
         {
             return;
         }
@@ -207,6 +295,10 @@ public class WeaponSlots : MonoBehaviour
             {
                 grappling.Detach(false);
             }
+
+            // zip works from every slot, so without the grapple the whole component is off:
+            // no zip, no swing, no reticle
+            grappling.enabled = hasGrapple;
         }
     }
 

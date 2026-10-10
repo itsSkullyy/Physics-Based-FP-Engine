@@ -414,6 +414,8 @@ public static class GameSounds
 
     public static AudioClip NewBest => Make("NewBest", 1.4f, 146, -9f, () => Jingle(new[] { 262f, 330f, 392f, 523f, 659f, 784f }, 0.08f, 3f));
 
+    public static AudioClip AbilityGet => Make("AbilityGet", 1.1f, 149, -8f, () => Jingle(new[] { 392f, 494f, 587f, 784f }, 0.07f, 3f));
+
     // rising rush of air while the slit forms, a thump when it tears wide, then a shimmer
     // that rings out. The tear lands at about 0.5s, same as Portal's slit phase.
     public static AudioClip PortalOpen => Make("PortalOpen", 2.4f, 147, -4f, () =>
