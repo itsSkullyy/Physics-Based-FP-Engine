@@ -276,7 +276,7 @@ public class TacticalMap : MonoBehaviour
         wallRunWalls.Clear();
 
         Grappling g = FindFirstObjectByType<Grappling>();
-        FirstPersonCharacterController ctrl = FindFirstObjectByType<FirstPersonCharacterController>();
+        FirstPersonCharacterController ctrl = PortalManager.FindPlayer();
 
         if (ctrl != null)
         {

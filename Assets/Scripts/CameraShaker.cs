@@ -49,7 +49,13 @@ public class CameraShaker : MonoBehaviour
 
     void Awake()
     {
-        Instance = this;
+        // A scene streamed in through a portal wakes its own camera rig for a moment before
+        // it's switched off. That copy mustn't take over from the live one, or every shake
+        // after the second scene loads goes to a disabled camera.
+        if (Instance == null || !Instance.isActiveAndEnabled)
+        {
+            Instance = this;
+        }
 
         seedA = Random.value * 100f;
         seedB = Random.value * 100f;

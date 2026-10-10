@@ -1,12 +1,19 @@
+using System.Collections;
 using UnityEngine;
 
 // Floating pickup that ends the level. Bobs and spins in place with ambient JuiceFX dust;
-// on touch stops CourseTimer, grades the time against the rank thresholds below, and
-// hands off to LevelCompleteMenu.
+// on touch stops CourseTimer, grades the time against the rank thresholds below, shows
+// the results panel (the game keeps running) and tears the exit portal open.
 [RequireComponent(typeof(Collider))]
 public class LevelGoal : MonoBehaviour
 {
     public string playerTag = "Player";
+
+    [Header("Exit Portal")]
+    [Tooltip("Portal (with Start Closed ticked) that opens when the level is done. Put it wherever you want the exit to appear. Left empty, the first closed portal in this scene is used.")]
+    public Portal exitPortal;
+    [Tooltip("Seconds after the pickup before the portal starts opening, so the rank lands first.")]
+    public float exitPortalDelay = 0.9f;
 
     [Header("Float")]
     public float bobHeight = 0.35f;
@@ -129,7 +136,37 @@ public class LevelGoal : MonoBehaviour
             r.enabled = false;
         }
 
-        LevelCompleteMenu.Get().Show(elapsed, RankFor(elapsed), newBest);
+        Portal exit = FindExitPortal();
+        LevelCompleteMenu.Get().Show(elapsed, RankFor(elapsed), newBest, exit);
+        if (exit != null)
+        {
+            StartCoroutine(OpenExitAfterDelay(exit));
+        }
+    }
+
+    Portal FindExitPortal()
+    {
+        if (exitPortal != null)
+        {
+            return exitPortal;
+        }
+
+        foreach (Portal p in FindObjectsByType<Portal>(FindObjectsSortMode.None))
+        {
+            if (p.startClosed && p.gameObject.scene == gameObject.scene)
+            {
+                return p;
+            }
+        }
+        Debug.LogWarning("[LevelGoal] No exit portal set and no closed portal in this scene, so nothing opens at the end.", this);
+        return null;
+    }
+
+    // Realtime, since the pickup's impact freeze can drop the time scale for a moment.
+    IEnumerator OpenExitAfterDelay(Portal exit)
+    {
+        yield return new WaitForSecondsRealtime(exitPortalDelay);
+        exit.Open();
     }
 
     char RankFor(float time)

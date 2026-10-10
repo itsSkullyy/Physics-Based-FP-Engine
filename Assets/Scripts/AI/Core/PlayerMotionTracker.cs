@@ -118,7 +118,7 @@ public class PlayerMotionTracker : MonoBehaviour
             return t;
         }
 
-        FirstPersonCharacterController c = FindFirstObjectByType<FirstPersonCharacterController>();
+        FirstPersonCharacterController c = PortalManager.FindPlayer();
         return c != null ? c.gameObject.AddComponent<PlayerMotionTracker>() : null;
     }
 

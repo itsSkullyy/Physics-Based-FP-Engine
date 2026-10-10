@@ -11,9 +11,9 @@ Most of the game is built from code at runtime. Particles, hit effects, menus, s
 
 | Branch | What's on it |
 |---|---|
-| `main` | Everything below: movement, grapple, axe, course timer and menus, breakable walls, synthesised audio, and the full enemy AI system (Grunts, Stillwalker, ML-Agents training). This is the current build. |
+| `main` | Everything below: movement, grapple, axe, course timer and menus, breakable walls, synthesised audio, the full enemy AI system (Grunts, Stillwalker, ML-Agents training), and the portals, room builder and tutorial draft from `Experimental-Changes`. This is the current build. |
 | `skullyy-work` | The working branch the movement, combat and course features were built on. It was merged into `main` through PR #2 and has no work that `main` doesn't. It's basically `main` from before the AI went in. |
-| `Experimental-Changes` | Seamless cross-scene portals, a ProBuilder room conversion tool and a first draft of the tutorial level. Split off before the AI work, so it hasn't been merged and doesn't have any of the enemy or audio code. |
+| `Experimental-Changes` | Where the portals, room builder and tutorial draft were made. Now merged into `main`. |
 
 ## Controls
 
@@ -124,8 +124,8 @@ There are no audio files in the project. `Synth` generates every sound from code
 
 - The course clock starts as soon as the scene loads and shows at the top of the screen as `M:SS:MMM`. It runs on unscaled time on purpose, so hitstop and impact frames don't give you free time. Pausing sets a separate `Paused` flag to stop it.
 - The **level goal** is a floating, spinning pickup at the end of the course. Touching it stops the clock and grades your time against S/A/B/C/D thresholds (anything slower is an F). These are set per level in the inspector.
-- The **level complete** screen shows your time, the rank letter in its colour, and "New Best!" if you beat your saved record (stored in PlayerPrefs). Try Again reloads the scene.
-- **Pause menu** with Resume, Restart and Close Game.
+- Finishing doesn't pause anything. A **results panel** slides in on the right while you keep moving: your time, your best (or "New Best!", saved in PlayerPrefs), and the rank letter stamping down in its colour. Then the level's **exit portal** tears open and a marker on screen points at it. Going through takes you back to the tutorial, and the panel slides away a few seconds later.
+- **Pause menu** with Resume, Restart and Close Game. Restart reloads whichever scene you're standing in (the level or the tutorial).
 - `StartZone` / `FinishZone` are an older manual start gate and finish line. They still work but aren't needed now that the timer starts by itself.
 - `Deathplane` kills or damages the player and sends them back to a respawn point, going through `PlayerHealth` so death only ever happens one way.
 
@@ -244,9 +244,9 @@ Then press Play in `Stillwalker Training.unity`. More F8 recordings (different s
 
 ---
 
-## Experimental-Changes branch
+## Portals, room builder and tutorial
 
-Not merged into `main` yet.
+Built on `Experimental-Changes`, merged into `main` along with the enemy AI.
 
 ### Portals
 
@@ -260,6 +260,10 @@ Seamless portals between different scenes. You can run, slide or dart through at
 - **Crossing.** The teleport is checked in physics, but also against the camera every rendered frame. The camera is interpolated between physics steps, so at high speed the view could pass through the portal a frame before the body does, and you'd see a frame of the room you just left. A small lockout stops both checks from firing on the same crossing.
 - **Teleporting.** `Portal` has a transform that maps any position, rotation or velocity from one side to the other. The player gets moved with `FirstPersonCharacterController.TeleportTo`, which keeps the look direction correct and tells Cinemachine it was a teleport so the camera doesn't slide across. The thrown axe and grapple aim ray check their paths against portals too, since neither of them uses trigger colliders.
 - The portal surface is a thin box with a frame instead of a flat quad, so it still looks like it has depth from an angle and the near plane doesn't clip it while you're halfway through.
+- **Closed portals.** Tick `Start Closed` and a portal stays invisible and can't be crossed until something calls `Open()`. It then drops onto the floor under it, a slit of light forms top to bottom, and it tears open sideways with an overshoot, a burst of particles, a camera shake, a light flash and a synthesised whoosh. Opening one side opens its partner too. The level's exit portal and the arrival spot in the tutorial work this way.
+- **Enemies go through too.** Each open portal adds a NavMesh link from the floor in front of it to the floor in front of its partner, so an enemy's path to you runs through the portal like any other route. The moment an enemy steps on the link it's carried out the other side and keeps going. When you go through, enemies that saw you in the last 10 seconds (or heard you near the portal), and squads that knew where you were, get the far side as your last known spot. The Stillwalker measures distance through portals as well, so it keeps stalking at the right range instead of thinking you're a scene away.
+- **NavMesh on the other side.** A scene with portals but no baked NavMesh (the tutorial, right now) gets one built from its colliders when it loads. Baking a `NavMeshSurface` there skips this.
+- **One player.** A streamed-in scene's own Player copy is awake for a frame before it gets switched off. `PortalManager.FindPlayer()` always returns the live one, and the camera shaker and input router won't let the copy take over. Restarting goes through `PortalManager.ReloadScene` so the carried-over player is cleared first.
 
 ### Room builder
 
@@ -269,7 +273,7 @@ Editor tool at **Tools > ProBuilder Rooms > Convert Selection To Room**. It take
 
 ### Tutorial level
 
-A first draft of the tutorial level, built across `Grapple Scene` and `Mirror Grapple Scene` (the scene on the other side of the portals, mostly rebuilt with the room builder). There's also a `FrustumErrorProbe.cs` debug script for portal rendering sitting in a stash on this branch.
+A first draft of the tutorial level in `Mirror Grapple Scene` (rebuilt with the room builder). The flow is tutorial, then through the portal into `Grapple Scene`, then out through the exit portal that opens at the end, which brings you back to the tutorial at the `Arrival Portal`. Drag the `Exit Portal` (Grapple Scene) and `Arrival Portal` (tutorial) to wherever they should appear; `LevelGoal.exitPortal` points at the exit. There's also a `FrustumErrorProbe.cs` debug script for portal rendering sitting in a stash on `Experimental-Changes`.
 
 ---
 
@@ -283,7 +287,8 @@ Assets/
     AI/Stillwalker/   Stillwalker, ML agent, training config
     Audio/            Synth and the sound recipes
   Enemies/            drop-in folders for Mixamo models and animations (see its README)
-  Scenes/             Grapple Scene (main course), Stillwalker Training
+  Scenes/             Grapple Scene (main course), Mirror Grapple Scene (tutorial), Stillwalker Training
+  Editor/             room builder
   Shaders/, Materials/, Prefabs/, Physics/, Input/
 ```
 

@@ -164,6 +164,7 @@ public abstract class EnemyAgent : MonoBehaviour
         float dt = Time.deltaTime;
         if (!IsDead)
         {
+            UpdatePortalCrossing();
             UpdateSenses(dt);
             AfterSenses(dt);
         }
@@ -594,6 +595,47 @@ public abstract class EnemyAgent : MonoBehaviour
             Debug.Log($"[{name}] stuck again, giving up on the move", this);
         }
     }
+
+    // ---------------------------------------------------------------- portals
+
+    /// Last portal this enemy came out of, and when. Subclasses can react (a Grunt calling
+    /// it in, etc.); nothing needs to.
+    public Portal LastPortalExit { get; private set; }
+    public float LastPortalTime { get; private set; } = -99f;
+
+    // Open portals add NavMesh links between scenes, so a path to the player on the other
+    // side runs through one. Left alone the agent would walk that link in a straight line
+    // across the gap between the two scenes, so the moment it steps on, it gets carried out
+    // the far side instead and carries on to wherever it was going.
+    void UpdatePortalCrossing()
+    {
+        if (!NavReady || !nav.isOnOffMeshLink)
+        {
+            return;
+        }
+        Portal portal = nav.currentOffMeshLinkData.owner as Portal;
+        if (portal == null)
+        {
+            return;
+        }
+
+        bool wasMoving = !nav.isStopped;
+        if (!portal.CarryAgent(nav))
+        {
+            return;
+        }
+
+        LastPortalExit = portal.LinkedPortal;
+        LastPortalTime = Time.time;
+        ClearStuck();
+        if (wasMoving)
+        {
+            nav.SetDestination(moveTarget);
+        }
+        OnCameThroughPortal(portal);
+    }
+
+    protected virtual void OnCameThroughPortal(Portal entered) { }
 
     void ClearStuck()
     {

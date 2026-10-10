@@ -2,7 +2,7 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 
 // Gamepad-and-keyboard navigation helper for the project's IMGUI popups. IMGUI only
-// reacts to real mouse clicks, so every button menu (PauseMenu, LevelCompleteMenu)
+// reacts to real mouse clicks, so every button menu (PauseMenu)
 // needs a manual "selected index + confirm" loop - centralized here so they all
 // navigate and highlight the same way.
 public static class GamepadMenu

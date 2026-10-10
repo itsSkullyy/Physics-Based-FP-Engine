@@ -158,7 +158,12 @@ public class PlayerInputRouter : MonoBehaviour
 
     void Awake()
     {
-        Instance = this;
+        // same as CameraShaker: a streamed-in scene's Player copy wakes briefly and
+        // mustn't steal the singleton from the live router
+        if (Instance == null || !Instance.isActiveAndEnabled)
+        {
+            Instance = this;
+        }
 
         BuildRegistry();
 

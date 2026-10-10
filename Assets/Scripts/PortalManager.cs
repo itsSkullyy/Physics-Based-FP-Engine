@@ -2,6 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using Unity.Cinemachine;
 using UnityEngine;
+using UnityEngine.AI;
 using UnityEngine.SceneManagement;
 
 // Cross-scene portal support. Handles additive scene streaming (ref-counted, with an
@@ -12,6 +13,10 @@ using UnityEngine.SceneManagement;
 // second scene additively would otherwise spawn a second player and a second camera.
 //
 // Auto-spawned the first time any Portal needs it - nothing to place by hand.
+//
+// Restarting has to go through ReloadScene/RestartCurrentScene rather than a plain
+// SceneManager.LoadScene: the player and cameras live in DontDestroyOnLoad, so a plain
+// reload would bring the scene's own Player up next to the old one.
 [DefaultExecutionOrder(-80)]
 public class PortalManager : MonoBehaviour
 {
@@ -40,12 +45,21 @@ public class PortalManager : MonoBehaviour
 
         SceneManager.sceneLoaded += OnSceneLoaded;
         ResolvePersistentObjects();
+        startScene = SceneManager.GetActiveScene();
+        PlayerSceneName = startScene.name;
     }
+
+    Scene startScene;
 
     void OnDestroy()
     {
         if (Instance == this) Instance = null;
         SceneManager.sceneLoaded -= OnSceneLoaded;
+
+        foreach (List<NavMeshDataInstance> list in builtNavMeshes.Values)
+            foreach (NavMeshDataInstance instance in list)
+                instance.Remove();
+        builtNavMeshes.Clear();
     }
 
     // ---------------------------------------------------------------- player/camera persistence
@@ -99,12 +113,114 @@ public class PortalManager : MonoBehaviour
         }
     }
 
+    /// The one live player. A scene streamed in through a portal brings its own Player rig,
+    /// and that copy is awake for a moment before it gets switched off, so a plain
+    /// FindFirstObjectByType can land on the copy. Anything that grabs the player in Awake
+    /// should come through here.
+    public static FirstPersonCharacterController FindPlayer()
+    {
+        if (Instance != null && Instance.persistentPlayer != null)
+        {
+            FirstPersonCharacterController c = Instance.persistentPlayer.GetComponentInChildren<FirstPersonCharacterController>();
+            if (c != null) return c;
+        }
+        return FindFirstObjectByType<FirstPersonCharacterController>();
+    }
+
+    /// Scene the player is standing in. The active scene never changes when walking through
+    /// a portal, so this is tracked separately for restarts.
+    public string PlayerSceneName { get; private set; }
+
+    public void NotePlayerEntered(Scene scene)
+    {
+        if (scene.IsValid()) PlayerSceneName = scene.name;
+    }
+
+    /// Restarts whichever scene the player is in right now (the level, or the tutorial).
+    public static void RestartCurrentScene()
+    {
+        string scene = Instance != null && !string.IsNullOrEmpty(Instance.PlayerSceneName)
+            ? Instance.PlayerSceneName
+            : SceneManager.GetActiveScene().name;
+        ReloadScene(scene);
+    }
+
+    /// Fresh load of one scene, throwing away the carried-over player, cameras and this
+    /// manager first so the new scene starts exactly like pressing Play on it.
+    public static void ReloadScene(string sceneName)
+    {
+        Time.timeScale = 1f;
+
+        if (Instance != null)
+        {
+            if (Instance.persistentPlayer != null) Destroy(Instance.persistentPlayer);
+            if (Instance.persistentCamera != null) Destroy(Instance.persistentCamera);
+            if (Instance.persistentVcam != null) Destroy(Instance.persistentVcam);
+            Destroy(Instance.gameObject);
+            Instance = null;
+        }
+
+        SceneManager.LoadScene(sceneName, LoadSceneMode.Single);
+    }
+
     void OnSceneLoaded(Scene scene, LoadSceneMode mode)
     {
-        if (mode != LoadSceneMode.Additive) return;
+        if (mode == LoadSceneMode.Single)
+        {
+            OnSingleSceneLoaded(scene);
+            return;
+        }
 
         ResolvePersistentObjects();
         DisableDuplicatePlayerObjects(scene);
+        StartCoroutine(EnsureNavMesh(scene));
+    }
+
+    // Something loaded a scene the normal way while this manager was carrying a player over.
+    // If the new scene has its own player, the carried-over one is stale: drop it and start
+    // tracking the new one, and forget every scene load from before.
+    void OnSingleSceneLoaded(Scene scene)
+    {
+        // the scene this manager woke up in finishing its own load, nothing is stale
+        if (scene == startScene)
+        {
+            StartCoroutine(EnsureNavMesh(scene));
+            return;
+        }
+        startScene = scene;
+
+        bool sceneHasOwnPlayer = false;
+        foreach (GameObject root in scene.GetRootGameObjects())
+        {
+            if (root.GetComponentInChildren<FirstPersonCharacterController>(true) != null)
+            {
+                sceneHasOwnPlayer = true;
+                break;
+            }
+        }
+
+        if (sceneHasOwnPlayer && persistentPlayer != null && persistentPlayer.scene != scene)
+        {
+            Destroy(persistentPlayer);
+            if (persistentCamera != null) Destroy(persistentCamera);
+            if (persistentVcam != null) Destroy(persistentVcam);
+            persistentPlayer = persistentCamera = persistentVcam = null;
+        }
+
+        StopAllCoroutines();
+        sceneRefs.Clear();
+        ResolvePersistentObjects();
+        PlayerSceneName = scene.name;
+
+        // The new scene's portals asked for their linked scenes before this ran, against the
+        // old bookkeeping, so ask again.
+        foreach (Portal portal in Portal.ActivePortals)
+        {
+            if (portal != null && portal.gameObject.scene == scene)
+                RequestSceneLoad(portal.linkedSceneName);
+        }
+
+        StartCoroutine(EnsureNavMesh(scene));
     }
 
     void DisableDuplicatePlayerObjects(Scene scene)
@@ -141,6 +257,91 @@ public class PortalManager : MonoBehaviour
                 cam.gameObject.SetActive(false);
             }
         }
+    }
+
+    // ---------------------------------------------------------------- runtime navmesh
+
+    readonly Dictionary<string, List<NavMeshDataInstance>> builtNavMeshes = new Dictionary<string, List<NavMeshDataInstance>>();
+
+    // Enemies follow the player through portals, which needs NavMesh on both sides. A scene
+    // with portals but nothing baked under them (the tutorial, at the moment) gets a NavMesh
+    // built from its colliders when it loads, so nothing has to be baked by hand for it.
+    IEnumerator EnsureNavMesh(Scene scene)
+    {
+        // one frame so the scene's portals have registered and duplicates are switched off
+        yield return null;
+        if (!scene.isLoaded || builtNavMeshes.ContainsKey(scene.name)) yield break;
+
+        // a scene with its own bake is left alone, even if a portal sits off the edge of it
+        foreach (GameObject root in scene.GetRootGameObjects())
+        {
+            foreach (Unity.AI.Navigation.NavMeshSurface surface in root.GetComponentsInChildren<Unity.AI.Navigation.NavMeshSurface>())
+            {
+                if (surface.navMeshData != null) yield break;
+            }
+        }
+
+        bool needsMesh = false;
+        foreach (Portal portal in Portal.ActivePortals)
+        {
+            if (portal == null || portal.gameObject.scene != scene || !portal.enemiesCanPass) continue;
+            if (!portal.HasNavMeshInFront()) needsMesh = true;
+        }
+        if (!needsMesh) yield break;
+
+        if (!SceneBounds(scene, out Bounds bounds)) yield break;
+        bounds.Expand(4f);
+
+        List<NavMeshBuildSource> sources = new List<NavMeshBuildSource>();
+        NavMeshBuilder.CollectSources(bounds, ~0, NavMeshCollectGeometry.PhysicsColliders, 0,
+            new List<NavMeshBuildMarkup>(), sources);
+        sources.RemoveAll(IsNotLevelGeometry);
+
+        List<NavMeshDataInstance> instances = new List<NavMeshDataInstance>();
+        builtNavMeshes[scene.name] = instances;
+
+        for (int i = 0; i < NavMesh.GetSettingsCount(); i++)
+        {
+            NavMeshBuildSettings settings = NavMesh.GetSettingsByIndex(i);
+            NavMeshData data = new NavMeshData(settings.agentTypeID);
+            instances.Add(NavMesh.AddNavMeshData(data));
+            yield return NavMeshBuilder.UpdateNavMeshDataAsync(data, settings, sources, bounds);
+        }
+
+        Debug.Log($"[PortalManager] '{scene.name}' had no NavMesh by its portals, so one was built at load for enemies to follow you into it. Baking a NavMeshSurface there skips this.");
+    }
+
+    static bool SceneBounds(Scene scene, out Bounds bounds)
+    {
+        bounds = default;
+        bool any = false;
+        foreach (GameObject root in scene.GetRootGameObjects())
+        {
+            if (!root.activeInHierarchy) continue;
+            foreach (Collider c in root.GetComponentsInChildren<Collider>())
+            {
+                if (c.isTrigger) continue;
+                // kill planes and the like are huge and would pull the other scene in too
+                if (c.bounds.size.x > 1000f || c.bounds.size.z > 1000f) continue;
+                if (!any) { bounds = c.bounds; any = true; }
+                else bounds.Encapsulate(c.bounds);
+            }
+        }
+        return any;
+    }
+
+    // Only static level geometry. Anything that moves, the player, enemies and the portals'
+    // own trigger volumes would leave holes or bumps in the mesh.
+    static bool IsNotLevelGeometry(NavMeshBuildSource source)
+    {
+        Collider c = source.component as Collider;
+        if (c == null) return false;
+        if (c.isTrigger) return true;
+        if (c.attachedRigidbody != null && !c.attachedRigidbody.isKinematic) return true;
+        if (c.GetComponentInParent<NavMeshAgent>() != null) return true;
+        if (c.GetComponentInParent<FirstPersonCharacterController>() != null) return true;
+        if (c.GetComponentInParent<Portal>() != null) return true;
+        return false;
     }
 
     // ---------------------------------------------------------------- scene streaming
@@ -194,9 +395,12 @@ public class PortalManager : MonoBehaviour
     {
         r.loading = true;
 
-        if (SceneManager.GetSceneByName(sceneName).isLoaded)
+        Scene existing = SceneManager.GetSceneByName(sceneName);
+        if (existing.IsValid())
         {
-            r.loaded = true;
+            // already loaded, or already on its way in from an earlier request
+            while (existing.IsValid() && !existing.isLoaded) yield return null;
+            r.loaded = existing.isLoaded;
             r.loading = false;
             yield break;
         }
@@ -233,6 +437,11 @@ public class PortalManager : MonoBehaviour
         if (scene.isLoaded)
         {
             UnregisterScenePortals(sceneName);
+            if (builtNavMeshes.TryGetValue(sceneName, out List<NavMeshDataInstance> built))
+            {
+                foreach (NavMeshDataInstance instance in built) instance.Remove();
+                builtNavMeshes.Remove(sceneName);
+            }
             yield return SceneManager.UnloadSceneAsync(scene);
         }
 

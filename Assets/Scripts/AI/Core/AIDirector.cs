@@ -133,6 +133,7 @@ public class AIDirector : MonoBehaviour
         }
         Instance = this;
         FindPlayer();
+        Portal.PlayerTravelled += OnPlayerTravelled;
 
         // F6 menu, editor/dev builds only
         if ((Application.isEditor || Debug.isDebugBuild) && GetComponent<AIDebugMenu>() == null)
@@ -143,6 +144,7 @@ public class AIDirector : MonoBehaviour
 
     void OnDestroy()
     {
+        Portal.PlayerTravelled -= OnPlayerTravelled;
         if (PlayerHealth != null)
         {
             PlayerHealth.Respawned -= ResetAll;
@@ -164,7 +166,9 @@ public class AIDirector : MonoBehaviour
             return;
         }
 
-        Controller = FindFirstObjectByType<FirstPersonCharacterController>();
+        // not FindFirstObjectByType: when this scene is streamed in through a portal its own
+        // Player copy is still awake here and could be picked instead of the real one
+        Controller = PortalManager.FindPlayer();
         if (Controller == null)
         {
             return;
@@ -188,6 +192,64 @@ public class AIDirector : MonoBehaviour
         if (Axe != null)
         {
             Axe.AxeHit += OnAxeHit;
+        }
+    }
+
+    // ---------------------------------------------------------------- portals
+
+    [Header("Portals")]
+    [Tooltip("Enemies that saw the player this recently (or heard them near the portal) know where they went and follow them through.")]
+    public float portalFollowMemory = 10f;
+    [Tooltip("How close to the portal a heard noise has to be for the enemy to guess the player went through.")]
+    public float portalHeardRadius = 15f;
+
+    // The player stepping through a portal is, to anyone chasing them, them running out of
+    // sight round a corner. Whoever was on their trail gets the far side as the last known
+    // spot, and their path there runs through the portal's NavMesh link.
+    void OnPlayerTravelled(Portal entered, Portal exited)
+    {
+        if (Player == null || exited == null)
+        {
+            return;
+        }
+
+        Vector3 there = Player.Center;
+        Vector3 velocity = PlayerBody != null ? PlayerBody.linearVelocity : Vector3.zero;
+
+        foreach (EnemyAgent e in enemies)
+        {
+            if (e == null || e.IsDead)
+            {
+                continue;
+            }
+
+            if (e.PlayerVisible || e.TimeSinceSeen < portalFollowMemory)
+            {
+                e.Board.Set(BB.LastSeenPos, there);
+            }
+
+            bool heardNearPortal = e.TimeSinceHeard < portalFollowMemory
+                && Vector3.Distance(e.Board.Get(BB.HeardPos, e.transform.position), entered.transform.position) < portalHeardRadius;
+            if (heardNearPortal)
+            {
+                e.Board.Set(BB.HeardPos, there);
+            }
+        }
+
+        if (Time.time - Global.Get(BB.SquadLastKnownAt, -999f) < portalFollowMemory)
+        {
+            Global.Set(BB.SquadLastKnown, there);
+        }
+
+        foreach (GruntSquad squad in squads)
+        {
+            if (squad == null || squad.TimeSinceKnown >= portalFollowMemory)
+            {
+                continue;
+            }
+            squad.Board.Set(BB.KnownPos, there);
+            squad.Board.Set(BB.KnownVel, velocity);
+            squad.Board.Set(BB.KnownAt, Time.time);
         }
     }
 

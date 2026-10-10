@@ -72,9 +72,7 @@ public class PauseMenu : MonoBehaviour
             return;
         }
 
-        // the level complete screen has its own buttons, no pausing over it
-        bool levelDone = LevelCompleteMenu.Instance != null && LevelCompleteMenu.Instance.Showing;
-        if (pressed && !levelDone)
+        if (pressed)
         {
             Open();
         }
@@ -124,11 +122,12 @@ public class PauseMenu : MonoBehaviour
         CourseTimer.Get().Paused = false;
     }
 
+    // Restarts the scene you're standing in (the level or the tutorial). Goes through
+    // PortalManager since the player is carried between scenes and a plain reload would
+    // leave the old one alive next to the new one.
     void Restart()
     {
-        Time.timeScale = 1f;
-        UnityEngine.SceneManagement.SceneManager.LoadScene(
-            UnityEngine.SceneManagement.SceneManager.GetActiveScene().buildIndex);
+        PortalManager.RestartCurrentScene();
     }
 
     void QuitGame()

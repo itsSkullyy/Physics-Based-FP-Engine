@@ -414,6 +414,34 @@ public static class GameSounds
 
     public static AudioClip NewBest => Make("NewBest", 1.4f, 146, -9f, () => Jingle(new[] { 262f, 330f, 392f, 523f, 659f, 784f }, 0.08f, 3f));
 
+    // rising rush of air while the slit forms, a thump when it tears wide, then a shimmer
+    // that rings out. The tear lands at about 0.5s, same as Portal's slit phase.
+    public static AudioClip PortalOpen => Make("PortalOpen", 2.4f, 147, -4f, () =>
+    {
+        LowPass air = new LowPass();
+        Osc thump = new Osc();
+        Osc a = new Osc();
+        Osc b = new Osc();
+        Osc c = new Osc();
+        return (t, r) =>
+        {
+            float rise = Mathf.Clamp01(t / 0.5f);
+            float whoosh = air.Next(Noise(r), Mathf.Lerp(180f, 2800f, rise * rise)) * Hump(t, 1.3f);
+
+            float tear = t - 0.5f;
+            if (tear < 0f)
+            {
+                return Sat(whoosh * 0.9f, 1.5f);
+            }
+
+            float boom = thump.Sine(Mathf.Lerp(95f, 38f, Mathf.Clamp01(tear / 0.45f))) * Env(tear, 0.002f, 5f);
+            float wobble = 1f + 0.006f * Mathf.Sin(2f * Mathf.PI * 6f * t);
+            float shimmer = (a.Sine(392f * wobble) + b.Sine(587f * wobble) * 0.7f + c.Sine(784f * wobble) * 0.5f)
+                            * Env(tear, 0.12f, 1.5f) * 0.3f;
+            return Sat(whoosh * 0.9f + boom + shimmer, 1.5f);
+        };
+    });
+
     static System.Func<float, System.Random, float> Jingle(float[] notes, float step, float lastDecay)
     {
         Osc a = new Osc();

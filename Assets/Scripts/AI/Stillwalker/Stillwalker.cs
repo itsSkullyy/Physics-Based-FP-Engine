@@ -545,12 +545,9 @@ public partial class Stillwalker : EnemyAgent, IZipTarget
         return justLanded || player.GroundedTime > groundedTooLong;
     }
 
-    float DistToPlayer()
-    {
-        Vector3 d = player.Feet - transform.position;
-        d.y = 0f;
-        return d.magnitude;
-    }
+    // through a portal if that's shorter, so it keeps its stalking distance when you're
+    // on the other side of one instead of thinking you're a whole scene away
+    float DistToPlayer() => Portal.TravelDistance(transform.position, player.Feet);
 
     bool PolicyReady => Policy != null && Policy.PolicyActive && !DebugIgnorePolicy;
     bool PolicyRetreats => PolicyReady && DistToPlayer() <= policyMaxRetreatDistance;
@@ -612,11 +609,7 @@ public partial class Stillwalker : EnemyAgent, IZipTarget
         }
 
         Vector3[] corners = navPath.corners;
-        float length = 0f;
-        for (int i = 1; i < corners.Length; i++)
-        {
-            length += Vector3.Distance(corners[i - 1], corners[i]);
-        }
+        float length = Portal.PathLength(corners);
         if (corners.Length > 0)
         {
             length += Vector3.Distance(corners[corners.Length - 1], hit.position);
