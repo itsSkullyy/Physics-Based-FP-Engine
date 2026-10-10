@@ -3,49 +3,67 @@ using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.ProBuilder;
-using UnityEngine.ProBuilder.MeshOperations;
 using UnityEngine.SceneManagement;
 
-// Grey-box of the 16-room tutorial from the level design doc, built out of ProBuilder
-// cubes the same way the existing obstacles are: Ground layer, non-convex mesh colliders,
-// Gridbox prototype materials, wall-run walls red on the WallRun layer and tag, and the
-// project's own Grapple Point, BreakableWall and Portal prefabs.
+// Grey-box of the 16-room tutorial from the level design doc.
 //
-// USE: Tools > Tutorial Blockout > Build Blockout Scene. The first run copies Mirror
-// Grapple Scene to "Tutorial Blockout" (player, camera, portals and lighting come with
-// it), clears the old tutorial geometry out of the copy and builds the new layout under
-// one "Tutorial Blockout" object. Running it again rebuilds that object from scratch, so
-// tune the numbers below and rerun rather than hand-editing what it made - or stop using
-// the builder once you start detailing by hand.
+// Every room is an inverted-hull ProBuilder cube made with RoomBuilder.ConvertToRoom, the
+// same as Tools > ProBuilder Rooms > Convert Selection To Room, with real doorway holes
+// cut into it. Corridors are inverted hulls too, open at both ends. Inside the rooms,
+// platforms and obstacles are solid ProBuilder cubes on the Ground layer like the existing
+// ones: light grey to stand on, blue obstacles, red wall-run walls (WallRun layer + tag),
+// orange pogo surfaces (PogoSurface), glass breakables, brown axe targets. Grapple points
+// are the Grapple Point prefab with a green light.
 //
-// Everything is placed in metres relative to the root at (1900, 0, 0), the same far-off
-// spot the tutorial already uses so it never overlaps Grapple Scene when both are loaded.
-// x runs along Act 1, the route then turns back along -x for Act 2 and out along +x again
-// for Act 3, with the Gauntlet at the end.
+// No pit kills you. Every pit has 2 m steps (vaultable) back up, so falling costs a climb.
+//
+// USE: Tools > Tutorial Blockout > Build Blockout Scene. It builds into the Tutorial
+// Blockout scene (a copy of Mirror Grapple Scene), replacing everything under the
+// "Tutorial Blockout" object, and also adds the arrival portal to Grapple Scene that the
+// tutorial's exit portal leads to.
+//
+// Each room is laid out in its own frame: you come in through the -x wall at x = 0, z = 0,
+// standing on y = 0, and x runs forward. Rooms are chained exit to entry by 6 m corridors,
+// turning left (N exit) or right (S exit) as they go, so a room can be resized without
+// moving the ones after it by hand.
 public static class TutorialBlockoutBuilder
 {
-    const string SourceScene = "Assets/Scenes/Mirror Grapple Scene.unity";
-    const string BlockoutScene = "Assets/Scenes/Tutorial Blockout.unity";
+    // Scenes are found by name, so they can live in any folder (Assets/Scenes/In Build...).
+    const string SourceSceneName = "Mirror Grapple Scene";
+    const string BlockoutSceneName = "Tutorial Blockout";
+    const string LevelSceneName = "Grapple Scene";
     const string RootName = "Tutorial Blockout";
     const string Materials = "Assets/Materials/Thirdparty/Ciathyza/Gridbox Prototype Materials/Materials/URP/";
+    const string GlassPath = "Assets/Materials/Blockout Glass.mat";
     static readonly Vector3 Origin = new Vector3(1900f, 0f, 0f);
 
-    const float T = 0.5f;          // wall, floor and ceiling thickness
     const float DoorW = 4f;
     const float DoorH = 4f;
-    const float Eye = 1.25f;       // player root height above the floor
+    const float CorridorLength = 6f;
+    const float Eye = 1.25f;        // player root height above the floor
+    const float Rise = 2f;          // tallest step you can always vault
 
     static readonly Color Blue = new Color(0.45f, 0.85f, 1f, 1f);
     static readonly Color Orange = new Color(1f, 0.62f, 0.2f, 1f);
     static readonly Color Green = new Color(0.45f, 1f, 0.55f, 1f);
     static readonly Color Gold = new Color(1f, 0.85f, 0.3f, 1f);
+    static readonly Color ExitLight = new Color(1f, 0.85f, 0.45f, 1f);
 
-    static Material floorMat, wallMat, obstacleMat, wallRunMat, exitMat;
+    static Material hullMat, floorMat, obstacleMat, wallRunMat, exitMat, pogoMat, targetMat, glassMat;
     static int groundLayer, wallRunLayer;
-    static GameObject grapplePointPrefab, breakablePrefab;
-    static Transform room;          // the room being built
-    static float roomBottom;        // its lowest floor, solid floors are filled down to here
+    static GameObject grapplePointPrefab, breakablePrefab, portalPrefab;
     static int built;
+
+    // the room being built
+    static Transform root, room;
+    static float rL, rZ0, rZ1, rY0, rY1;
+    static bool rHasEntry;
+    static char exitSide;
+    static float exitAt, exitSill;
+
+    // where the next room's entry goes
+    static Vector3 cursorPos;
+    static float cursorYaw;
 
     // ---------------------------------------------------------------- menu
 
@@ -56,8 +74,7 @@ public static class TutorialBlockoutBuilder
         {
             return;
         }
-        string result = Build();
-        EditorUtility.DisplayDialog("Tutorial Blockout", result, "OK");
+        EditorUtility.DisplayDialog("Tutorial Blockout", Build(), "OK");
     }
 
     /// For -batchmode -executeMethod TutorialBlockoutBuilder.BuildFromCommandLine
@@ -68,39 +85,77 @@ public static class TutorialBlockoutBuilder
 
     static string Build()
     {
-        if (AssetDatabase.LoadAssetAtPath<SceneAsset>(BlockoutScene) == null)
+        string BlockoutScene = FindScene(BlockoutSceneName);
+        if (BlockoutScene == null)
         {
-            if (!AssetDatabase.CopyAsset(SourceScene, BlockoutScene))
+            string source = FindScene(SourceSceneName);
+            if (source == null)
             {
-                return "Couldn't copy " + SourceScene + " to " + BlockoutScene + ".";
+                return $"Couldn't find a '{BlockoutSceneName}' scene, or '{SourceSceneName}' to copy one from.";
             }
-            AddToBuildSettings(BlockoutScene);
+            string folder = System.IO.Path.GetDirectoryName(FindScene(LevelSceneName) ?? source).Replace('\\', '/');
+            BlockoutScene = folder + "/" + BlockoutSceneName + ".unity";
+            if (!AssetDatabase.CopyAsset(source, BlockoutScene))
+            {
+                return "Couldn't copy " + source + " to " + BlockoutScene + ".";
+            }
         }
+        AddToBuildSettings(BlockoutScene);
 
-        Scene scene = EditorSceneManager.OpenScene(BlockoutScene, OpenSceneMode.Single);
         if (!LoadAssets(out string problem))
         {
             return problem;
         }
 
+        Scene scene = EditorSceneManager.OpenScene(BlockoutScene, OpenSceneMode.Single);
         ClearOldLayout(scene);
 
-        GameObject rootGo = new GameObject(RootName);
-        rootGo.transform.position = Origin;
+        root = new GameObject(RootName).transform;
+        root.position = Origin;
+        cursorPos = Origin;
+        cursorYaw = 0f;
         built = 0;
 
-        BuildAct1(rootGo.transform);
-        BuildAct2(rootGo.transform);
-        BuildAct3(rootGo.transform);
-        BuildGauntlet(rootGo.transform);
-        PlacePlayerAtStart(scene);
+        Room01Arrival();
+        Room02JumpYard();
+        Room03VaultCourtyard();
+        Room04Slides();
+        Room05WallRunPit();
+        Room06Tower();
+        Room07TheRun();
+        Room08AxeShrine();
+        Room09ButtonDoor();
+        Room10PogoHall();
+        Room11GlassRun();
+        Room12TheWell();
+        Room13ZipCanyon();
+        Room14SwingGorge();
+        Room15AnchorChasm();
+        Room16TheAscent();
 
+        PlacePlayerAtStart(scene);
         EditorSceneManager.MarkSceneDirty(scene);
         EditorSceneManager.SaveScene(scene);
 
-        return $"Built the tutorial blockout in {BlockoutScene}: {built} pieces in 16 rooms.\n\n" +
-               "Press Play in this scene to try it. Rerunning the menu rebuilds the " +
-               $"'{RootName}' object from scratch, so hand edits inside it are lost.";
+        string levelNote = AddArrivalToLevel();
+
+        return $"Built the tutorial blockout in {BlockoutScene}: {built} pieces in 16 rooms.\n\n{levelNote}\n\n" +
+               "Press Play in Tutorial Blockout to try it. Rebuilding replaces everything " +
+               $"under '{RootName}', so hand edits inside it are lost.";
+    }
+
+    // the scene asset whose file is exactly "<name>.unity", wherever it is under Assets
+    static string FindScene(string name)
+    {
+        foreach (string guid in AssetDatabase.FindAssets(name + " t:Scene", new[] { "Assets" }))
+        {
+            string path = AssetDatabase.GUIDToAssetPath(guid);
+            if (System.IO.Path.GetFileNameWithoutExtension(path) == name)
+            {
+                return path;
+            }
+        }
+        return null;
     }
 
     static void AddToBuildSettings(string path)
@@ -120,11 +175,14 @@ public static class TutorialBlockoutBuilder
     static bool LoadAssets(out string problem)
     {
         problem = null;
+        hullMat = LoadMaterial("Prototype_512x512_Grey4");
         floorMat = LoadMaterial("Prototype_512x512_Grey1");
-        wallMat = LoadMaterial("Prototype_512x512_Grey3");
         obstacleMat = LoadMaterial("Prototype_512x512_Blue1");
         wallRunMat = LoadMaterial("Prototype_512x512_Red");
         exitMat = LoadMaterial("Prototype_512x512_Yellow");
+        pogoMat = LoadMaterial("Prototype_512x512_Orange");
+        targetMat = LoadMaterial("Prototype_512x512_Brown");
+        glassMat = GlassMaterial();
 
         groundLayer = LayerMask.NameToLayer("Ground");
         wallRunLayer = 8;
@@ -136,9 +194,10 @@ public static class TutorialBlockoutBuilder
 
         grapplePointPrefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Grapple Point.prefab");
         breakablePrefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/BreakableWall.prefab");
-        if (grapplePointPrefab == null || breakablePrefab == null)
+        portalPrefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Portal.prefab");
+        if (grapplePointPrefab == null || breakablePrefab == null || portalPrefab == null)
         {
-            problem = "Couldn't find Assets/Prefabs/Grapple Point.prefab or BreakableWall.prefab.";
+            problem = "Couldn't find the Grapple Point, BreakableWall or Portal prefab in Assets/Prefabs.";
             return false;
         }
         return true;
@@ -150,20 +209,57 @@ public static class TutorialBlockoutBuilder
         return m != null ? m : BuiltinMaterials.defaultMaterial;
     }
 
-    // The copy brings the old one-long-room tutorial with it. Its pieces are cleared out,
-    // everything else (player, cameras, portals, lights, JuiceFX...) stays.
+    // URP Lit, transparent, faintly blue. Made once and kept as an asset so shards and the
+    // scene keep referencing it.
+    static Material GlassMaterial()
+    {
+        Material glass = AssetDatabase.LoadAssetAtPath<Material>(GlassPath);
+        if (glass != null)
+        {
+            return glass;
+        }
+
+        Shader lit = Shader.Find("Universal Render Pipeline/Lit");
+        if (lit == null)
+        {
+            return BuiltinMaterials.defaultMaterial;
+        }
+
+        glass = new Material(lit) { name = "Blockout Glass" };
+        glass.SetFloat("_Surface", 1f);
+        glass.SetFloat("_Blend", 0f);
+        glass.SetFloat("_ZWrite", 0f);
+        glass.SetFloat("_SrcBlend", (float)UnityEngine.Rendering.BlendMode.SrcAlpha);
+        glass.SetFloat("_DstBlend", (float)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+        glass.SetFloat("_SrcBlendAlpha", (float)UnityEngine.Rendering.BlendMode.One);
+        glass.SetFloat("_DstBlendAlpha", (float)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+        glass.SetFloat("_Smoothness", 0.95f);
+        glass.SetColor("_BaseColor", new Color(0.7f, 0.9f, 1f, 0.22f));
+        glass.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+        glass.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
+        glass.SetOverrideTag("RenderType", "Transparent");
+
+        System.IO.Directory.CreateDirectory("Assets/Materials");
+        AssetDatabase.CreateAsset(glass, GlassPath);
+        return glass;
+    }
+
+    // The copy brings the old one-long-room tutorial and Portal B with it. Those go, the
+    // player, cameras, lights, the arrival portal and services stay.
     static void ClearOldLayout(Scene scene)
     {
         foreach (GameObject go in scene.GetRootGameObjects())
         {
             string n = go.name;
+            Portal portal = go.GetComponent<Portal>();
             bool oldPiece = n == RootName
                 || n == "Cube" || (n.StartsWith("Cube (") && n.EndsWith(")"))
                 || n.StartsWith("Grapple Point")
                 || n == "Axe Pickup" || n == "Grapple Pickup" || n == "Axe Wall"
-                // a loose copy of the thrown-axe prefab left in the scene; the axe itself
-                // uses the prefab asset, and this one would sit inside the Vaults room
-                || n == "AxeThrowPrefab";
+                // a loose copy of the thrown-axe prefab; the axe itself uses the asset
+                || n == "AxeThrowPrefab"
+                // the old way into the level, replaced by the exit portal at the end
+                || (portal != null && portal.portalId == "PortalB");
             if (oldPiece)
             {
                 Object.DestroyImmediate(go);
@@ -173,7 +269,7 @@ public static class TutorialBlockoutBuilder
 
     static void PlacePlayerAtStart(Scene scene)
     {
-        Vector3 spawn = Origin + new Vector3(3f, Eye, 0f);
+        Vector3 spawn = Origin + new Vector3(4f, Eye, 0f);
         Quaternion facing = Quaternion.Euler(0f, 90f, 0f);
 
         foreach (GameObject go in scene.GetRootGameObjects())
@@ -190,471 +286,752 @@ public static class TutorialBlockoutBuilder
                 go.transform.SetPositionAndRotation(spawn + Vector3.up * 0.6f, facing);
             }
         }
+    }
 
-        // Portal B, the way into Grapple Scene, moves onto the Gauntlet's island.
+    // The tutorial's exit portal leads to this one in Grapple Scene: closed until the
+    // tutorial ends, then it opens just ahead of the level's start.
+    static string AddArrivalToLevel()
+    {
+        string levelPath = FindScene(LevelSceneName);
+        if (levelPath == null)
+        {
+            return $"Couldn't find '{LevelSceneName}', so the portal the tutorial exit leads to wasn't added.";
+        }
+        Scene level = EditorSceneManager.OpenScene(levelPath, OpenSceneMode.Additive);
         foreach (Portal p in Object.FindObjectsByType<Portal>(FindObjectsInactive.Include, FindObjectsSortMode.None))
         {
-            if (p.gameObject.scene != scene || p.portalId != "PortalB")
+            if (p.gameObject.scene == level && p.portalId == "TutorialArrival")
             {
-                continue;
+                EditorSceneManager.CloseScene(level, true);
+                return "Grapple Scene already has the TutorialArrival portal.";
             }
-            p.transform.SetPositionAndRotation(Origin + new Vector3(353f, 36f + 3.02f, 66f), Quaternion.Euler(0f, -90f, 0f));
-            SerializedObject so = new SerializedObject(p);
-            so.FindProperty("portalSize").vector2Value = new Vector2(4.5f, 6f);
-            so.ApplyModifiedProperties();
         }
+
+        GameObject go = (GameObject)PrefabUtility.InstantiatePrefab(portalPrefab, level);
+        go.name = "Tutorial Arrival Portal";
+        go.transform.position = new Vector3(0f, 3f, 5f);
+        Portal portal = go.GetComponent<Portal>();
+        SerializedObject so = new SerializedObject(portal);
+        so.FindProperty("portalId").stringValue = "TutorialArrival";
+        so.FindProperty("linkedSceneName").stringValue = "Tutorial Blockout";
+        so.FindProperty("linkedPortalId").stringValue = "TutorialExit";
+        so.FindProperty("portalSize").vector2Value = new Vector2(4.5f, 6f);
+        so.FindProperty("startClosed").boolValue = true;
+        so.FindProperty("openPlacement").enumValueIndex = (int)Portal.OpenPlacement.AtSceneStart;
+        so.ApplyModifiedProperties();
+
+        EditorSceneManager.MarkSceneDirty(level);
+        EditorSceneManager.SaveScene(level);
+        EditorSceneManager.CloseScene(level, true);
+        return "Added the TutorialArrival portal to Grapple Scene (it opens ahead of the level's start).";
     }
 
-    // ---------------------------------------------------------------- Act 1: feet only
+    // ================================================================ Act 1: feet only
 
-    static void BuildAct1(Transform root)
+    // 1 Arrival. A calm room to look around in. The arrival portal opens 5 m ahead of you.
+    static void Room01Arrival()
     {
-        // 1 Arrival, 16 x 16 x 8. The arrival portal opens 5 m ahead of the spawn.
-        Room(root, "01 Arrival", 0f);
-        Shell(0, 16, -8, 8, 0, 8, D('E', 0, 0, exit: true));
-        Floor(0, 16, -8, 8, 0);
-        Checkpoint("Start", 3, 0, 0, 90);
-        Tip("Tip Move", 1, 8, -4, 4, 0, "MOVE", "MOVEMENT", Blue,
+        BeginRoom("01 Arrival", 24, -12, 12, 0, 10, entry: false);
+        Checkpoint("Start", 4, 0, 0, 90);
+        Tip("Tip Move", 2, 9, -4, 4, 0, "MOVE", "MOVEMENT", Blue,
             "{move}  Move, mouse to look.",
             "Keep moving and you get faster. Stopping throws your speed away.");
-        CorridorX(root, "C1", 16, 20, 0, 0);
+        Exit('E', 0, 0);
+        EndRoom();
+    }
 
-        // 2 Run lane, 72 x 8. Ditches 2, 3 and 4 m wide and 1 m deep you can climb out of,
-        // a 6 m gap over a pit that needs a run-up, then three gaps back to back.
-        Room(root, "02 Run Lane", -5f);
-        Shell(20, 92, -4, 4, -5, 6, D('W', 0, 0), D('E', 0, 0, exit: true));
-        Floor(20, 30, -4, 4, 0);
-        Floor(30, 32, -4, 4, -1);
-        Floor(32, 40, -4, 4, 0);
-        Floor(40, 43, -4, 4, -1);
-        Floor(43, 52, -4, 4, 0);
-        Floor(52, 56, -4, 4, -1);
-        Floor(56, 62, -4, 4, 0);
-        Floor(62, 68, -4, 4, -4);
-        FallReset("Pit Reset", 62, 68, -4, 4, -4, -3);
-        Floor(68, 74, -4, 4, 0);
-        Floor(74, 77, -4, 4, -1.5f);
-        Floor(77, 80, -4, 4, 0);
-        Floor(80, 83, -4, 4, -1.5f);
-        Floor(83, 86, -4, 4, 0);
-        Floor(86, 89, -4, 4, -1.5f);
-        Floor(89, 92, -4, 4, 0);
-        Checkpoint("Run Lane", 20.6f, 0, 0, 90);
-        Checkpoint("Run Lane Gaps", 68.6f, 0, 0, 90);
-        Tip("Tip Jump", 21, 25, -4, 4, 0, "JUMP", "MOVEMENT", Blue,
+    // 2 Jump yard. Platforms over a 4 m trench: gaps of 2, 3 and 4 m, steps up and down, a
+    // 12 m runway into a 6 m gap, then zigzag stepping stones. Fall in and climb the steps
+    // back up to the platform you jumped from.
+    static void Room02JumpYard()
+    {
+        BeginRoom("02 Jump Yard", 100, -7, 7, -4, 10);
+        Floor(0, 12, -7, 7, 0);
+        Floor(14, 20, -7, 7, 0);
+        Floor(23, 29, -7, 7, 0);
+        Floor(33, 40, -7, 7, 1);
+        Floor(43, 48, -7, 7, 0);
+        Floor(51, 55, -7, 7, 1.5f);
+        Floor(58, 70, -7, 7, 0.5f);
+        Floor(76, 80, -7, 7, 0.5f);
+        Floor(83, 85.5f, 1, 4.5f, 0.5f);
+        Floor(88, 90.5f, -4.5f, -1, 0.5f);
+        Floor(93, 95.5f, 1, 4.5f, 0.5f);
+        Floor(97.5f, 100, -7, 7, 0.5f);
+        ClimbBack(12, 5, 7, 0);
+        ClimbBack(20, 5, 7, 0);
+        ClimbBack(29, 5, 7, 0);
+        ClimbBack(40, 5, 7, 1);
+        ClimbBack(48, 5, 7, 0);
+        ClimbBack(55, 5, 7, 1.5f);
+        ClimbBack(70, 5, 7, 0.5f);
+        ClimbBack(80, 5, 7, 0.5f);
+        Checkpoint("Jump Yard", 1.5f, 0, 0, 90);
+        Checkpoint("Runway", 59, 0, 0.5f, 90);
+        Tip("Tip Jump", 1, 6, -7, 7, 0, "JUMP", "MOVEMENT", Blue,
             "{jump}  Jump. Hold it to go higher, tap it for a hop.");
-        CorridorX(root, "C2", 92, 96, 0, 0);
+        Tip("Tip Run Up", 58.5f, 62, -7, 7, 0.5f, "RUN-UP", "MOVEMENT", Blue,
+            "Long gap ahead. Use the whole runway and hold  {jump}.");
+        Exit('E', 0, 0.5f);
+        EndRoom();
+    }
 
-        // 3 Vaults, 24 x 24. A 0.5, 1.0 and 1.8 m block in a line, then a long 1.8 m block
-        // that runs to the exit, which is 1.8 m up. A side lane of mixed blocks is the test.
-        Room(root, "03 Vaults", -1f);
-        Shell(96, 120, -12, 12, -1, 7, D('W', 0, 0), D('E', 0, 1.8f, exit: true));
-        Floor(96, 120, -12, 12, 0);
-        Obstacle("Vault 0.5", 100, 101, -4, 4, 0, 0.5f);
-        Obstacle("Vault 1.0", 105, 106, -4, 4, 0, 1.0f);
-        Obstacle("Vault 1.8", 110, 111, -4, 4, 0, 1.8f);
-        Obstacle("Vault Run To Exit", 113, 120, -2, 2, 0, 1.8f);
-        Obstacle("Zigzag 1.0", 99, 100, -10, -6, 0, 1.0f);
-        Obstacle("Zigzag 0.5", 102, 103, -10, -6, 0, 0.5f);
-        Obstacle("Zigzag 1.8", 105, 106, -10, -6, 0, 1.8f);
-        Obstacle("Zigzag 1.0 B", 108, 109, -10, -6, 0, 1.0f);
-        Obstacle("Zigzag 0.5 B", 111, 112, -10, -6, 0, 0.5f);
-        Checkpoint("Vaults", 96.6f, 0, 0, 90);
-        Tip("Tip Vault", 96.5f, 99, -4, 4, 0, "VAULT", "MOVEMENT", Blue,
-            "Run straight at a ledge to vault it. No need to jump.");
-        CorridorX(root, "C3", 120, 124, 0, 1.8f);
+    // 3 Vault courtyard. Vaulting is how you climb: up three 1.8 m terraces, then low
+    // barriers you vault at speed (low vaults keep your speed) into a 6 m gap to the exit.
+    // Miss and you land on the terrace below and vault straight back up.
+    static void Room03VaultCourtyard()
+    {
+        BeginRoom("03 Vault Courtyard", 40, -12, 12, 0, 14);
+        Block("Crate", 6, 7, -3, 3, 0, 1);
+        Floor(14, 40, -12, 12, 1.8f);
+        Floor(18, 40, -12, 12, 3.6f);
+        Floor(22, 30, -12, 12, 5.4f);
+        Block("Barrier 1", 24.5f, 25, -12, 12, 5.4f, 6f);
+        Block("Barrier 2", 27, 27.5f, -12, 12, 5.4f, 6f);
+        Floor(36, 40, -12, 12, 6f);
+        Checkpoint("Vault Courtyard", 1.5f, 0, 0, 90);
+        Checkpoint("Top Terrace", 22.6f, 0, 5.4f, 90);
+        Tip("Tip Vault", 1, 5, -6, 6, 0, "VAULT", "MOVEMENT", Blue,
+            "Run straight at a ledge to vault it. No need to jump.",
+            "Ledges up to about your height are climbable this way.");
+        Tip("Tip Keep Speed", 22.2f, 24, -12, 12, 5.4f, "KEEP YOUR SPEED", "MOVEMENT", Blue,
+            "Vault low walls instead of jumping them. You keep your speed for the gap.");
+        Exit('E', 0, 6f);
+        EndRoom();
+    }
 
-        // 4 Slides, 40 x 8. A 10 degree slope with two pipes 1.3 m up you have to slide
-        // under, a third on the flat, then a 1 m ledge with a platform 2.2 m above it -
-        // too high to vault, so only a slide launch off the ledge gets you up.
-        Room(root, "04 Slides", -3f);
-        Shell(124, 164, -4, 4, -3, 9, D('W', 0, 1.8f), D('E', 0, 1.5f, exit: true));
-        Ramp("Slope", 124, 1.8f, 144, -1.7f, -4, 4, floorMat);
-        Floor(144, 152, -4, 4, -1.7f);
-        Obstacle("Pipe 1", 129.5f, 130.5f, -4, 4, SlopeY(130) + 1.3f, SlopeY(130) + 1.8f);
-        Obstacle("Pipe 2", 135.5f, 136.5f, -4, 4, SlopeY(136) + 1.3f, SlopeY(136) + 1.8f);
-        Obstacle("Pipe 3", 147, 148, -4, 4, -0.4f, 0.1f);
-        Obstacle("Launch Ledge", 152, 153, -4, 4, -1.7f, -0.7f);
-        Floor(153, 164, -4, 4, 1.5f);
-        Checkpoint("Slides", 122.5f, 0, 1.8f, 90);
-        Tip("Tip Slide", 124.5f, 127, -4, 4, 1.8f, "SLIDE", "MOVEMENT", Blue,
+    // 4 Slides. Down a slope, under two pipes 1.6 m off the floor (too low to stand under,
+    // too high to vault), then a 1 m ledge with a platform 2.2 m above it: only a slide
+    // launch off the ledge gets you up.
+    static void Room04Slides()
+    {
+        BeginRoom("04 Slides", 56, -5, 5, -5, 8);
+        Floor(0, 6, -5, 5, 0);
+        Ramp("Slope", 6, 0, 30, -4.2f, -5, 5);
+        Floor(30, 44, -5, 5, -4.2f);
+        Block("Pipe 1", 33, 34, -5, 5, -2.6f, -2f);
+        Block("Pipe 2", 38, 39, -5, 5, -2.6f, -2f);
+        Block("Launch Ledge", 44, 45, -5, 5, -4.2f, -3.2f);
+        Floor(45, 56, -5, 5, -1f);
+        Checkpoint("Slides", 1.5f, 0, 0, 90);
+        Checkpoint("Slide Flat", 30.6f, 0, -4.2f, 90);
+        Tip("Tip Slide", 1, 5, -5, 5, 0, "SLIDE", "MOVEMENT", Blue,
             "{slide}  Slide. Fit under low gaps and pick up speed downhill.");
-        Tip("Tip Slide Launch", 144, 148, -4, 4, -1.7f, "SLIDE LAUNCH", "MOVEMENT", Blue,
+        Tip("Tip Slide Launch", 40, 43.5f, -5, 5, -4.2f, "SLIDE LAUNCH", "MOVEMENT", Blue,
             "Slide into a low ledge fast and it launches you up.");
-        CorridorX(root, "C4", 164, 168, 0, 1.5f);
+        Exit('N', 51, -1f);
+        EndRoom();
+    }
 
-        // 5 Wall runs, 60 x 14. One wall beside an 8 m gap over a 1 m ditch (safe), one
-        // beside a 14 m gap over a pit, then two walls on alternate sides.
-        Room(root, "05 Wall Runs", -3f);
-        Shell(168, 228, -7, 7, -3, 11.5f, D('W', 0, 1.5f), D('E', 0, 1.5f, exit: true));
-        Floor(168, 173, -7, 7, 1.5f);
-        Floor(173, 181, -7, 7, 0.5f);
-        Floor(181, 186, -7, 7, 1.5f);
-        Floor(186, 200, -7, 7, -2.5f);
-        Floor(200, 204, -7, 7, 1.5f);
-        Floor(204, 220, -7, 7, -2.5f);
-        Floor(220, 228, -7, 7, 1.5f);
-        FallReset("Pit Reset A", 186, 200, -7, 7, -2.5f, -1.5f);
-        FallReset("Pit Reset B", 204, 220, -7, 7, -2.5f, -1.5f);
-        WallRunWall("Wall Run Teach", 172, 183, 2.5f, 3f, 0, 7);
-        WallRunWall("Wall Run Practise", 185, 201, -3f, -2.5f, -2.5f, 7);
-        WallRunWall("Wall Run Twist A", 203, 213, 2.5f, 3f, -2.5f, 7);
-        WallRunWall("Wall Run Twist B", 211, 221, -3f, -2.5f, -2.5f, 7);
-        Checkpoint("Wall Runs", 168.6f, 0, 1.5f, 90);
-        Checkpoint("Wall Runs Twist", 200.6f, 0, 1.5f, 90);
-        Tip("Tip Wall Run", 168.5f, 171, -7, 7, 1.5f, "WALL RUN", "MOVEMENT", Blue,
+    // 5 Wall-run pit. A 12 m pit under everything. One wall across the first gap to a
+    // pillar, then two walls on alternate sides across 32 m to the exit ledge. Fall and you
+    // climb the steps in the pit up to the pillar or the exit ledge.
+    static void Room05WallRunPit()
+    {
+        BeginRoom("05 Wall Run Pit", 72, -9, 9, -12, 14);
+        Floor(0, 6, -9, 9, 0);
+        Floor(18, 26, -9, 9, 0);
+        Floor(58, 72, -9, 9, 0);
+        // the walls hang above the pit floor so it stays one space you can walk around
+        WallRun("Wall Run Teach", 5, 19, 4, 4.5f, -4, 8);
+        WallRun("Wall Run A", 25, 42, -4.5f, -4, -4, 8);
+        WallRun("Wall Run B", 40, 57, 4, 4.5f, -4, 8);
+        Stairs(18, +1, -9, -6, -12, 0);
+        Stairs(58, +1, -9, -6, -12, 0);
+        Checkpoint("Wall Run Pit", 1.5f, 0, 0, 90);
+        Checkpoint("Pillar", 18.6f, 0, 0, 90);
+        Tip("Tip Wall Run", 1, 5, -9, 9, 0, "WALL RUN", "MOVEMENT", Blue,
             "Jump alongside a red wall and hold forward to run along it.",
             "{jump}  jumps off it.");
-        CorridorX(root, "C5", 228, 232, 0, 1.5f);
+        Exit('E', 0, 0);
+        EndRoom();
+    }
 
-        // 6 The shaft, 5 x 5 x 20. Kick up between the walls: a wall kick pushes you 8 m/s
-        // across and 7 m/s up, so each crossing of the shaft is worth about 3 m. Ledges on
-        // alternating walls every 3 to 3.5 m, the exit 16 m up and close enough above the
-        // last ledge to vault into. A yellow stripe runs up to the exit so players look up.
-        Room(root, "06 The Shaft", 1f);
-        Shell(232, 237, -2.5f, 2.5f, 1f, 21.5f, D('W', 0, 1.5f), D('E', 0, 17.5f, exit: true));
-        Floor(232, 237, -2.5f, 2.5f, 1.5f);
-        Obstacle("Ledge 3m", 235.8f, 237, -2.5f, 2.5f, 4f, 4.5f);
-        Obstacle("Ledge 6m", 232, 233.2f, -2.5f, 2.5f, 7f, 7.5f);
-        Obstacle("Ledge 9.5m", 235.8f, 237, -2.5f, 2.5f, 10.5f, 11f);
-        Obstacle("Ledge 12.5m", 232, 233.2f, -2.5f, 2.5f, 13.5f, 14f);
-        Piece("Look Up Stripe", new Vector3(236.9f, 11.5f, -0.4f), new Vector3(237f, 17.5f, 0.4f), exitMat);
-        Checkpoint("Shaft", 232.6f, 0, 1.5f, 90);
-        Tip("Tip Wall Kick", 232.2f, 234, -2.5f, 2.5f, 1.5f, "WALL KICK", "MOVEMENT", Blue,
-            "{jump}  in the air next to a wall kicks off it. Twice per jump.");
-        TipBox("Tip Dart", new Vector3(232, 7.5f, -2.5f), new Vector3(233.2f, 10f, 2.5f), "DART", "MOVEMENT", Blue,
+    // 6 The tower. 16 x 16, climbing to an exit 18.6 m up. Vault up two blocks, jump a 4 m
+    // gap along the walls, kick up a 4 m chimney, then ledges to the exit. Falling just
+    // drops you to a lower ledge or the floor to climb again.
+    static void Room06Tower()
+    {
+        BeginRoom("06 The Tower", 16, -8, 8, 0, 26);
+        Block("Step", 4, 8, 5, 8, 0, 1.8f);
+        Floor(8, 16, 6, 8, 3.6f);
+        Ledge("Ledge East", 14, 16, -2, 6, 5.4f);
+        Ledge("Ledge South", 0, 16, -8, -6, 5.4f);
+        Block("Chimney Wall", 4, 5, -6, 0, 0, 11.4f);
+        Ledge("Ledge Chimney Top", 0, 1.5f, -6, 0, 11.4f);
+        Ledge("Ledge West", 0, 1.5f, 2, 8, 13.2f);
+        Ledge("Ledge North", 4, 16, 6.5f, 8, 15f);
+        Ledge("Ledge Exit", 14.5f, 16, -8, 5, 16.8f);
+        Checkpoint("Tower", 1.5f, 0, 0, 90);
+        TipBox("Tip Wall Kick", new Vector3(0, 5.4f, -8), new Vector3(4, 9, -6), "WALL KICK", "MOVEMENT", Blue,
+            "{jump}  in the air next to a wall kicks off it. Twice per jump.",
+            "Kick between these two walls to climb the chimney.");
+        TipBox("Tip Dart", new Vector3(0, 13.2f, 2), new Vector3(1.5f, 16, 8), "DART", "MOVEMENT", Blue,
             "{dart}  just after a jump or kick darts forward.",
             "A dart gives you a wall kick back.");
-        CorridorX(root, "C6", 237, 241, 0, 17.5f);
-
-        // 7 The Run, 100 m. No cards: a long slide down with pipes, a vault, a ditch, a
-        // slide launch, two wall runs over a pit and a vault up to the exit.
-        Room(root, "07 The Run", -4f);
-        Shell(241, 341, -5, 5, -4, 24, D('W', 0, 17.5f), D('E', 0, 5.2f, exit: true));
-        Ramp("Long Slide", 241, 17.5f, 291, 0, -5, 5, floorMat);
-        Obstacle("Pipe A", 254.5f, 255.5f, -5, 5, RunSlopeY(255) + 1.3f, RunSlopeY(255) + 1.8f);
-        Obstacle("Pipe B", 271.5f, 272.5f, -5, 5, RunSlopeY(272) + 1.3f, RunSlopeY(272) + 1.8f);
-        Floor(291, 300, -5, 5, 0);
-        Obstacle("Vault 1.0", 295, 296, -5, 5, 0, 1.0f);
-        Floor(300, 303, -5, 5, -1.5f);
-        Floor(303, 308, -5, 5, 0);
-        Obstacle("Launch Ledge", 308, 309, -5, 5, 0, 1.0f);
-        Floor(309, 316, -5, 5, 3.2f);
-        Floor(316, 332, -5, 5, -3f);
-        FallReset("Pit Reset", 316, 332, -5, 5, -3, -2);
-        WallRunWall("Run Wall A", 315, 325, 2.5f, 3f, -3, 9);
-        WallRunWall("Run Wall B", 323, 333, -3f, -2.5f, -3, 9);
-        Floor(332, 341, -5, 5, 3.2f);
-        Checkpoint("Run Top", 239.5f, 0, 17.5f, 90);
-        Checkpoint("Run Bottom", 291.6f, 0, 0, 90);
-        Checkpoint("Run Platform", 309.6f, 0, 3.2f, 90);
-        Checkpoint("Run Landing", 332.6f, 0, 3.2f, 90);
-        CorridorX(root, "C7", 341, 345, 0, 5.2f);
+        Exit('E', -4, 18.6f);
+        EndRoom();
     }
 
-    static float SlopeY(float x) => Mathf.Lerp(1.8f, -1.7f, (x - 124f) / 20f);
-    static float RunSlopeY(float x) => Mathf.Lerp(17.5f, 0f, (x - 241f) / 50f);
-
-    // ---------------------------------------------------------------- Act 2: axe
-
-    static void BuildAct2(Transform root)
+    // 7 The Run. 150 m, no cards: a long slide with pipes, a crate, two trenches, a slide
+    // launch, two wall runs over a 22 m pit, and a vault climb to the exit.
+    static void Room07TheRun()
     {
-        // 8 Axe shrine, 14 x 14. The axe on a plinth, two crates, the exit north sealed by
-        // a breakable wall that only the axe opens.
-        Room(root, "08 Axe Shrine", 4.2f);
-        Shell(345, 359, -7, 7, 4.2f, 13.2f, D('W', 0, 5.2f), D('N', 352, 5.2f, exit: true));
-        Floor(345, 359, -7, 7, 5.2f);
-        Obstacle("Plinth", 351, 353, -1, 1, 5.2f, 6.2f);
-        Pickup("Axe Pickup", AbilityPickup.Ability.Axe, new Vector3(352, 7.6f, 0), "Smash the wall to get out.");
-        Breakable("Crate A", new Vector3(348, 5.95f, 4), 1.5f, 1.5f, alongX: true, runThrough: true);
-        Breakable("Crate B", new Vector3(356, 5.95f, 4), 1.5f, 1.5f, alongX: true, runThrough: true);
-        Breakable("Axe Wall", new Vector3(352, 5.2f + DoorH * 0.5f, 7.25f), DoorW, DoorH, alongX: false, runThrough: false);
-        Checkpoint("Axe Shrine", 345.6f, 0, 5.2f, 90);
-        CorridorZ(root, "C8", 7, 20, 352, 5.2f);
+        BeginRoom("07 The Run", 150, -6, 6, -22, 10);
+        Floor(0, 6, -6, 6, 0);
+        Ramp("Slide 1", 6, 0, 26, -5, -6, 6);
+        Floor(26, 34, -6, 6, -5);
+        Block("Pipe A", 29, 30, -6, 6, -3.4f, -2.8f);
+        Ramp("Slide 2", 34, -5, 54, -10, -6, 6);
+        Floor(54, 66, -6, 6, -10);
+        Block("Pipe B", 58, 59, -6, 6, -8.4f, -7.8f);
+        Floor(66, 70, -6, 6, -14);
+        Floor(70, 78, -6, 6, -10);
+        Block("Crate", 73, 74, -6, 6, -10, -9);
+        Floor(78, 82, -6, 6, -14);
+        Floor(82, 93, -6, 6, -10);
+        Block("Launch Ledge", 93, 94, -6, 6, -10, -9);
+        Floor(94, 104, -6, 6, -6.8f);
+        Floor(130, 143, -6, 6, -6.8f);
+        Floor(143, 150, -6, 6, -4.8f);
+        ClimbBack(66, 4, 6, -10, -14);
+        ClimbBack(78, 4, 6, -10, -14);
+        WallRun("Run Wall A", 103, 117, 3, 3.5f, -12, 0);
+        WallRun("Run Wall B", 115, 131, -3.5f, -3, -12, 0);
+        Stairs(130, +1, -6, -4, -22, -6.8f);
+        Checkpoint("The Run", 1.5f, 0, 0, 90);
+        Checkpoint("Run Flat", 54.6f, 0, -10, 90);
+        Checkpoint("Run Launch", 82.6f, 0, -10, 90);
+        Checkpoint("Run Landing", 130.6f, 0, -6.8f, 90);
+        Exit('E', 0, -2.8f);
+        EndRoom();
+    }
 
-        // 9 Throw range, 32 x 12, travelling -x. Panels on the north wall at 10, 20 and
-        // 30 m, and the exit 2 m up in the far wall behind a breakable window.
-        Room(root, "09 Throw Range", 4.2f);
-        Shell(323, 355, 20, 32, 4.2f, 15.2f, D('S', 352, 5.2f), D('W', 26, 7.2f, exit: true));
-        Floor(323, 355, 20, 32, 5.2f);
-        Breakable("Target 10m", new Vector3(343, 8, 31.5f), 2, 2, alongX: false, runThrough: false);
-        Breakable("Target 20m", new Vector3(333, 8, 31.5f), 2, 2, alongX: false, runThrough: false);
-        Breakable("Target 30m", new Vector3(326, 8, 31.5f), 2, 2, alongX: false, runThrough: false);
-        Breakable("Window", new Vector3(322.75f, 7.2f + DoorH * 0.5f, 26), DoorW, DoorH, alongX: true, runThrough: false);
-        Checkpoint("Throw Range", 352, 20.6f, 5.2f, 0);
-        TipBox("Tip Throw", new Vector3(350, 5.2f, 20), new Vector3(354, 9, 23), "THROW", "AXE", Orange,
+    // ================================================================ Act 2: axe
+
+    // 8 Axe shrine. The axe on a lit plinth, two glass crates, and the exit sealed by a
+    // glass wall only the axe opens.
+    static void Room08AxeShrine()
+    {
+        BeginRoom("08 Axe Shrine", 20, -10, 10, 0, 12);
+        Block("Plinth", 9, 11, -1, 1, 0, 1);
+        Pickup("Axe Pickup", AbilityPickup.Ability.Axe, new Vector3(10, 2.4f, 0), "Smash the glass to get out.");
+        PointLight("Plinth Light", new Vector3(10, 7, 0), new Color(1f, 0.8f, 0.6f), 12, 2.5f);
+        Glass("Glass Crate A", new Vector3(6, 0.75f, 6), 1.5f, 1.5f, alongX: true, runThrough: true);
+        Glass("Glass Crate B", new Vector3(14, 0.75f, -6), 1.5f, 1.5f, alongX: true, runThrough: true);
+        Glass("Exit Glass", new Vector3(19.8f, DoorH * 0.5f, 0), DoorW, DoorH, alongX: true, runThrough: false);
+        Checkpoint("Axe Shrine", 1.5f, 0, 0, 90);
+        Exit('E', 0, 0);
+        EndRoom();
+    }
+
+    // 9 Button door. A red button on a pillar in the middle of a 6 m pit, out of reach on
+    // foot. Stick the axe in it and the door on the raised platform in the far corner
+    // opens; the way there is a run of platforms along the north side. Walk through the
+    // door and the axe comes flying back after you, squeezing under it as it shuts.
+    static void Room09ButtonDoor()
+    {
+        BeginRoom("09 Button Door", 44, -14, 14, -6, 16);
+        Floor(0, 10, -14, 14, 0);
+        Floor(18, 22, -2, 2, 4);
+        Floor(12, 14, 8, 12, 0.5f);
+        Floor(17, 19, 8, 12, 1f);
+        Floor(22, 24, 8, 12, 1.5f);
+        Floor(27, 30, 8, 12, 1f);
+        Floor(30, 44, -14, 14, 0);
+        Floor(38, 44, -14, -4, 2);
+        Stairs(10, -1, 12, 14, -6, 0);
+        Stairs(30, +1, 12, 14, -6, 0);
+        Glass("Target A", new Vector3(5, 3, -13.8f), 2, 2, alongX: false, runThrough: false);
+        Glass("Target B", new Vector3(8.5f, 3, -13.8f), 2, 2, alongX: false, runThrough: false);
+
+        GameObject button = Block("Button", 17.6f, 18, -1.5f, 1.5f, 0.5f, 3.5f);
+        button.GetComponent<MeshRenderer>().sharedMaterial = wallRunMat;
+        AxeButton axeButton = button.AddComponent<AxeButton>();
+        axeButton.face = button.GetComponent<MeshRenderer>();
+
+        GameObject door = MovingBlock("Axe Door", 43.6f, 44, -10, -6, 2, 2 + DoorH);
+        AxeDoor axeDoor = door.AddComponent<AxeDoor>();
+        axeDoor.buttons = new[] { axeButton };
+
+        GameObject zone = Trigger("Axe Recall Zone", new Vector3(44.5f, 2, -10), new Vector3(47, 6, -6));
+        zone.AddComponent<AxeRecallZone>().buttons = new[] { axeButton };
+
+        Checkpoint("Button Door", 1.5f, 0, 0, 90);
+        Tip("Tip Throw", 1, 5, -6, 6, 0, "THROW", "AXE", Orange,
             "Hold {primary} to charge a throw, {secondary} throws straight away.",
-            "{axePickup}  calls it back.");
-        CorridorX(root, "C9", 319, 323, 26, 7.2f);
-
-        // 10 Pogo drop, 12 x 12. Drop 6 m, bounce off the floor up to a 3 m ledge or the
-        // 4.5 m exit. Steps along the south wall lead back up to try the drop again.
-        Room(root, "10 Pogo Drop", 0.2f);
-        Shell(307, 319, 20, 32, 0.2f, 15.2f, D('E', 26, 7.2f), D('W', 30, 5.7f, exit: true));
-        Floor(307, 319, 20, 32, 1.2f);
-        Obstacle("Entry Ledge", 315.5f, 319, 20, 32, 1.2f, 7.2f);
-        Obstacle("Practise Ledge 3m", 311, 313, 27, 29, 1.2f, 4.2f);
-        Obstacle("Exit Ledge", 307, 310, 28, 32, 1.2f, 5.7f);
-        Obstacle("Step 1", 311, 312.5f, 20, 21.5f, 1.2f, 2.7f);
-        Obstacle("Step 2", 312.5f, 314, 20, 21.5f, 1.2f, 4.2f);
-        Obstacle("Step 3", 314, 315.5f, 20, 21.5f, 1.2f, 5.7f);
-        Checkpoint("Pogo Drop", 318.4f, 26, 7.2f, -90);
-        Tip("Tip Pogo", 316, 318, 20, 32, 7.2f, "POGO", "AXE", Orange,
-            "Swing at the floor as you land to bounce back up.");
-        CorridorX(root, "C10", 303, 307, 30, 5.7f);
-
-        // 11 Glass corridor, 50 x 6. Two walls on the flat to swing through, a downhill
-        // slide, then three walls close together to break by running into them.
-        Room(root, "11 Glass Corridor", 1.7f);
-        Shell(253, 303, 27, 33, 1.7f, 11.7f, D('E', 30, 5.7f), D('W', 30, 2.7f, exit: true));
-        Floor(275, 303, 27, 33, 5.7f);
-        RampDown("Slide Down", 275, 5.7f, 265, 2.7f, 27, 33, floorMat);
-        Floor(253, 265, 27, 33, 2.7f);
-        Breakable("Glass A", new Vector3(291, 5.7f + 3, 30), 6, 6, alongX: true, runThrough: true);
-        Breakable("Glass B", new Vector3(281, 5.7f + 3, 30), 6, 6, alongX: true, runThrough: true);
-        Breakable("Glass C", new Vector3(262, 2.7f + 4.5f, 30), 6, 9, alongX: true, runThrough: true);
-        Breakable("Glass D", new Vector3(259, 2.7f + 4.5f, 30), 6, 9, alongX: true, runThrough: true);
-        Breakable("Glass E", new Vector3(256, 2.7f + 4.5f, 30), 6, 9, alongX: true, runThrough: true);
-        Checkpoint("Glass Corridor", 302.4f, 30, 5.7f, -90);
-        Checkpoint("Glass Corridor Slide", 277, 30, 5.7f, -90);
-        Tip("Tip Run Through", 276, 279, 27, 33, 5.7f, "RUN-THROUGH", "AXE", Orange,
-            "Fast enough, and walls like these break when you run into them.");
+            "{axePickup}  calls it back. Try the glass targets.");
+        Tip("Tip Button", 6, 9.5f, -6, 6, 0, "AXE BUTTON", "AXE", Orange,
+            "Stick the axe in the red button to hold the door open.",
+            "Walk through and the axe follows you.");
+        Exit('E', -8, 2);
+        EndRoom();
     }
 
-    // ---------------------------------------------------------------- Act 3: grapple
-
-    static void BuildAct3(Transform root)
+    // 10 Pogo hall. Only orange surfaces bounce you. Drop onto a pad and pogo to a 4 m
+    // ledge, drop further onto a deeper pad and pogo to 8 m, then climb an orange shaft by
+    // bouncing off its walls to the exit 20 m up. Every pit has steps back to its ledge.
+    static void Room10PogoHall()
     {
-        // 12 Grapple pit, 34 x 28. You drop in from the glass corridor. The grapple sits on
-        // the low platform, the only way out is the ledge 11 m up with a point above it.
-        Room(root, "12 Grapple Pit", -7f);
-        Shell(219, 253, 18, 46, -7, 14, D('E', 30, 2.7f), D('N', 236, 5f, exit: true));
-        Floor(219, 253, 18, 46, -6);
-        Obstacle("Platform", 231, 241, 28, 36, -6, -5);
-        Obstacle("Exit Ledge", 233, 239, 43, 46, -6, 5);
-        Pickup("Grapple Pickup", AbilityPickup.Ability.Grapple, new Vector3(236, -3.8f, 32), "Zip up to the ledge above the far wall.");
-        GrapplePoint("Point Pit Exit", 236, 7.5f, 44.5f);
-        Checkpoint("Grapple Pit", 249, 30, -6, -90);
-        CorridorZ(root, "C12", 46, 54, 236, 5f);
-
-        // 13 Zip tower, 12 x 12 x 28. Zip to a ledge at 8 m, then to the ledge at 16 m that
-        // runs into the exit.
-        Room(root, "13 Zip Tower", 4f);
-        Shell(230, 242, 54, 66, 4, 33, D('S', 236, 5f), D('E', 64.25f, 21f, exit: true));
-        Floor(230, 242, 54, 66, 5);
-        Obstacle("Ledge 8m", 230, 233.5f, 56, 61, 12.5f, 13f);
-        Obstacle("Ledge 16m", 230, 242, 62.5f, 66, 20.5f, 21f);
-        GrapplePoint("Point 8m", 231.75f, 15.5f, 58.5f);
-        GrapplePoint("Point 16m", 236, 26f, 64.5f);
-        Checkpoint("Zip Tower", 236, 54.6f, 5, 0);
-        CorridorX(root, "C13", 242, 246, 64.25f, 21f);
-
-        // 14 Swing gorge, 50 x 16, 20 m deep. A first swing over a 2 m ditch, a resting
-        // platform, then two swings over the deep part with a 4 m wall between them.
-        Room(root, "14 Swing Gorge", 1f);
-        Shell(246, 296, 56, 72, 1, 37, D('W', 64.25f, 21f), D('E', 64.25f, 21f, exit: true));
-        Floor(246, 251, 56, 72, 21);
-        Floor(251, 262, 56, 72, 19);
-        Floor(262, 266, 56, 72, 21);
-        Floor(266, 291, 56, 72, 1.5f);
-        FallReset("Gorge Reset", 266, 291, 56, 72, 1.5f, 3f);
-        Obstacle("Mid Wall", 277, 278, 56, 72, 1.5f, 25f);
-        Floor(291, 296, 56, 72, 21);
-        GrapplePoint("Swing 1", 256.5f, 33, 64);
-        GrapplePoint("Swing 2", 272, 33, 64);
-        GrapplePoint("Swing 3", 284, 33, 64);
-        Checkpoint("Swing Gorge", 246.6f, 64.25f, 21, 90);
-        Checkpoint("Swing Gorge Platform", 262.6f, 64.25f, 21, 90);
-        Tip("Tip Swing", 246.5f, 250, 56, 72, 21, "SWING", "GRAPPLE", Green,
-            "{slot2}  then hold  {primary}  to swing.",
-            "Scroll reels in and out.  {jump}  jumps off with a boost.");
-        CorridorX(root, "C14", 296, 300, 64.25f, 21f);
-
-        // 15 Anchor wall, 16 x 16. Three 5 m steps and no grapple points: throw the axe
-        // into each step and zip to it.
-        Room(root, "15 Anchor Wall", 20f);
-        Shell(300, 316, 56, 72, 20, 45, D('W', 64.25f, 21f), D('E', 64.25f, 36f, exit: true));
-        Floor(300, 316, 56, 72, 21);
-        Obstacle("Step 5m", 308, 316, 56, 72, 21, 26);
-        Obstacle("Step 10m", 311, 316, 56, 72, 26, 31);
-        Obstacle("Step 15m", 314, 316, 56, 72, 31, 36);
-        Checkpoint("Anchor Wall", 300.6f, 64.25f, 21, 90);
-        Tip("Tip Anchor", 300.5f, 304, 56, 72, 21, "ANCHOR", "GRAPPLE", Green,
-            "No point to grab? Throw the axe into the wall and  {zip}  to it.");
-        CorridorX(root, "C15", 316, 320, 64.25f, 36f);
+        BeginRoom("10 Pogo Hall", 48, -12, 12, -6, 28);
+        Floor(0, 8, -12, 12, 0);
+        Floor(8, 16, -12, 12, -4);
+        Pogo("Pogo Pad 1", 8.5f, 15.5f, -5, 5, -4, -3.6f);
+        Floor(16, 24, -12, 12, 4);
+        Floor(24, 32, -12, 12, -6);
+        Pogo("Pogo Pad 2", 24.5f, 31.5f, -5, 5, -6, -5.6f);
+        Floor(32, 48, -12, 12, 8);
+        Pogo("Pogo Wall West", 39.6f, 40, -4, 4, 10.6f, 24);
+        Pogo("Pogo Wall East", 44, 44.4f, -4, 4, 8, 19);
+        Floor(44.4f, 48, -12, 12, 20);
+        ClimbBack(8, 10, 12, 0, -4);
+        ClimbBack(24, 10, 12, 4, -6);
+        Checkpoint("Pogo Hall", 1.5f, 0, 0, 90);
+        Tip("Tip Pogo", 1, 6, -12, 12, 0, "POGO", "AXE", Orange,
+            "Only orange surfaces bounce you.",
+            "Swing at the orange pad as you land to bounce back up.");
+        Tip("Tip Pogo Wall", 33, 38, -4, 4, 8, "POGO WALLS", "AXE", Orange,
+            "Swing at an orange wall to bounce off it.",
+            "Bounce side to side to climb the shaft.");
+        Exit('E', 0, 20);
+        EndRoom();
     }
 
-    // ---------------------------------------------------------------- Act 4: the Gauntlet
-
-    // A 6 m track around a central pit. From the entrance it runs south past the start
-    // gate (vault blocks), east (slide pipe, a gap, a glass wall), north (one long wall
-    // run over a gap), west (a zip across a gap), then south again over an anchor block
-    // towards the entrance. Just before it, a swing reaches the island with Portal B. Falling
-    // in the pit puts you back at the entrance, which also restarts the clock.
-    static void BuildGauntlet(Transform root)
+    // 11 Glass run. Glass panes stand at the ends of platforms over a pit: smash one as you
+    // reach the edge and it launches you across the gap. Then a slide down through three
+    // panes close together, fast enough to break them just by running into them.
+    static void Room11GlassRun()
     {
-        Room(root, "16 The Gauntlet", 20f);
-        Shell(320, 382, 41, 92, 20, 56, D('W', 64.25f, 36f));
-        // the pit floor runs under the whole arena, so every gap in the track lands in it
-        Floor(320, 382, 41, 92, 22);
-        FallReset("Pit Reset", 320, 382, 41, 92, 22, 24);
-
-        // west strip, entrance and start gate
-        Floor(320, 326, 47, 92, 36);
-        Obstacle("Vault 1.0", 320, 326, 55, 56, 36, 37);
-        Obstacle("Vault 1.8", 320, 326, 50, 51, 36, 37.8f);
-        // south strip, with a 4 m gap
-        Floor(320, 345, 41, 47, 36);
-        Floor(349, 382, 41, 47, 36);
-        Obstacle("Pipe", 334.5f, 335.5f, 41, 47, 37.3f, 37.8f);
-        Breakable("Glass", new Vector3(362, 39, 44), 6, 6, alongX: true, runThrough: true);
-        // east strip, a 16 m gap with a wall-run wall on the outside
-        Floor(376, 382, 47, 55, 36);
-        Floor(376, 382, 71, 86, 36);
-        WallRunWall("Gauntlet Wall Run", 381.5f, 382, 54, 72, 30, 44);
-        // north strip, a 12 m gap with a zip point over it
-        Floor(362, 382, 86, 92, 36);
-        Floor(320, 350, 86, 92, 36);
-        GrapplePoint("Zip Gap", 356, 41, 89);
-        // anchor block across the west strip, 5 m tall, no points
-        Obstacle("Anchor Block", 320, 326, 74, 78, 36, 41);
-        // the island and the swing to it
-        Obstacle("Island", 345, 357, 60, 72, 22, 36);
-        // north of the entrance, so coming round the loop you swing off before the start gate
-        GrapplePoint("Swing To Island", 336, 47, 70);
-
-        GameObject start = Trigger("Start Gate", new Vector3(320, 36, 57), new Vector3(326, 40, 59));
-        start.AddComponent<StartZone>();
-        GameObject finish = Trigger("Finish", new Vector3(345, 36, 60), new Vector3(347, 40, 72));
-        finish.AddComponent<FinishZone>();
-
-        Checkpoint("Gauntlet", 323, 64.25f, 36, 180);
-        Tip("Tip Gauntlet", 320, 326, 61, 67, 36, "THE GAUNTLET", "TEST", Gold,
-            "Every move you've learned, against the clock.",
-            "Go round, then swing to the island. Portal B is waiting there.");
+        BeginRoom("11 Glass Run", 72, -8, 8, -10, 12);
+        Floor(0, 8, -8, 8, 0);
+        Floor(14, 22, -8, 8, 0);
+        Floor(30, 36, -8, 8, 1);
+        Floor(40, 48, -8, 8, 3);
+        Ramp("Glass Slide", 48, 3, 60, -1, -8, 8);
+        Floor(60, 72, -8, 8, -1);
+        Glass("Edge Glass 1", new Vector3(7.7f, 2, 0), 16, 4, alongX: true, runThrough: true);
+        Glass("Edge Glass 2", new Vector3(21.7f, 2, 0), 16, 4, alongX: true, runThrough: true);
+        Glass("Slide Glass 1", new Vector3(61, 3, 0), 16, 8, alongX: true, runThrough: true);
+        Glass("Slide Glass 2", new Vector3(63.5f, 3, 0), 16, 8, alongX: true, runThrough: true);
+        Glass("Slide Glass 3", new Vector3(66, 3, 0), 16, 8, alongX: true, runThrough: true);
+        ClimbBack(8, 6, 8, 0, -10);
+        ClimbBack(22, 6, 8, 0, -10);
+        ClimbBack(36, 6, 8, 1, -10);
+        Checkpoint("Glass Run", 1.5f, 0, 0, 90);
+        Tip("Tip Smash", 1, 5, -8, 8, 0, "SMASH", "AXE", Orange,
+            "Swing at glass as you reach the edge and it launches you across.");
+        Tip("Tip Run Through", 42, 46, -8, 8, 3, "RUN-THROUGH", "AXE", Orange,
+            "Fast enough, and glass breaks when you run into it.");
+        Exit('E', 0, -1);
+        EndRoom();
     }
 
-    // ---------------------------------------------------------------- building blocks
+    // ================================================================ Act 3: grapple
 
-    struct Door
+    // 12 The Well. Drop 28 m into a well with the grapple at the bottom, then zip up a
+    // ladder of lit points with a ledge under each, round the walls to the exit.
+    static void Room12TheWell()
     {
-        public char side;      // W/E = the -x/+x walls, S/N = the -z/+z walls
-        public float at;       // centre along the wall (z for W/E, x for S/N)
-        public float sill;
-        public bool exit;
+        BeginRoom("12 The Well", 24, -12, 12, -28, 8);
+        Floor(0, 3, -4, 4, 0);
+        Block("Plinth", 11, 13, -1, 1, -28, -27);
+        Pickup("Grapple Pickup", AbilityPickup.Ability.Grapple, new Vector3(12, -25.6f, 0), "Zip from ledge to ledge to climb out.");
+        Ledge("Ledge 1", 6, 18, -12, -9, -20);
+        Ledge("Ledge 2", 21, 24, -8, 8, -12);
+        Ledge("Ledge 3", 6, 18, 9, 12, -4);
+        Ledge("Exit Ledge", 21, 24, -10, -2, 4);
+        GPoint("Point 1", 12, -17.5f, -10.5f);
+        GPoint("Point 2", 22.5f, -9.5f, 0);
+        GPoint("Point 3", 12, -1.5f, 10.5f);
+        GPoint("Point Exit", 22, 6.5f, -6);
+        Checkpoint("Well", 8, 0, -28, 90);
+        Exit('E', -6, 4);
+        EndRoom();
     }
 
-    // a door on one wall: "at" is where its middle is along that wall (z for W/E, x for S/N)
-    static Door D(char side, float at, float sill, bool exit = false) =>
-        new Door { side = side, at = at, sill = sill, exit = exit };
-
-    static void Room(Transform root, string name, float bottom)
+    // 13 Zip canyon. Zip island to island over a 14 m canyon, then zip to the point beside
+    // the red wall and drop straight into a wall run along it to the exit ledge. Fall and
+    // the steps in the canyon take you back up to the start to try again.
+    static void Room13ZipCanyon()
     {
-        GameObject go = new GameObject(name);
-        go.transform.SetParent(root, false);
-        room = go.transform;
-        roomBottom = bottom;
+        BeginRoom("13 Zip Canyon", 64, -12, 12, -14, 14);
+        Floor(0, 8, -12, 12, 0);
+        Floor(18, 24, -4, 4, 2);
+        Floor(34, 40, 2, 10, 4);
+        Floor(56, 64, -12, 12, 4);
+        WallRun("Canyon Wall", 42, 58, 11.5f, 12, -14, 12);
+        GPoint("Zip 1", 21, 6.5f, 0);
+        GPoint("Zip 2", 37, 8.5f, 6);
+        GPoint("Zip To Wall Run", 44, 9, 9.5f);
+        ClimbBack(8, -12, -9, 0, -14);
+        Checkpoint("Zip Canyon", 1.5f, 0, 0, 90);
+        Tip("Tip Zip Wall Run", 34.5f, 39.5f, 2, 10, 4, "ZIP TO WALL RUN", "GRAPPLE", Green,
+            "Zip to a point beside a red wall to land straight in a wall run.");
+        Exit('E', 0, 4);
+        EndRoom();
     }
 
-    // Four walls round the floor plan and an invisible ceiling (collider only, so light
-    // still gets in for the blockout). Doors are holes in the walls; an exit's lintel is
-    // yellow so the way on stands out.
-    static void Shell(float x0, float x1, float z0, float z1, float yb, float yt, params Door[] doors)
+    // 14 Swing gorge. 90 m over a 16 m deep gorge. Each swing point hangs 12 m above the
+    // ledges, halfway across its gap, 14 m apart - one rope length - so letting go at the
+    // top of one swing carries you to the next. A wall hanging 6 m above the ledges near the
+    // end needs a reel in to clear. Fall and the steps take you back up to the ledge you
+    // swung from.
+    static void Room14SwingGorge()
     {
-        Wall('W', x0 - T, x0, z0 - T, z1 + T, yb, yt, doors);
-        Wall('E', x1, x1 + T, z0 - T, z1 + T, yb, yt, doors);
-        Wall('S', x0, x1, z0 - T, z0, yb, yt, doors);
-        Wall('N', x0, x1, z1, z1 + T, yb, yt, doors);
-        Piece("Ceiling", new Vector3(x0 - T, yt, z0 - T), new Vector3(x1 + T, yt + T, z1 + T), wallMat, visible: false);
+        BeginRoom("14 Swing Gorge", 90, -10, 10, -16, 24);
+        Floor(0, 6, -10, 10, 0);
+        Floor(20, 26, -10, 10, 0);
+        Floor(54, 60, -10, 10, 0);
+        Floor(82, 90, -10, 10, 0);
+        Block("Gorge Wall", 66, 67, -10, 10, -4, 6);
+        GPoint("Swing 1", 13, 12, 0);
+        GPoint("Swing 2", 33, 12, 0);
+        GPoint("Swing 3", 47, 12, 0);
+        GPoint("Swing 4", 64, 14, 0);
+        GPoint("Swing 5", 76, 12, 0);
+        ClimbBack(6, -10, -7, 0, -16);
+        ClimbBack(26, -10, -7, 0, -16);
+        ClimbBack(60, -10, -7, 0, -16);
+        Checkpoint("Swing Gorge", 1.5f, 0, 0, 90);
+        Tip("Tip Swing", 1, 5, -10, 10, 0, "SWING", "GRAPPLE", Green,
+            "{slot2}  then hold  {primary}  to swing. Let go at the top of the swing.",
+            "{jump}  jumps off with a boost.");
+        Tip("Tip Reel", 55, 59, -10, 10, 0, "REEL", "GRAPPLE", Green,
+            "Scroll to reel in and lift yourself over the wall.");
+        Exit('E', 0, 0);
+        EndRoom();
     }
 
-    static void Wall(char side, float xa, float xb, float za, float zb, float yb, float yt, Door[] doors)
+    // 15 Anchor chasm. A 36 m chasm with nothing to grab. The only way over is to throw
+    // the axe into the brown board above the exit and zip to it. Fall in and it's a long
+    // climb back up to where you started.
+    static void Room15AnchorChasm()
     {
-        bool alongZ = side == 'W' || side == 'E';
-        float a0 = alongZ ? za : xa;
-        float a1 = alongZ ? zb : xb;
+        BeginRoom("15 Anchor Chasm", 56, -15, 15, -24, 30);
+        Floor(0, 10, -15, 15, 0);
+        Floor(46, 56, -15, 15, 0);
+        Target("Target Board", 55.6f, 56, -4, 4, 6, 12);
+        PointLight("Board Light", new Vector3(52, 10, 0), new Color(1f, 0.8f, 0.5f), 12, 2f);
+        ClimbBack(10, -15, -12, 0, -24);
+        Checkpoint("Anchor Chasm", 1.5f, 0, 0, 90);
+        Tip("Tip Anchor", 1, 6, -15, 15, 0, "ANCHOR", "GRAPPLE", Green,
+            "Nothing to grab? Throw the axe into the board and  {zip}  to it.");
+        Exit('E', 0, 0);
+        EndRoom();
+    }
 
-        List<Door> mine = new List<Door>();
-        foreach (Door d in doors)
+    // ================================================================ Act 4: the Ascent
+
+    // 16 The Ascent. One long run through everything: slide, pipe, a glass launch, a pogo
+    // pad, two wall runs, a zip up, a swing, and a 10 m wall you anchor up. The goal is on
+    // the summit; grabbing it gives your time and opens the portal into the level.
+    // Shortcut for the good: from the zip ledge, throw the axe straight into the summit
+    // board and zip up, skipping the swing.
+    static void Room16TheAscent()
+    {
+        BeginRoom("16 The Ascent", 150, -15, 15, -20, 30);
+        Floor(0, 8, -15, 15, 0);
+        Ramp("Slide", 8, 0, 28, -6, -15, 15);
+        Floor(28, 36, -15, 15, -6);
+        Block("Pipe", 31, 32, -15, 15, -4.4f, -3.8f);
+        Glass("Launch Glass", new Vector3(35.7f, -4, 0), 30, 4, alongX: true, runThrough: true);
+        Floor(44, 52, -15, 15, -6);
+        Floor(52, 60, -15, 15, -12);
+        Pogo("Pogo Pad", 52.5f, 59.5f, -6, 6, -12, -11.6f);
+        Floor(60, 66, -15, 15, -2);
+        WallRun("Ascent Wall A", 65, 80, 4, 4.5f, -8, 6);
+        WallRun("Ascent Wall B", 78, 93, -4.5f, -4, -8, 6);
+        Floor(92, 98, -15, 15, -2);
+        Floor(106, 112, -15, 15, 4);
+        GPoint("Zip Up", 109, 7, 0);
+        GPoint("Swing", 120, 16, 0);
+        Floor(128, 134, -15, 15, 4);
+        Floor(134, 150, -15, 15, 14);
+        Target("Summit Board", 133.6f, 134, -4, 4, 10, 14);
+        // every fall climbs back to the platform you left, so a miss costs a retry
+        ClimbBack(36, -15, -12, -6, -20);
+        ClimbBack(52, 12, 15, -6, -12);
+        ClimbBack(66, -15, -12, -2, -20);
+        ClimbBack(98, -15, -12, -2, -20);
+        ClimbBack(112, -15, -12, 4, -20);
+        Checkpoint("Ascent", 1.5f, 0, 0, 90);
+        Checkpoint("Ascent Middle", 92.6f, 0, -2, 90);
+
+        GameObject exitPortal = ExitPortal(new Vector3(146, 17.02f, 0));
+        Goal(new Vector3(142, 15.6f, 0), exitPortal.GetComponent<Portal>());
+
+        Tip("Tip Ascent", 1, 6, -15, 15, 0, "THE ASCENT", "FINAL", Gold,
+            "Everything you've learned, start to finish. The goal's at the top.");
+        EndRoom();
+    }
+
+    // ================================================================ rooms and chaining
+
+    static void BeginRoom(string name, float length, float z0, float z1, float y0, float y1, bool entry = true)
+    {
+        room = new GameObject(name).transform;
+        room.SetParent(root, true);
+        room.SetPositionAndRotation(cursorPos, Quaternion.Euler(0f, cursorYaw, 0f));
+        rL = length;
+        rZ0 = z0;
+        rZ1 = z1;
+        rY0 = y0;
+        rY1 = y1;
+        rHasEntry = entry;
+        exitSide = '\0';
+    }
+
+    static void Exit(char side, float at, float sill)
+    {
+        exitSide = side;
+        exitAt = at;
+        exitSill = sill;
+    }
+
+    // Builds the room's hull, the corridor out of it, and moves the cursor to the far end
+    // of that corridor, turned to face the way it goes.
+    static void EndRoom()
+    {
+        List<HullDoor> doors = new List<HullDoor>();
+        if (rHasEntry)
         {
-            if (d.side == side)
-            {
-                mine.Add(d);
-            }
+            doors.Add(new HullDoor { side = 'W', at = 0, sill = 0, exit = false });
         }
-        mine.Sort((p, q) => p.at.CompareTo(q.at));
-
-        float cursor = a0;
-        foreach (Door d in mine)
+        if (exitSide != '\0')
         {
-            float o0 = d.at - DoorW * 0.5f;
-            float o1 = d.at + DoorW * 0.5f;
-            WallPiece("Wall " + side, alongZ, xa, xb, za, zb, cursor, o0, yb, yt, wallMat);
-            WallPiece("Below Door " + side, alongZ, xa, xb, za, zb, o0, o1, yb, d.sill, wallMat);
-            WallPiece(d.exit ? "Exit Lintel " + side : "Above Door " + side, alongZ, xa, xb, za, zb, o0, o1,
-                d.sill + DoorH, yt, d.exit ? exitMat : wallMat);
-            cursor = o1;
+            doors.Add(new HullDoor { side = exitSide, at = exitAt, sill = exitSill, exit = true });
         }
-        WallPiece("Wall " + side, alongZ, xa, xb, za, zb, cursor, a1, yb, yt, wallMat);
-    }
+        Hull("Room Hull", 0, rL, rY0, rY1, rZ0, rZ1, doors, open: null);
 
-    static void WallPiece(string name, bool alongZ, float xa, float xb, float za, float zb,
-                          float a0, float a1, float y0, float y1, Material mat)
-    {
-        if (a1 - a0 < 0.01f || y1 - y0 < 0.01f)
+        if (exitSide == '\0')
         {
             return;
         }
-        Vector3 min = alongZ ? new Vector3(xa, y0, a0) : new Vector3(a0, y0, za);
-        Vector3 max = alongZ ? new Vector3(xb, y1, a1) : new Vector3(a1, y1, zb);
-        Piece(name, min, max, mat);
-    }
 
-    // solid from the room's bottom up to the walking surface, so pits have real sides
-    static void Floor(float x0, float x1, float z0, float z1, float top)
-    {
-        Piece("Floor", new Vector3(x0, Mathf.Min(roomBottom, top - T), z0), new Vector3(x1, top, z1), floorMat);
-    }
-
-    static void Obstacle(string name, float x0, float x1, float z0, float z1, float y0, float y1)
-    {
-        Piece(name, new Vector3(x0, y0, z0), new Vector3(x1, y1, z1), obstacleMat);
-    }
-
-    // red, on the WallRun layer and tag, like the walls in the current tutorial
-    static void WallRunWall(string name, float x0, float x1, float z0, float z1, float y0, float y1)
-    {
-        GameObject go = Piece(name, new Vector3(x0, y0, z0), new Vector3(x1, y1, z1), wallRunMat);
-        if (go != null)
+        Vector3 doorPoint;
+        Vector3 dir;
+        float turn;
+        switch (exitSide)
         {
-            go.layer = wallRunLayer;
-            go.tag = "WallRun";
+            case 'N': doorPoint = new Vector3(exitAt, exitSill, rZ1); dir = Vector3.forward; turn = -90f; break;
+            case 'S': doorPoint = new Vector3(exitAt, exitSill, rZ0); dir = Vector3.back; turn = 90f; break;
+            default: doorPoint = new Vector3(rL, exitSill, exitAt); dir = Vector3.right; turn = 0f; break;
+        }
+
+        // exit light just inside the door: the way on is always the lit opening
+        PointLight("Exit Light", doorPoint - dir * 1.5f + Vector3.up * (DoorH + 0.5f), ExitLight, 10, 2f);
+        Corridor(doorPoint, dir);
+
+        cursorPos = room.TransformPoint(doorPoint + dir * CorridorLength);
+        cursorYaw += turn;
+    }
+
+    struct HullDoor
+    {
+        public char side;
+        public float at, sill;
+        public bool exit;
+    }
+
+    // An inverted-hull box from (x0, y0, z0) to (x1, y1, z1) in the room's frame with door
+    // holes cut through its walls. Built outward-facing, then handed to RoomBuilder, which
+    // flips it inside out and sets it up like any other room (Ground layer, non-convex
+    // collider, two-sided shadows, static). "open" lists sides with no face at all
+    // (W/E/S/N, D = floor, U = ceiling).
+    static void Hull(string name, float x0, float x1, float y0, float y1, float z0, float z1,
+                     List<HullDoor> doors, string open)
+    {
+        List<Vector3> verts = new List<Vector3>();
+        List<Face> faces = new List<Face>();
+        List<Face> lintels = new List<Face>();
+
+        void Quad(Vector3 a, Vector3 b, Vector3 c, Vector3 d, Vector3 outward, bool lintel)
+        {
+            if ((a - b).sqrMagnitude < 1e-4f || (b - c).sqrMagnitude < 1e-4f)
+            {
+                return;
+            }
+            if (Vector3.Dot(Vector3.Cross(b - a, c - a), outward) < 0f)
+            {
+                (b, d) = (d, b);
+            }
+            int i = verts.Count;
+            verts.Add(a);
+            verts.Add(b);
+            verts.Add(c);
+            verts.Add(d);
+            Face f = new Face(new[] { i, i + 1, i + 2, i, i + 2, i + 3 });
+            faces.Add(f);
+            if (lintel)
+            {
+                lintels.Add(f);
+            }
+        }
+
+        bool Has(char side) => open == null || open.IndexOf(side) < 0;
+
+        if (Has('D'))
+        {
+            Quad(new Vector3(x0, y0, z0), new Vector3(x1, y0, z0), new Vector3(x1, y0, z1), new Vector3(x0, y0, z1), Vector3.down, false);
+        }
+        if (Has('U'))
+        {
+            Quad(new Vector3(x0, y1, z0), new Vector3(x1, y1, z0), new Vector3(x1, y1, z1), new Vector3(x0, y1, z1), Vector3.up, false);
+        }
+
+        // a wall as rectangles in (u along the wall, y), with each door's hole left out
+        void WallFace(char side, float u0, float u1, System.Func<float, float, Vector3> at, Vector3 outward)
+        {
+            if (!Has(side))
+            {
+                return;
+            }
+            List<HullDoor> mine = doors.FindAll(d => d.side == side);
+            mine.Sort((p, q) => p.at.CompareTo(q.at));
+
+            void Rect(float a0, float a1, float b0, float b1, bool lintel)
+            {
+                if (a1 - a0 < 0.01f || b1 - b0 < 0.01f)
+                {
+                    return;
+                }
+                Quad(at(a0, b0), at(a1, b0), at(a1, b1), at(a0, b1), outward, lintel);
+            }
+
+            float cursor = u0;
+            foreach (HullDoor d in mine)
+            {
+                float o0 = d.at - DoorW * 0.5f, o1 = d.at + DoorW * 0.5f;
+                Rect(cursor, o0, y0, y1, false);
+                Rect(o0, o1, y0, d.sill, false);
+                Rect(o0, o1, d.sill + DoorH, y1, d.exit);
+                cursor = o1;
+            }
+            Rect(cursor, u1, y0, y1, false);
+        }
+
+        WallFace('W', z0, z1, (u, y) => new Vector3(x0, y, u), Vector3.left);
+        WallFace('E', z0, z1, (u, y) => new Vector3(x1, y, u), Vector3.right);
+        WallFace('S', x0, x1, (u, y) => new Vector3(u, y, z0), Vector3.back);
+        WallFace('N', x0, x1, (u, y) => new Vector3(u, y, z1), Vector3.forward);
+
+        ProBuilderMesh pb = ProBuilderMesh.Create(verts, faces);
+        GameObject go = pb.gameObject;
+        go.name = name;
+        go.transform.SetParent(room, false);
+        pb.SetMaterial(faces, hullMat);
+        if (lintels.Count > 0)
+        {
+            pb.SetMaterial(lintels, exitMat);
+        }
+        pb.ToMesh();
+        pb.Refresh();
+        RoomBuilder.ConvertToRoom(pb, groundLayer);
+        built++;
+    }
+
+    // 6 m hull from a door out along "dir" (in the room's frame), open at both ends.
+    static void Corridor(Vector3 doorPoint, Vector3 dir)
+    {
+        Vector3 far = doorPoint + dir * CorridorLength;
+        float y0 = doorPoint.y, y1 = doorPoint.y + DoorH;
+        bool alongX = Mathf.Abs(dir.x) > 0.5f;
+        List<HullDoor> none = new List<HullDoor>();
+        if (alongX)
+        {
+            Hull("Corridor", Mathf.Min(doorPoint.x, far.x), Mathf.Max(doorPoint.x, far.x), y0, y1,
+                 doorPoint.z - DoorW * 0.5f, doorPoint.z + DoorW * 0.5f, none, open: "WE");
+        }
+        else
+        {
+            Hull("Corridor", doorPoint.x - DoorW * 0.5f, doorPoint.x + DoorW * 0.5f, y0, y1,
+                 Mathf.Min(doorPoint.z, far.z), Mathf.Max(doorPoint.z, far.z), none, open: "SN");
         }
     }
 
-    static void CorridorX(Transform root, string name, float x0, float x1, float zc, float floorY)
+    // ================================================================ pieces
+
+    // walkable block, solid from the room's floor up to "top", so pits have real sides
+    static GameObject Floor(float x0, float x1, float z0, float z1, float top)
     {
-        Room(root, name, floorY - T);
-        float z0 = zc - DoorW * 0.5f, z1 = zc + DoorW * 0.5f;
-        Floor(x0, x1, z0, z1, floorY);
-        Piece("Wall S", new Vector3(x0, floorY, z0 - T), new Vector3(x1, floorY + DoorH, z0), wallMat);
-        Piece("Wall N", new Vector3(x0, floorY, z1), new Vector3(x1, floorY + DoorH, z1 + T), wallMat);
-        Piece("Ceiling", new Vector3(x0, floorY + DoorH, z0 - T), new Vector3(x1, floorY + DoorH + T, z1 + T), wallMat, visible: false);
+        return Piece("Floor", new Vector3(x0, rY0, z0), new Vector3(x1, top, z1), floorMat);
     }
 
-    static void CorridorZ(Transform root, string name, float z0, float z1, float xc, float floorY)
+    // a shelf on a wall, 0.5 m thick
+    static GameObject Ledge(string name, float x0, float x1, float z0, float z1, float top)
     {
-        Room(root, name, floorY - T);
-        float x0 = xc - DoorW * 0.5f, x1 = xc + DoorW * 0.5f;
-        Floor(x0, x1, z0, z1, floorY);
-        Piece("Wall W", new Vector3(x0 - T, floorY, z0), new Vector3(x0, floorY + DoorH, z1), wallMat);
-        Piece("Wall E", new Vector3(x1, floorY, z0), new Vector3(x1 + T, floorY + DoorH, z1), wallMat);
-        Piece("Ceiling", new Vector3(x0 - T, floorY + DoorH, z0), new Vector3(x1 + T, floorY + DoorH + T, z1), wallMat, visible: false);
+        return Piece(name, new Vector3(x0, top - 0.5f, z0), new Vector3(x1, top, z1), floorMat);
+    }
+
+    static GameObject Block(string name, float x0, float x1, float z0, float z1, float y0, float y1)
+    {
+        return Piece(name, new Vector3(x0, y0, z0), new Vector3(x1, y1, z1), obstacleMat);
+    }
+
+    static void WallRun(string name, float x0, float x1, float z0, float z1, float y0, float y1)
+    {
+        GameObject go = Piece(name, new Vector3(x0, y0, z0), new Vector3(x1, y1, z1), wallRunMat);
+        go.layer = wallRunLayer;
+        go.tag = "WallRun";
+    }
+
+    // orange, and the axe bounces you off it
+    static void Pogo(string name, float x0, float x1, float z0, float z1, float y0, float y1)
+    {
+        GameObject go = Piece(name, new Vector3(x0, y0, z0), new Vector3(x1, y1, z1), pogoMat);
+        go.AddComponent<PogoSurface>();
+    }
+
+    // brown: something to throw the axe into
+    static void Target(string name, float x0, float x1, float z0, float z1, float y0, float y1)
+    {
+        Piece(name, new Vector3(x0, y0, z0), new Vector3(x1, y1, z1), targetMat);
+    }
+
+    // 2 m steps (or less) climbing from "bottom" to "top" at the face x = faceX, in a strip
+    // from z0 to z1. dir +1: the steps sit at x < faceX and climb as x increases; dir -1:
+    // they sit at x > faceX and climb as x decreases.
+    static void Stairs(float faceX, int dir, float z0, float z1, float bottom, float top)
+    {
+        int risers = Mathf.CeilToInt((top - bottom) / Rise - 0.001f);
+        float rise = (top - bottom) / risers;
+        for (int k = risers - 1; k >= 1; k--)
+        {
+            int fromFace = risers - 1 - k;
+            float near = faceX - dir * (fromFace * 1.5f);
+            float farX = near - dir * 1.5f;
+            Piece("Step", new Vector3(Mathf.Min(near, farX), rY0, z0),
+                  new Vector3(Mathf.Max(near, farX), bottom + k * rise, z1), floorMat);
+        }
+    }
+
+    // steps in the gap right after the platform ending at faceX, back up onto it
+    static void ClimbBack(float faceX, float z0, float z1, float top, float bottom = float.NaN)
+    {
+        Stairs(faceX, -1, z0, z1, float.IsNaN(bottom) ? rY0 : bottom, top);
+    }
+
+    // a slab whose top runs from (xa, ya) to (xb, yb) along x
+    static void Ramp(string name, float xa, float ya, float xb, float yb, float z0, float z1)
+    {
+        const float thick = 0.5f;
+        float dx = xb - xa, dy = yb - ya;
+        float len = Mathf.Sqrt(dx * dx + dy * dy);
+        Quaternion rot = Quaternion.Euler(0f, 0f, Mathf.Atan2(dy, dx) * Mathf.Rad2Deg);
+
+        ProBuilderMesh pb = ShapeGenerator.GenerateCube(PivotLocation.Center, new Vector3(len, thick, z1 - z0));
+        GameObject go = pb.gameObject;
+        go.name = name;
+        go.transform.SetParent(room, false);
+        go.transform.localRotation = rot;
+        go.transform.localPosition = new Vector3((xa + xb) * 0.5f, (ya + yb) * 0.5f, (z0 + z1) * 0.5f)
+                                     - rot * Vector3.up * (thick * 0.5f);
+        FinishPiece(pb, floorMat, true);
     }
 
     // A ProBuilder cube between two corners, set up like the project's other level pieces:
     // Ground layer, non-convex mesh collider, static.
-    static GameObject Piece(string name, Vector3 min, Vector3 max, Material mat, bool visible = true)
+    static GameObject Piece(string name, Vector3 min, Vector3 max, Material mat, bool isStatic = true)
     {
         Vector3 size = max - min;
         if (size.x < 0.01f || size.y < 0.01f || size.z < 0.01f)
@@ -667,35 +1044,17 @@ public static class TutorialBlockoutBuilder
         go.name = name;
         go.transform.SetParent(room, false);
         go.transform.localPosition = (min + max) * 0.5f;
-        FinishPiece(pb, mat, visible);
+        FinishPiece(pb, mat, isStatic);
         return go;
     }
 
-    // a slab whose top surface runs from (xa, ya) to (xb, yb) along x
-    static void Ramp(string name, float xa, float ya, float xb, float yb, float z0, float z1, Material mat)
+    // not static: it moves
+    static GameObject MovingBlock(string name, float x0, float x1, float z0, float z1, float y0, float y1)
     {
-        float dx = xb - xa, dy = yb - ya;
-        float len = Mathf.Sqrt(dx * dx + dy * dy);
-        float angle = Mathf.Atan2(dy, dx) * Mathf.Rad2Deg;
-        Quaternion rot = Quaternion.Euler(0f, 0f, angle);
-
-        ProBuilderMesh pb = ShapeGenerator.GenerateCube(PivotLocation.Center, new Vector3(len, T, z1 - z0));
-        GameObject go = pb.gameObject;
-        go.name = name;
-        go.transform.SetParent(room, false);
-        Vector3 topMid = new Vector3((xa + xb) * 0.5f, (ya + yb) * 0.5f, (z0 + z1) * 0.5f);
-        go.transform.localRotation = rot;
-        go.transform.localPosition = topMid - rot * Vector3.up * (T * 0.5f);
-        FinishPiece(pb, mat, true);
+        return Piece(name, new Vector3(x0, y0, z0), new Vector3(x1, y1, z1), obstacleMat, isStatic: false);
     }
 
-    // same, for a slope met while travelling -x
-    static void RampDown(string name, float xHigh, float yHigh, float xLow, float yLow, float z0, float z1, Material mat)
-    {
-        Ramp(name, xLow, yLow, xHigh, yHigh, z0, z1, mat);
-    }
-
-    static void FinishPiece(ProBuilderMesh pb, Material mat, bool visible)
+    static void FinishPiece(ProBuilderMesh pb, Material mat, bool isStatic)
     {
         pb.SetMaterial(pb.faces, mat);
         pb.ToMesh();
@@ -708,33 +1067,49 @@ public static class TutorialBlockoutBuilder
         col.convex = false;
         col.sharedMesh = go.GetComponent<MeshFilter>().sharedMesh;
 
-        MeshRenderer r = go.GetComponent<MeshRenderer>();
-        if (r != null)
+        if (isStatic)
         {
-            r.enabled = visible;
+            GameObjectUtility.SetStaticEditorFlags(go,
+                StaticEditorFlags.ContributeGI | StaticEditorFlags.BatchingStatic |
+                StaticEditorFlags.OccluderStatic | StaticEditorFlags.ReflectionProbeStatic);
         }
-
-        GameObjectUtility.SetStaticEditorFlags(go,
-            StaticEditorFlags.ContributeGI | StaticEditorFlags.BatchingStatic |
-            StaticEditorFlags.OccluderStatic | StaticEditorFlags.ReflectionProbeStatic);
         built++;
     }
 
     // ---------------------------------------------------------------- gameplay pieces
 
-    static void GrapplePoint(string name, float x, float y, float z)
+    static void GPoint(string name, float x, float y, float z)
     {
         GameObject go = (GameObject)PrefabUtility.InstantiatePrefab(grapplePointPrefab, room.gameObject.scene);
         go.name = name;
         go.transform.SetParent(room, false);
         go.transform.localPosition = new Vector3(x, y, z);
+        // lit, so the points read from across the room
+        Light light = new GameObject("Light").AddComponent<Light>();
+        light.transform.SetParent(go.transform, false);
+        light.type = LightType.Point;
+        light.color = Green;
+        light.range = 6f;
+        light.intensity = 2f;
         built++;
     }
 
-    // The BreakableWall prefab is a 10.3 m wide, 10.2 m tall slab with its pivot off to one
-    // side. It's scaled to the opening and shifted so its middle lands on "centre".
-    // alongX = you walk through it travelling along x (the wall faces x).
-    static void Breakable(string name, Vector3 centre, float width, float height, bool alongX, bool runThrough)
+    static void PointLight(string name, Vector3 local, Color color, float range, float intensity)
+    {
+        Light light = new GameObject(name).AddComponent<Light>();
+        light.transform.SetParent(room, false);
+        light.transform.localPosition = local;
+        light.type = LightType.Point;
+        light.color = color;
+        light.range = range;
+        light.intensity = intensity;
+        light.shadows = LightShadows.None;
+    }
+
+    // The BreakableWall prefab (a 10.3 x 10.2 m slab with its pivot off to one side),
+    // scaled to size, centred on "centre", and given the glass material.
+    // alongX = you go through it travelling along x.
+    static void Glass(string name, Vector3 centre, float width, float height, bool alongX, bool runThrough)
     {
         GameObject go = (GameObject)PrefabUtility.InstantiatePrefab(breakablePrefab, room.gameObject.scene);
         go.name = name;
@@ -746,6 +1121,12 @@ public static class TutorialBlockoutBuilder
         go.transform.localScale = scale;
         go.transform.localRotation = rot;
         go.transform.localPosition = centre - rot * Vector3.Scale(local.center, scale);
+
+        MeshRenderer r = go.GetComponent<MeshRenderer>();
+        if (r != null)
+        {
+            r.sharedMaterial = glassMat;
+        }
 
         BreakableWall wall = go.GetComponent<BreakableWall>();
         if (wall != null)
@@ -797,7 +1178,7 @@ public static class TutorialBlockoutBuilder
         return go;
     }
 
-    // a tip zone the full height of a doorway, from x0 to x1 and z0 to z1, standing on "floor"
+    // a tip zone the full height of a doorway, from x0 to x1 and z0 to z1, on "floor"
     static void Tip(string name, float x0, float x1, float z0, float z1, float floor,
                     string title, string subtitle, Color accent, params string[] lines)
     {
@@ -814,7 +1195,7 @@ public static class TutorialBlockoutBuilder
         tip.lines = lines;
     }
 
-    // You come back standing here, facing "yaw" (90 = +x). The trigger spans a doorway.
+    // You come back standing here, facing "yaw" in the room's frame (90 = forward).
     static void Checkpoint(string name, float x, float z, float floor, float yaw)
     {
         GameObject go = new GameObject("Checkpoint " + name);
@@ -829,9 +1210,46 @@ public static class TutorialBlockoutBuilder
         built++;
     }
 
-    static void FallReset(string name, float x0, float x1, float z0, float z1, float y0, float y1)
+    // Closed until the goal is grabbed, then it opens floating in front of the player and
+    // leads to the TutorialArrival portal in Grapple Scene.
+    static GameObject ExitPortal(Vector3 local)
     {
-        GameObject go = Trigger(name, new Vector3(x0, y0, z0), new Vector3(x1, y1, z1));
-        go.AddComponent<FallReset>();
+        GameObject go = (GameObject)PrefabUtility.InstantiatePrefab(portalPrefab, room.gameObject.scene);
+        go.name = "Tutorial Exit Portal";
+        go.transform.SetParent(room, false);
+        go.transform.localPosition = local;
+        go.transform.localRotation = Quaternion.Euler(0f, -90f, 0f);
+        SerializedObject so = new SerializedObject(go.GetComponent<Portal>());
+        so.FindProperty("portalId").stringValue = "TutorialExit";
+        so.FindProperty("linkedSceneName").stringValue = "Grapple Scene";
+        so.FindProperty("linkedPortalId").stringValue = "TutorialArrival";
+        so.FindProperty("portalSize").vector2Value = new Vector2(4.5f, 6f);
+        so.FindProperty("startClosed").boolValue = true;
+        so.FindProperty("openPlacement").enumValueIndex = (int)Portal.OpenPlacement.InFrontOfPlayer;
+        so.ApplyModifiedProperties();
+        built++;
+        return go;
+    }
+
+    // The same LevelGoal as Grapple Scene: stops the clock, ranks the time, opens the exit.
+    // Rank times are for a first run of about ten minutes.
+    static void Goal(Vector3 local, Portal exit)
+    {
+        GameObject go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        go.name = "Tutorial Goal";
+        go.transform.SetParent(room, false);
+        go.transform.localPosition = local;
+        go.transform.localScale = Vector3.one * 0.8f;
+        go.GetComponent<MeshRenderer>().sharedMaterial = exitMat;
+        go.GetComponent<BoxCollider>().isTrigger = true;
+        LevelGoal goal = go.AddComponent<LevelGoal>();
+        goal.exitPortal = exit;
+        goal.sTime = 360f;
+        goal.aTime = 480f;
+        goal.bTime = 600f;
+        goal.cTime = 780f;
+        goal.dTime = 960f;
+        PointLight("Goal Light", local + Vector3.up * 2f, Gold, 10, 3f);
+        built++;
     }
 }

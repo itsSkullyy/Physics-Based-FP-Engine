@@ -134,6 +134,9 @@ public class ThrownAxe : MonoBehaviour
 
     public bool IsStuck => stuck;
     public bool IsRecalling => recalling;
+    /// The collider it's stuck in, or null when it isn't stuck in anything (flying,
+    /// recalling, or lying loose).
+    public Collider StuckSurface => stuck && !dropped && hasSurface ? surfaceCollider : null;
     public bool IsFlying => launched && !stuck && !dropped;
     public Vector3 Velocity => velocity;
     public static IReadOnlyList<ThrownAxe> Live => live;
@@ -464,7 +467,7 @@ public class ThrownAxe : MonoBehaviour
     /// moving point like the player's chest; pass null to home on the transform's origin.
     /// onCaught fires when the axe reaches the catch radius.
     public bool Recall(Transform target, float catchRadius, System.Action onCaught,
-                       System.Func<Vector3> targetPoint = null)
+                       System.Func<Vector3> targetPoint = null, float speedScale = 1f)
     {
         if (target == null)
         {
@@ -477,6 +480,7 @@ public class ThrownAxe : MonoBehaviour
 
         recallTarget = target;
         recallTargetPoint = targetPoint;
+        recallSpeedScale = Mathf.Max(0.1f, speedScale);
         recallCatchRadius = Mathf.Max(0f, catchRadius);
         onRecallCaught = onCaught;
 
@@ -507,7 +511,7 @@ public class ThrownAxe : MonoBehaviour
             }
         }
 
-        velocity = (RecallAimPoint() - HeadPosition).normalized * (recallMaxSpeed * 0.25f);
+        velocity = (RecallAimPoint() - HeadPosition).normalized * (RecallSpeed * 0.25f);
 
         if (trail != null)
         {
@@ -597,11 +601,11 @@ public class ThrownAxe : MonoBehaviour
             }
         }
 
-        Vector3 desiredVel = desiredDir * recallMaxSpeed;
-        velocity = Vector3.MoveTowards(velocity, desiredVel, recallAcceleration * dt);
-        if (velocity.magnitude > recallMaxSpeed)
+        Vector3 desiredVel = desiredDir * RecallSpeed;
+        velocity = Vector3.MoveTowards(velocity, desiredVel, recallAcceleration * recallSpeedScale * dt);
+        if (velocity.magnitude > RecallSpeed)
         {
-            velocity = velocity.normalized * recallMaxSpeed;
+            velocity = velocity.normalized * RecallSpeed;
         }
 
         // Collision-swept movement: the axe is kinematic with its colliders off, so we
@@ -664,6 +668,10 @@ public class ThrownAxe : MonoBehaviour
     }
 
     public bool IsLoose => dropped && !recalling;
+
+    // a zip reel brings it in faster than a normal recall
+    float recallSpeedScale = 1f;
+    float RecallSpeed => recallMaxSpeed * recallSpeedScale;
 
     /// Skips the embed cooldown. Used by the zip pull, which is its own gate.
     public void ForceRecallReady()

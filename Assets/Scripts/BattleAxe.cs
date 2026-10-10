@@ -97,6 +97,8 @@ public class BattleAxe : MonoBehaviour
     public int maxAirBounces = 0;           // 0 = unlimited
     public bool bounceWhenGrounded = true;
     public bool bounceReleasesGrapple = true;
+    [Tooltip("Only floors and walls with a PogoSurface (and enemies) bounce you. Off: everything does.")]
+    public bool pogoOnlyOnMarkedSurfaces = true;
 
     [Header("Glass Smash Boost")]
     [Tooltip("Skips the normal bounce on a broken BreakableWall and launches you through the gap instead.")]
@@ -144,10 +146,13 @@ public class BattleAxe : MonoBehaviour
     public float recallCatchRadius = 0.7f;
 
     [Header("Zip Pull")]
+    [Tooltip("Zip at the axe lying loose and the hook latches onto it and reels it straight back, like a fishing line.")]
     public bool zipPullsLooseAxe = true;
     public float zipAimAngle = 14f;
     public float zipPullRange = 60f;
     public bool zipIgnoresRecallCooldown = true;
+    [Tooltip("How much faster than a normal recall the reel brings it in.")]
+    public float zipReelSpeedScale = 1.8f;
 
     [Header("Auto Pickup")]
     public bool autoPickupOnContact = true;
@@ -600,7 +605,8 @@ public class BattleAxe : MonoBehaviour
         }
         else
         {
-            bounced = bounceOnHit && ApplyBounce(dir, normal);
+            bool canPogo = !pogoOnlyOnMarkedSurfaces || PogoSurface.Allows(best.collider);
+            bounced = bounceOnHit && canPogo && ApplyBounce(dir, normal);
         }
 
         AxeHit?.Invoke(point, normal, bounced);
@@ -900,13 +906,19 @@ public class BattleAxe : MonoBehaviour
             }
         }
 
-        if (zipPullsLooseAxe && activeAxe.IsLoose && input.grapplePull.Pressed && AimedAtLooseAxe())
+        // the grapple has to be unlocked (and on) for the hook to reach it
+        bool hookAvailable = grappling != null && grappling.enabled;
+        if (zipPullsLooseAxe && hookAvailable && activeAxe.IsLoose && input.grapplePull.Pressed && AimedAtLooseAxe())
         {
             if (zipIgnoresRecallCooldown)
             {
                 activeAxe.ForceRecallReady();
             }
-            StartRecall();
+            StartRecall(zipReelSpeedScale);
+            if (activeAxe != null && activeAxe.IsRecalling)
+            {
+                grappling.StartAxeReel(activeAxe);
+            }
             return;
         }
 
@@ -946,7 +958,20 @@ public class BattleAxe : MonoBehaviour
         }
     }
 
-    void StartRecall()
+    /// Calls the axe back from wherever it is, skipping the recall cooldown. Used by
+    /// level pieces like AxeRecallZone. False if there's no axe out or it's already coming.
+    public bool RecallNow(float speedScale = 1f)
+    {
+        if (activeAxe == null || activeAxe.IsRecalling)
+        {
+            return false;
+        }
+        activeAxe.ForceRecallReady();
+        StartRecall(speedScale);
+        return activeAxe != null && activeAxe.IsRecalling;
+    }
+
+    void StartRecall(float speedScale = 1f)
     {
         if (activeAxe == null)
         {
@@ -957,7 +982,7 @@ public class BattleAxe : MonoBehaviour
         System.Func<Vector3> aimPoint = () =>
             aimT.position + aimT.TransformVector(recallAimLocalOffset);
 
-        activeAxe.Recall(aimT, recallCatchRadius, OnRecallCaught, aimPoint);
+        activeAxe.Recall(aimT, recallCatchRadius, OnRecallCaught, aimPoint, speedScale);
 
         if (logDebug)
         {

@@ -1190,10 +1190,57 @@ public class Grappling : MonoBehaviour
         return dir.sqrMagnitude > 0.01f ? dir.normalized : Vector3.zero;
     }
 
+    // ---------------------------------------------------------------- axe reel
+
+    ThrownAxe reelAxe;
+
+    /// Zipping at the axe lying loose: the hook shoots out, latches on, and the line stays
+    /// on it while BattleAxe reels it in. Purely the rope; the axe flies itself.
+    public void StartAxeReel(ThrownAxe axe)
+    {
+        reelAxe = axe;
+        currentRopeEnd = gunTip != null ? gunTip.position : transform.position;
+        Synth.Play(GameSounds.GrappleClick, 0.9f);
+        Synth.Play(GameSounds.GrappleReel, 0.7f, 1.3f);
+    }
+
+    void DrawReelRope()
+    {
+        // caught, destroyed or no longer coming back: the line goes with it
+        if (reelAxe == null || !reelAxe.IsRecalling)
+        {
+            reelAxe = null;
+            ropeLine.positionCount = 0;
+            return;
+        }
+
+        Vector3 start = gunTip != null ? gunTip.position : transform.position;
+        Vector3 end = reelAxe.HeadPosition;
+        currentRopeEnd = Vector3.MoveTowards(currentRopeEnd, end, ropeDrawSpeed * 2f * Time.deltaTime);
+        // once the hook has reached it, it rides along with the axe
+        if ((currentRopeEnd - end).sqrMagnitude < 1f)
+        {
+            currentRopeEnd = end;
+        }
+
+        if (ropeLine.positionCount != 2)
+        {
+            ropeLine.positionCount = 2;
+        }
+        ropeLine.SetPosition(0, start);
+        ropeLine.SetPosition(1, currentRopeEnd);
+    }
+
     void DrawRope()
     {
         if (ropeLine == null)
         {
+            return;
+        }
+
+        if (reelAxe != null && !isSwinging && !isZipping)
+        {
+            DrawReelRope();
             return;
         }
 

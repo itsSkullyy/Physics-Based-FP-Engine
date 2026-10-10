@@ -274,9 +274,17 @@ Floating pickups that hand out the axe or the grapple. In the scene the game sta
 
 ### Tutorial blockout
 
-`Assets/Editor/TutorialBlockoutBuilder.cs`, `Scenes/Tutorial Blockout.unity`
+`Assets/Editor/TutorialBlockoutBuilder.cs`, `Scenes/In Build/Tutorial Blockout.unity`
 
-A grey-box of the full 16-room tutorial from the level design doc, in its own scene (a copy of Mirror Grapple Scene, so the player, cameras, portals and lighting come with it). Run **Tools > Tutorial Blockout > Build Blockout Scene** to build or rebuild it. Every piece is a ProBuilder cube set up like the existing obstacles (Ground layer, non-convex mesh collider): grey floors and walls, blue obstacles, red wall-run walls on the WallRun layer, yellow lintels over each exit, and the project's Grapple Point, BreakableWall and Portal prefabs. It also places the axe and grapple pickups, a tip zone for every new move, a checkpoint at every room and a fall reset in every pit, a start gate and finish on the Gauntlet, and moves Portal B onto the Gauntlet's island. Ceilings are collider-only so daylight still gets in. All sizes live in the builder as plain numbers, so tune them there and rebuild; rebuilding replaces everything under the `Tutorial Blockout` object.
+A grey-box of the full 16-room tutorial from the level design doc. Run **Tools > Tutorial Blockout > Build Blockout Scene** to build or rebuild it (scenes are found by name, so they can live in any folder). Every room and corridor is an inverted-hull ProBuilder cube made with `RoomBuilder.ConvertToRoom`, with doorway holes cut in it; inside, platforms are solid ProBuilder cubes on the Ground layer: light grey to stand on, blue obstacles, red wall-run walls, orange pogo surfaces, glass breakables and brown axe targets. Rooms are chained exit to entry by corridors, so one can be resized without moving the rest by hand. No pit kills you: every pit has 2 m steps back up (to the far side in the movement rooms, back to the start in the ability rooms). It also places the pickups, tip zones, checkpoints, grapple points with green lights, the axe button door, and the goal at the end, which opens a portal into Grapple Scene (the builder adds the matching arrival portal there). Rebuilding replaces everything under the `Tutorial Blockout` object.
+
+### Axe extras
+
+`PogoSurface.cs`, `AxeButton.cs`, `AxeDoor.cs`, `AxeRecallZone.cs`
+
+- **Pogo surfaces.** The axe only bounces you off floors and walls with a `PogoSurface` (and off enemies). Colour them so players learn them; the blockout uses orange.
+- **Zip reel.** Zip at the axe lying loose and the hook latches on and reels it back to you, rope and all, faster than a recall.
+- **Axe button door.** Stick the axe in an `AxeButton` and every `AxeDoor` listing it opens. An `AxeRecallZone` past the door calls the axe home as you walk through, and the door holds just above the returning axe so it squeezes under before slamming shut.
 
 ### Tip zones, checkpoints and fall resets
 

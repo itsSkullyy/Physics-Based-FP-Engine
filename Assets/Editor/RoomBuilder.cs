@@ -56,7 +56,8 @@ public static class RoomBuilder
             "OK");
     }
 
-    static void ConvertToRoom(ProBuilderMesh mesh, int groundLayer)
+    // Public so other editor tools (TutorialBlockoutBuilder) build rooms exactly the same way.
+    public static void ConvertToRoom(ProBuilderMesh mesh, int groundLayer)
     {
         Undo.RecordObject(mesh, "Convert To Room");
         Undo.RecordObject(mesh.gameObject, "Convert To Room");
