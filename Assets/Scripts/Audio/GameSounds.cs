@@ -442,6 +442,27 @@ public static class GameSounds
         };
     });
 
+    // roughly the open sound backwards: shimmer falling away, air sucked in, a soft thud as
+    // it shuts at about 0.95s (Portal's close takes 1s)
+    public static AudioClip PortalClose => Make("PortalClose", 1.3f, 148, -6f, () =>
+    {
+        LowPass air = new LowPass();
+        Osc a = new Osc();
+        Osc b = new Osc();
+        Osc thud = new Osc();
+        return (t, r) =>
+        {
+            float fall = Mathf.Clamp01(t / 0.9f);
+            float shimmer = (a.Sine(Mathf.Lerp(784f, 392f, fall)) + b.Sine(Mathf.Lerp(587f, 262f, fall)) * 0.7f)
+                            * Hump(t, 0.95f) * 0.25f;
+            float suck = air.Next(Noise(r), Mathf.Lerp(2400f, 200f, fall)) * Hump(t, 0.95f) * 0.8f;
+
+            float shut = t - 0.95f;
+            float boom = shut < 0f ? 0f : thud.Sine(Mathf.Lerp(120f, 50f, Mathf.Clamp01(shut / 0.2f))) * Env(shut, 0.002f, 14f);
+            return Sat(shimmer + suck + boom, 1.5f);
+        };
+    });
+
     static System.Func<float, System.Random, float> Jingle(float[] notes, float step, float lastDecay)
     {
         Osc a = new Osc();

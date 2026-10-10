@@ -80,6 +80,7 @@ public class PortalManager : MonoBehaviour
             if (player != null)
             {
                 persistentPlayer = player.transform.root.gameObject;
+                RecordSpawn(persistentPlayer.scene, player.transform);
                 DontDestroyOnLoad(persistentPlayer);
             }
         }
@@ -111,6 +112,35 @@ public class PortalManager : MonoBehaviour
                 }
             }
         }
+    }
+
+    readonly Dictionary<string, Pose> sceneSpawns = new Dictionary<string, Pose>();
+
+    void RecordSpawn(Scene scene, Transform player)
+    {
+        if (!scene.IsValid() || sceneSpawns.ContainsKey(scene.name)) return;
+        Vector3 forward = player.forward;
+        forward.y = 0f;
+        if (forward.sqrMagnitude < 0.001f) forward = Vector3.forward;
+        sceneSpawns[scene.name] = new Pose(player.position, Quaternion.LookRotation(forward.normalized, Vector3.up));
+    }
+
+    /// Where the player starts in a scene and which way they face. The scene the game
+    /// started in is recorded before its player is carried off; any other scene still has
+    /// its own (switched off) Player copy sitting at the start.
+    public bool TryGetSceneSpawn(Scene scene, out Pose spawn)
+    {
+        if (sceneSpawns.TryGetValue(scene.name, out spawn)) return true;
+
+        foreach (GameObject root in scene.GetRootGameObjects())
+        {
+            FirstPersonCharacterController copy = root.GetComponentInChildren<FirstPersonCharacterController>(true);
+            if (copy == null) continue;
+            RecordSpawn(scene, copy.transform);
+            spawn = sceneSpawns[scene.name];
+            return true;
+        }
+        return false;
     }
 
     /// The one live player. A scene streamed in through a portal brings its own Player rig,
@@ -295,7 +325,7 @@ public class PortalManager : MonoBehaviour
         List<NavMeshBuildSource> sources = new List<NavMeshBuildSource>();
         NavMeshBuilder.CollectSources(bounds, ~0, NavMeshCollectGeometry.PhysicsColliders, 0,
             new List<NavMeshBuildMarkup>(), sources);
-        sources.RemoveAll(IsNotLevelGeometry);
+        sources.RemoveAll(source => IsNotLevelGeometry(source, scene));
 
         List<NavMeshDataInstance> instances = new List<NavMeshDataInstance>();
         builtNavMeshes[scene.name] = instances;
@@ -332,10 +362,15 @@ public class PortalManager : MonoBehaviour
 
     // Only static level geometry. Anything that moves, the player, enemies and the portals'
     // own trigger volumes would leave holes or bumps in the mesh.
-    static bool IsNotLevelGeometry(NavMeshBuildSource source)
+    static bool IsNotLevelGeometry(NavMeshBuildSource source, Scene scene)
     {
         Collider c = source.component as Collider;
         if (c == null) return false;
+        // The collect is by bounds, so it also picks up whatever's standing in them from
+        // other scenes - the carried-over player and the axe in their hand included.
+        if (c.gameObject.scene != scene) return true;
+        // Imported meshes without Read/Write can't be built from in a player build.
+        if (c is MeshCollider mc && mc.sharedMesh != null && !mc.sharedMesh.isReadable) return true;
         if (c.isTrigger) return true;
         if (c.attachedRigidbody != null && !c.attachedRigidbody.isKinematic) return true;
         if (c.GetComponentInParent<NavMeshAgent>() != null) return true;

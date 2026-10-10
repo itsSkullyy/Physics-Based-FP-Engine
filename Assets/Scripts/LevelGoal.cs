@@ -10,7 +10,7 @@ public class LevelGoal : MonoBehaviour
     public string playerTag = "Player";
 
     [Header("Exit Portal")]
-    [Tooltip("Portal (with Start Closed ticked) that opens when the level is done. Put it wherever you want the exit to appear. Left empty, the first closed portal in this scene is used.")]
+    [Tooltip("Portal (with Start Closed ticked) that opens when the level is done. Its Open Placement decides where it shows up (In Front Of Player, or Where Placed to use its spot in the scene). Left empty, the first closed portal in this scene is used.")]
     public Portal exitPortal;
     [Tooltip("Seconds after the pickup before the portal starts opening, so the rank lands first.")]
     public float exitPortalDelay = 0.9f;

@@ -80118,6 +80118,10 @@ PrefabInstance:
       propertyPath: startClosed
       value: 1
       objectReference: {fileID: 0}
+    - target: {fileID: 100003, guid: 7cf57c9c2994460c8ce670a2720ce7aa, type: 3}
+      propertyPath: openPlacement
+      value: 1
+      objectReference: {fileID: 0}
     - target: {fileID: 200001, guid: 7cf57c9c2994460c8ce670a2720ce7aa, type: 3}
       propertyPath: m_LocalScale.x
       value: 4.5

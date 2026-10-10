@@ -79,9 +79,23 @@ public class Portal : MonoBehaviour
     [Range(0f, 1f)] public float restingGlow = 0.2f;
     public float openShake = 0.5f;
     public float openShakeRange = 45f;
-    [Tooltip("When a closed portal opens, drop it so the bottom of the opening sits on whatever floor is under it. Means it only has to be placed roughly.")]
-    public bool snapToGround = true;
-    public float groundSnapRange = 60f;
+    [Tooltip("Where a closed portal appears when it opens.\n" +
+             "Where Placed: right where it sits in the scene.\n" +
+             "In Front Of Player: floating ahead of the player, facing them, at the moment it opens.\n" +
+             "At Scene Start: just ahead of where the player starts in this scene, facing the same way, so you come out inside the start room.")]
+    public OpenPlacement openPlacement = OpenPlacement.WherePlaced;
+    [Tooltip("In Front Of Player: how far ahead. Pulled in if a wall is closer.")]
+    public float placeDistance = 9f;
+    [Tooltip("In Front Of Player: how far the bottom of the opening floats above the player's feet.")]
+    public float floatHeight = 0.4f;
+    [Tooltip("At Scene Start: how far ahead of the start point.")]
+    public float spawnDistance = 5f;
+
+    [Header("Closing")]
+    [Tooltip("Closes itself (and its partner) a moment after the player goes through. Only for portals that started closed.")]
+    public bool closeBehindPlayer = true;
+    public float closeDelay = 0.4f;
+    public float closeDuration = 1f;
 
     [Header("Enemies")]
     [Tooltip("Lets NavMesh agents path through. Needs NavMesh under the bottom edge of the opening on both sides.")]
@@ -111,19 +125,21 @@ public class Portal : MonoBehaviour
 
     public bool IsOpen => openState == OpenState.Open;
     public bool IsOpening => openState == OpenState.Opening;
+    public bool IsClosing => openState == OpenState.Closing;
     public bool IsVisible => openState != OpenState.Closed;
 
     /// Linked and open far enough to go through. During the opening animation that's once
-    /// the tear is wide enough to fit a person.
-    public bool Crossable => linkedPortal != null && OpenProgress >= CrossableAt;
+    /// the tear is wide enough to fit a person; once it starts closing it's shut.
+    public bool Crossable => linkedPortal != null
+        && (openState == OpenState.Open || (openState == OpenState.Opening && OpenProgress >= CrossableAt));
 
-    /// 0 closed, 1 fully open.
+    /// 0 closed, 1 fully open (opening only).
     public float OpenProgress => openState == OpenState.Open ? 1f
-        : openState == OpenState.Closed ? 0f
-        : Mathf.Clamp01(openTimer / Mathf.Max(0.01f, openDuration));
+        : openState == OpenState.Opening ? Mathf.Clamp01(openTimer / Mathf.Max(0.01f, openDuration))
+        : 0f;
 
-    /// Size of the opening right now, smaller than portalSize while it's tearing open.
-    public Vector2 CurrentSize => Vector2.Scale(portalSize, OpenShape(OpenProgress));
+    /// Size of the opening right now, smaller than portalSize while it opens or closes.
+    public Vector2 CurrentSize => Vector2.Scale(portalSize, shapeFactor);
 
     /// Maps a pose on this portal's side into the linked portal's space. Apply it to
     /// anything that travels through - a body's position/rotation/velocity, or a world
@@ -199,9 +215,15 @@ public class Portal : MonoBehaviour
     const float CrossingMargin = 0.15f;
     const float ObliqueMinFarCornerDistance = 1f;
 
-    enum OpenState { Closed, Opening, Open }
+    public enum OpenPlacement { WherePlaced, InFrontOfPlayer, AtSceneStart }
+
+    enum OpenState { Closed, Opening, Open, Closing }
     OpenState openState = OpenState.Open;
+    Vector2 shapeFactor = Vector2.one;
     float openTimer;
+    float closeTimer;
+    bool closeQueued;
+    float closeAt;
     bool openPartnerWhenLinked;
     bool tore;
     float sparkTimer;
@@ -218,7 +240,11 @@ public class Portal : MonoBehaviour
     {
         triggerCollider = GetComponent<BoxCollider>();
         frameRenderers = CollectFrameRenderers();
-        if (startClosed) openState = OpenState.Closed;
+        if (startClosed)
+        {
+            openState = OpenState.Closed;
+            shapeFactor = Vector2.zero;
+        }
         ApplyPortalSize();
 
         // The surface mesh is no longer drawn through Unity's normal per-object
@@ -275,12 +301,14 @@ public class Portal : MonoBehaviour
 
         RenderPipelineManager.beginCameraRendering += OnBeginCameraRendering;
         RenderPipelineManager.endCameraRendering += OnEndCameraRendering;
+        PlayerTravelled += OnAnyPlayerTravel;
     }
 
     void OnDisable()
     {
         RenderPipelineManager.beginCameraRendering -= OnBeginCameraRendering;
         RenderPipelineManager.endCameraRendering -= OnEndCameraRendering;
+        PlayerTravelled -= OnAnyPlayerTravel;
 
         ActivePortals.Remove(this);
         if (portalCamera != null) PortalCameras.Remove(portalCamera);
@@ -369,8 +397,16 @@ public class Portal : MonoBehaviour
         if (linkedPortal == null)
             TryResolveLink();
 
+        if (closeQueued && Time.time >= closeAt)
+        {
+            closeQueued = false;
+            Close();
+        }
+
         if (openState == OpenState.Opening)
             AnimateOpening(Time.deltaTime);
+        else if (openState == OpenState.Closing)
+            AnimateClosing(Time.deltaTime);
         else if (openState == OpenState.Open && startClosed)
             IdleGlow(Time.deltaTime);
 
@@ -387,11 +423,13 @@ public class Portal : MonoBehaviour
     {
         if (openState != OpenState.Closed) return;
 
-        if (snapToGround) SnapToGround();
+        PlaceForOpening();
         openState = OpenState.Opening;
         openTimer = 0f;
         tore = false;
         sparkTimer = 0f;
+        closeQueued = false;
+        shapeFactor = Vector2.zero;
         ApplyVisibility();
 
         if (linkedPortal != null) linkedPortal.Open();
@@ -402,24 +440,84 @@ public class Portal : MonoBehaviour
         if (fx != null) fx.AirPuff(transform.position, transform.forward, 0.6f);
     }
 
-    void SnapToGround()
+    void PlaceForOpening()
     {
-        Vector3 top = transform.position + Vector3.up * portalSize.y * 0.5f;
-        RaycastHit[] hits = Physics.RaycastAll(top, Vector3.down, portalSize.y + groundSnapRange, ~0, QueryTriggerInteraction.Ignore);
-        System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
+        if (openPlacement == OpenPlacement.InFrontOfPlayer) PlaceInFrontOfPlayer();
+        else if (openPlacement == OpenPlacement.AtSceneStart) PlaceAtSceneStart();
+    }
 
+    // Floating ahead of wherever the player is looking, facing them, so they can carry
+    // straight on into it.
+    void PlaceInFrontOfPlayer()
+    {
+        FirstPersonCharacterController player = PortalManager.FindPlayer();
+        Camera cam = Camera.main;
+        if (player == null || cam == null) return;
+
+        Vector3 eye = cam.transform.position;
+        Vector3 ahead = player.FlatForward;
+
+        float distance = placeDistance;
+        if (FirstSolidHit(eye, ahead, placeDistance + 1f, out RaycastHit wall))
+            distance = Mathf.Max(3f, wall.distance - 1.5f);
+
+        Collider body = player.GetComponent<Collider>();
+        float feet = body != null ? body.bounds.min.y : player.transform.position.y - 1f;
+
+        Vector3 centre = eye + ahead * distance;
+        centre.y = feet + floatHeight + portalSize.y * 0.5f;
+        transform.SetPositionAndRotation(centre, Quaternion.LookRotation(-ahead, Vector3.up));
+    }
+
+    // Just ahead of where the player starts in this scene, facing the same way, standing on
+    // the floor there. The start point is always inside the room, wherever the room is.
+    void PlaceAtSceneStart()
+    {
+        if (!PortalManager.Get().TryGetSceneSpawn(gameObject.scene, out Pose spawn)) return;
+
+        Vector3 ahead = spawn.forward;
+        Vector3 chest = spawn.position + Vector3.up * 0.5f;
+
+        float distance = spawnDistance;
+        if (FirstSolidHit(chest, ahead, spawnDistance + 1f, out RaycastHit wall))
+            distance = Mathf.Max(1.5f, wall.distance - 1.5f);
+
+        Vector3 spot = spawn.position + ahead * distance;
+        float bottom = FindFloor(spot + Vector3.up * 2f, 10f, out Vector3 floor)
+            ? floor.y + 0.05f
+            : spawn.position.y - 1f;
+
+        Vector3 centre = new Vector3(spot.x, bottom + portalSize.y * 0.5f, spot.z);
+        transform.SetPositionAndRotation(centre, Quaternion.LookRotation(ahead, Vector3.up));
+    }
+
+    // Level geometry only: skips triggers, portals, the player, enemies and loose props.
+    static bool IsSolidLevel(Collider c) =>
+        c.GetComponentInParent<Portal>() == null
+        && (c.attachedRigidbody == null || c.attachedRigidbody.isKinematic)
+        && c.GetComponentInParent<NavMeshAgent>() == null
+        && c.GetComponentInParent<FirstPersonCharacterController>() == null
+        && c.gameObject.scene.name != "DontDestroyOnLoad";
+
+    static bool FirstSolidHit(Vector3 from, Vector3 dir, float range, out RaycastHit hit)
+    {
+        RaycastHit[] hits = Physics.RaycastAll(from, dir, range, ~0, QueryTriggerInteraction.Ignore);
+        System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
         foreach (RaycastHit h in hits)
         {
-            Collider c = h.collider;
-            if (c.GetComponentInParent<Portal>() != null) continue;
-            if (c.attachedRigidbody != null && !c.attachedRigidbody.isKinematic) continue;
-            if (c.GetComponentInParent<NavMeshAgent>() != null) continue;
-
-            Vector3 p = transform.position;
-            p.y = h.point.y + portalSize.y * 0.5f + 0.02f;
-            transform.position = p;
-            return;
+            if (!IsSolidLevel(h.collider)) continue;
+            hit = h;
+            return true;
         }
+        hit = default;
+        return false;
+    }
+
+    static bool FindFloor(Vector3 from, float range, out Vector3 point)
+    {
+        bool found = FirstSolidHit(from, Vector3.down, range, out RaycastHit hit);
+        point = found ? hit.point : from;
+        return found;
     }
 
     // x = width factor, y = height factor
@@ -445,10 +543,18 @@ public class Portal : MonoBehaviour
         return 1f + c3 * u * u * u + c1 * u * u;
     }
 
+    static float EaseInBack(float t)
+    {
+        const float c1 = 1.4f;
+        const float c3 = c1 + 1f;
+        return c3 * t * t * t - c1 * t * t;
+    }
+
     void AnimateOpening(float dt)
     {
         openTimer += dt;
         float p = OpenProgress;
+        shapeFactor = OpenShape(p);
         Vector2 size = CurrentSize;
         ApplyShape(size);
 
@@ -475,8 +581,91 @@ public class Portal : MonoBehaviour
         if (p >= 1f)
         {
             openState = OpenState.Open;
+            shapeFactor = Vector2.one;
             ApplyShape(portalSize);
             SetGlow(restingGlow);
+        }
+    }
+
+    // ---------------------------------------------------------------- closing
+
+    Vector2 closeFrom;
+
+    /// Seals it again (and its partner): the opening played backwards, pinching in to a
+    /// slit of light that then shrinks away to nothing.
+    public void Close()
+    {
+        if (openState == OpenState.Closed || openState == OpenState.Closing) return;
+
+        closeQueued = false;
+        openState = OpenState.Closing;
+        closeTimer = 0f;
+        sparkTimer = 0f;
+        closeFrom = shapeFactor;
+
+        if (linkedPortal != null) linkedPortal.Close();
+
+        Synth.PlayAt(GameSounds.PortalClose, transform.position, 1f, 1f, openShakeRange * 2f);
+    }
+
+    void OnAnyPlayerTravel(Portal entered, Portal exited)
+    {
+        if (!startClosed || !closeBehindPlayer) return;
+        if (entered != this && exited != this) return;
+        if (openState != OpenState.Open && openState != OpenState.Opening) return;
+
+        // a beat after, so the player is clear of the opening before it shuts
+        closeQueued = true;
+        closeAt = Time.time + closeDelay;
+    }
+
+    const float PinchPhase = 0.6f;
+
+    // width pinches in (bulging out a touch first), then the slit shrinks top and bottom
+    Vector2 CloseShape(float p)
+    {
+        if (p < PinchPhase)
+        {
+            float w = Mathf.LerpUnclamped(closeFrom.x, SlitWidth, EaseInBack(p / PinchPhase));
+            return new Vector2(Mathf.Max(0f, w), closeFrom.y);
+        }
+
+        float u = (p - PinchPhase) / (1f - PinchPhase);
+        return new Vector2(SlitWidth * (1f - u * u), closeFrom.y * (1f - u * u * u));
+    }
+
+    void AnimateClosing(float dt)
+    {
+        closeTimer += dt;
+        float p = Mathf.Clamp01(closeTimer / Mathf.Max(0.01f, closeDuration));
+        shapeFactor = CloseShape(p);
+        Vector2 size = CurrentSize;
+        ApplyShape(size);
+
+        // brightens as it pinches shut, then goes out with it
+        float glow = p < PinchPhase
+            ? Mathf.Lerp(restingGlow, 1.4f, p / PinchPhase)
+            : Mathf.Lerp(1.4f, 0f, (p - PinchPhase) / (1f - PinchPhase));
+        SetGlow(glow);
+
+        sparkTimer -= dt;
+        if (sparkTimer <= 0f)
+        {
+            sparkTimer = 0.05f;
+            EmitRimPuff(size, 0.3f);
+        }
+
+        if (p >= 1f)
+        {
+            openState = OpenState.Closed;
+            shapeFactor = Vector2.zero;
+            SetGlow(0f);
+            ApplyVisibility();
+
+            JuiceFX fx = JuiceFX.Get();
+            if (fx != null) fx.ImpactBurst(transform.position, transform.forward, 0.6f);
+            if (CameraShaker.Instance != null)
+                CameraShaker.Instance.AddTraumaAtPoint(transform.position, openShake * 0.5f, openShakeRange * 0.2f, openShakeRange * 0.6f);
         }
     }
 
@@ -640,8 +829,17 @@ public class Portal : MonoBehaviour
         navLinks.Clear();
     }
 
-    Vector3 FloorProbe =>
-        transform.position + transform.forward * enemyLinkInset - Vector3.up * (portalSize.y * 0.5f - 0.6f);
+    // Floor in front of the opening. A floating portal's bottom edge can sit well off the
+    // ground, so this looks down from it rather than assuming it's standing on the floor.
+    Vector3 FloorProbe
+    {
+        get
+        {
+            Vector3 bottom = transform.position + transform.forward * enemyLinkInset
+                             - Vector3.up * (portalSize.y * 0.5f - 0.6f);
+            return FindFloor(bottom, 8f, out Vector3 floor) ? floor : bottom;
+        }
+    }
 
     public bool TryGetFloorInFront(int agentTypeID, out Vector3 point)
     {
