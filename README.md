@@ -272,6 +272,12 @@ Seamless portals between different scenes. You can run, slide or dart through at
 
 Floating pickups that hand out the axe or the grapple. In the scene the game starts in, each one takes its ability off the player at load; touching it gives it back, switches to it and slides in a controls card on the left built from the player's current key bindings, plus an optional line about the room (Level Hint). `WeaponSlots` has `hasAxe` / `hasGrapple`: a slot you don't own is skipped when switching and hidden on the HUD, and without the grapple the whole `Grappling` component is off (no zip, swing or reticle). Arriving through a portal keeps what you had, and pickups you already own don't show. With no model under it a pickup builds a stand-in from primitives; add the real model as a child to replace it.
 
+### Tip zones, checkpoints and fall resets
+
+`TutorialTip.cs`, `Checkpoint.cs`, `FallReset.cs`
+
+Trigger volumes for building the tutorial. `TutorialTip` shows a card (the same one the pickups use) the first time you walk in; card text can use `{jump}`, `{slide}`, `{primary}` and any other `PlayerInputRouter` action name, which fill in from the player's bindings. `Checkpoint` sets where you come back to (it also becomes `PlayerHealth`'s respawn point). `FallReset` goes at the bottom of a tutorial pit and puts you back at the last checkpoint with no damage. The full room-by-room plan for the tutorial is in the level design doc.
+
 ### Room builder
 
 `Assets/Editor/RoomBuilder.cs`

@@ -1,8 +1,9 @@
 using UnityEngine;
 
-// Controls card that slides in on the left when the player picks up an ability. Stays up
-// for a few seconds while they keep playing (nothing pauses), then slides away. A new card
-// replaces the old one. IMGUI, matching the other menus; creates itself when first needed.
+// Controls card that slides in on the left: an ability pickup's controls, or a movement
+// tip from a TutorialTip zone. Stays up for a few seconds while they keep playing (nothing
+// pauses), then slides away. A new card replaces the old one. IMGUI, matching the other
+// menus; creates itself when first needed.
 public class AbilityTooltip : MonoBehaviour
 {
     public static AbilityTooltip Instance { get; private set; }
@@ -16,6 +17,7 @@ public class AbilityTooltip : MonoBehaviour
     public float slideTime = 0.4f;
 
     string title;
+    string subtitle;
     string[] lines;
     Color accent = Color.white;
     float shownAt = -99f;
@@ -56,9 +58,10 @@ public class AbilityTooltip : MonoBehaviour
         }
     }
 
-    public void Show(string cardTitle, string[] cardLines, Color accentColor, float seconds)
+    public void Show(string cardTitle, string[] cardLines, Color accentColor, float seconds, string cardSubtitle = "NEW ABILITY")
     {
         title = cardTitle;
+        subtitle = cardSubtitle;
         lines = cardLines;
         accent = accentColor;
         duration = seconds;
@@ -112,7 +115,7 @@ public class AbilityTooltip : MonoBehaviour
         GUI.Label(new Rect(innerX, y, innerW, 30f), title, titleStyle);
         y += 30f;
         GUI.color = new Color(1f, 1f, 1f, 0.6f);
-        GUI.Label(new Rect(innerX, y, innerW, 20f), "NEW ABILITY", subStyle);
+        GUI.Label(new Rect(innerX, y, innerW, 20f), subtitle, subStyle);
         y += 30f;
         GUI.color = old;
 
